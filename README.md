@@ -96,6 +96,8 @@ It does three things:
 - builds the app on pushes and pull requests
 - deploys Firebase preview channels for pull requests and the live site for `main`
 
+After the Firebase service-account secret is added, the next push to `main` should trigger the first live deployment automatically.
+
 Before the workflow can deploy, add this GitHub repository secret:
 
 - `FIREBASE_SERVICE_ACCOUNT_TIKTRACK_F112B`
