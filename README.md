@@ -1,29 +1,61 @@
-# TikTrack App
+# TikTrack
 
-## Run
+Family chore tracking app built with React, Vite, and Firebase.
+
+Recommended GitHub repo description:
+`Family chore tracking app built with React, Vite, and Firebase.`
+
+## What It Does
+
+TikTrack helps families manage chores and rewards with separate parent and child experiences.
+
+- Parent and child authentication flows
+- Role-based routing and dashboards
+- Child account linking for parent-managed families
+- Firebase-backed auth, data, storage, analytics, and messaging foundations
+- Theme support and unit-tested Firebase environment selection
+
+## Tech Stack
+
+- React 19
+- Vite 8
+- TypeScript
+- Firebase
+- Tailwind CSS
+- Vitest
+
+## Local Development
+
+Install dependencies and start the app:
 
 ```bash
-npm install --legacy-peer-deps
+npm install
 npm run dev
 ```
 
-## Unit Tests
+Run tests:
 
 ```bash
 npm test
 ```
 
-## Firebase Environments (Prod + Test)
+Create a production build locally:
+
+```bash
+npm run build
+```
+
+## Firebase Environments
 
 This app supports two isolated Firebase systems:
 
-- `prod`: original live Firebase project (default)
-- `test`: separate Firebase project for test data
+- `prod`: the live Firebase project
+- `test`: a separate Firebase project for safe local and test data
 
-Local safety rule:
+Safety rule:
 
-- Local/dev runtime always uses `test` Firebase automatically.
-- `prod` is used only in hosted runtime (unless hosted is explicitly set to `test`).
+- Local development always uses the `test` Firebase environment automatically.
+- Hosted deployments use `prod` unless you explicitly override the runtime environment.
 
 Copy `.env.example` to `.env` and set:
 
@@ -31,20 +63,51 @@ Copy `.env.example` to `.env` and set:
 VITE_APP_ENV=prod
 ```
 
-or
+or:
 
 ```bash
 VITE_APP_ENV=test
 ```
 
-When using `test`, all `VITE_FIREBASE_TEST_*` values are required.
+When `VITE_APP_ENV=test`, all `VITE_FIREBASE_TEST_*` values are required.
 
-## Phase 1 Scope (Completed)
+## Firebase Hosting
 
-- Auth flows: signup/login/logout
-- Role routing: parent and child
-- Child account create/link to parent
-- Child account list in parent dashboard
+This repository is configured for Firebase Hosting as a single-page app:
+
+- Build output directory: `dist`
+- SPA rewrite: all routes go to `index.html`
+- Default Firebase project alias: `tiktrack-f112b`
+
+Local deploy flow:
+
+```bash
+npm run build
+firebase deploy --only hosting
+```
+
+## GitHub Actions Deployment
+
+The repository includes a GitHub Actions workflow at `.github/workflows/firebase-hosting.yml`.
+
+It does three things:
+
+- runs tests on pushes and pull requests
+- builds the app on pushes and pull requests
+- deploys Firebase preview channels for pull requests and the live site for `main`
+
+Before the workflow can deploy, add this GitHub repository secret:
+
+- `FIREBASE_SERVICE_ACCOUNT_TIKTRACK_F112B`
+
+To create that secret, generate a Firebase service account JSON key for the `tiktrack-f112b` project and paste the full JSON into the GitHub Actions secret value.
+
+## Phase 1 Scope
+
+- Auth flows: signup, login, and logout
+- Role routing for parent and child users
+- Child account creation and linking
+- Child account listing in the parent dashboard
 - Child data mapping by logged-in child UID
-- Theme foundation (light/dark)
+- Theme foundation with light and dark support
 - Unit tests for auth helpers and Firebase environment selection

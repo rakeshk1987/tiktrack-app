@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "tiktrack-f112b",
+    "prod": "tiktrack-f112b"
+  }
+}
