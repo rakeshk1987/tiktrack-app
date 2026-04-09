@@ -30,10 +30,8 @@ const isLocalRuntime =
   runtimeHostname.endsWith('.local');
 
 const requestedEnv = resolveFirebaseRuntimeEnv(import.meta.env.VITE_APP_ENV);
-export const isUsingFirebaseEmulators = isLocalRuntime;
-
-// Local development uses Firebase emulators while hosted runtimes use the requested Firebase env.
 export const activeFirebaseEnv: FirebaseRuntimeEnv = requestedEnv;
+export const isUsingFirebaseEmulators = isLocalRuntime;
 
 let firebaseConfig: FirebaseClientConfig | null = null;
 let firebaseInitError = '';

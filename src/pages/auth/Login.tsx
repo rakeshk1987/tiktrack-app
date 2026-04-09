@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import { auth, isUsingFirebaseEmulators } from '../../config/firebase';
 import {
   ArrowRight,
   Heart,
@@ -101,8 +101,17 @@ export default function Login() {
           : 'Child login details did not match. Please try again.';
       case 'auth/too-many-requests':
         return 'Too many attempts. Please wait a few minutes and try again.';
+      case 'auth/network-request-failed':
+      case 'auth/api-key-not-valid.-please-pass-a-valid-api-key.':
+        return isUsingFirebaseEmulators
+          ? 'Local Firebase emulators are not reachable. Start them with `npm run emulators` and try again.'
+          : 'Network error while contacting Firebase. Please try again.';
+      case 'auth/invalid-api-key':
+        return 'Firebase configuration looks incomplete. Please check the local setup.';
       default:
-        return 'Login failed. Please try again.';
+        return isUsingFirebaseEmulators
+          ? 'Login failed. If you are on localhost, make sure `npm run emulators` is running first.'
+          : 'Login failed. Please try again.';
     }
   };
 
