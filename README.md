@@ -33,6 +33,8 @@ npm install
 npm run dev
 ```
 
+This repository uses `legacy-peer-deps` during install because the current Vite 8 toolchain is ahead of some package peer version declarations used by Vitest and the PWA plugin.
+
 Run tests:
 
 ```bash
