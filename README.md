@@ -26,15 +26,28 @@ TikTrack helps families manage chores and rewards with separate parent and child
 
 ## Local Development
 
-Install dependencies and start the app:
+Install dependencies and start the full local stack with one command:
 
 ```bash
 npm install
-npm run emulators
-npm run dev
+npm run local
 ```
 
 This repository uses `legacy-peer-deps` during install because the current Vite 8 toolchain is ahead of some package peer version declarations used by Vitest and the PWA plugin.
+
+`npm run local` does all of this for you on Windows:
+
+- finds your local Java install
+- starts Firebase emulators with persisted data
+- waits for the emulators to be ready
+- starts the Vite app
+
+If you want to run the pieces manually instead:
+
+```bash
+npm run emulators:data
+npm run dev
+```
 
 Run tests:
 
@@ -64,11 +77,7 @@ This means:
 - no extra local database layer is needed
 - `.env`, emulator cache, and emulator data folders stay out of Git
 
-If you want emulator data to persist between sessions, use:
-
-```bash
-npm run emulators:data
-```
+Emulator data persists between sessions through the `.firebase-data` folder.
 
 ## Firebase Environments
 

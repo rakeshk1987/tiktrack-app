@@ -7,6 +7,7 @@
     "dev": "vite",
     "emulators": "npx firebase-tools emulators:start --only auth,firestore,storage",
     "emulators:data": "npx firebase-tools emulators:start --only auth,firestore,storage --import .firebase-data --export-on-exit",
+    "local": "powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

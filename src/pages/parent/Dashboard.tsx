@@ -23,13 +23,23 @@ import {
 } from 'lucide-react';
 import { getSecondaryAuth } from '../../utils/secondaryAuth';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
 
 interface ChildAccount {
   id: string;
   name?: string;
   email?: string;
+}
+
+interface PendingProof {
+  id: string;
+  child_id?: string;
+  task_id?: string;
+  task_title?: string;
+  image_url?: string;
+  approval_status?: 'pending' | 'approved' | 'rejected';
+  timestamp?: string;
 }
 
 export default function ParentDashboard() {
@@ -40,13 +50,16 @@ export default function ParentDashboard() {
   const [cUser, setCUser] = useState('');
   const [cName, setCName] = useState('');
   const [cPass, setCPass] = useState('');
+  const [cDob, setCDob] = useState('');
+  const [cHeight, setCHeight] = useState('');
+  const [cWeight, setCWeight] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [info, setInfo] = useState('');
   const [children, setChildren] = useState<ChildAccount[]>([]);
   const [childrenLoading, setChildrenLoading] = useState(true);
-  const [approvalStatus, setApprovalStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [pendingProofs, setPendingProofs] = useState<PendingProof[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -74,6 +87,32 @@ export default function ParentDashboard() {
       (err) => {
         console.error('Failed to fetch child accounts:', err);
         setChildrenLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setPendingProofs([]);
+      return;
+    }
+
+    const proofQuery = query(
+      collection(db, 'proof_logs'),
+      where('approval_status', '==', 'pending'),
+      limit(20)
+    );
+
+    const unsubscribe = onSnapshot(
+      proofQuery,
+      (snapshot) => {
+        const mapped = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PendingProof, 'id'>) }));
+        setPendingProofs(mapped);
+      },
+      (err) => {
+        console.error('Failed to fetch pending proofs:', err);
       }
     );
 
@@ -130,9 +169,9 @@ export default function ParentDashboard() {
         id: childUid,
         user_id: user.id,
         name: cName,
-        date_of_birth: new Date().toISOString(),
-        height_cm: 0,
-        weight_kg: 0,
+        date_of_birth: new Date(cDob).toISOString(),
+        height_cm: Number(cHeight),
+        weight_kg: Number(cWeight),
         streak_count: 0,
         streak_shields: 0,
         consistency_score: 0,
@@ -146,6 +185,9 @@ export default function ParentDashboard() {
       setCUser('');
       setCName('');
       setCPass('');
+      setCDob('');
+      setCHeight('');
+      setCWeight('');
       setSuccess('Child account is ready and linked to your Family Hub.');
     } catch (err: any) {
       setError(formatChildCreationError(err?.code));
@@ -163,7 +205,26 @@ export default function ParentDashboard() {
     }
   };
 
+  const handleProofDecision = async (proofId: string, status: 'approved' | 'rejected') => {
+    try {
+      await updateDoc(doc(db, 'proof_logs', proofId), { approval_status: status });
+      if (status === 'approved') {
+        setSuccess('Proof approved and removed from the pending queue.');
+      } else {
+        setInfo('Proof rejected and removed from the pending queue.');
+      }
+    } catch (err) {
+      console.error('Failed to update proof status:', err);
+      setError('Could not update proof approval. Please try again.');
+    }
+  };
+
   const cardBase = 'rounded-3xl border p-5 shadow-[var(--card-shadow)]';
+  const hasChildren = children.length > 0;
+  const tasksCompleted = hasChildren ? 0 : 0;
+  const consistencyPercent = hasChildren ? 0 : 0;
+  const visiblePendingProofs = pendingProofs.filter((proof) => children.some((child) => child.id === proof.child_id));
+  const featuredProof = visiblePendingProofs[0];
 
   return (
     <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -262,41 +323,60 @@ export default function ParentDashboard() {
                       <p className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>Consistency</p>
                       <Activity size={18} className="text-cyan-500" />
                     </div>
-                    <p className="text-3xl font-black mt-2" style={{ color: 'var(--text-main)' }}>95%</p>
+                    <p className="text-3xl font-black mt-2" style={{ color: 'var(--text-main)' }}>{consistencyPercent}%</p>
                     <div className="mt-3 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                      <div className="h-full bg-cyan-500 rounded-full" style={{ width: '95%' }} />
+                      <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${consistencyPercent}%` }} />
                     </div>
+                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                      {hasChildren ? 'Live child consistency will appear here as activity starts.' : 'Add a child account to begin tracking consistency.'}
+                    </p>
                   </div>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>Tasks Completed</p>
                       <CheckSquare size={18} className="text-emerald-500" />
                     </div>
-                    <p className="text-3xl font-black mt-2" style={{ color: 'var(--text-main)' }}>42</p>
-                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>This week performance</p>
+                    <p className="text-3xl font-black mt-2" style={{ color: 'var(--text-main)' }}>{tasksCompleted}</p>
+                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                      {hasChildren ? 'Task completion totals will update from real logs.' : 'No child activity yet.'}
+                    </p>
                   </div>
                 </div>
 
                 <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Pending Proof Approval</h2>
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">{approvalStatus}</span>
+                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                      {visiblePendingProofs.length > 0 ? `${visiblePendingProofs.length} waiting` : 'none'}
+                    </span>
                   </div>
-                  <div className="rounded-2xl p-3 border flex items-center gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                    <div className="h-12 w-12 rounded-xl bg-slate-300 grid place-items-center text-xs text-slate-600">Image</div>
-                    <div className="flex-1">
-                      <p className="font-bold" style={{ color: 'var(--text-main)' }}>Math Homework</p>
-                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Submitted today</p>
+                  {featuredProof ? (
+                    <div className="rounded-2xl p-3 border flex items-center gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      {featuredProof.image_url ? (
+                        <img src={featuredProof.image_url} alt="Child proof" className="h-16 w-16 rounded-xl object-cover" />
+                      ) : (
+                        <div className="h-12 w-12 rounded-xl bg-slate-300 grid place-items-center text-xs text-slate-600">Image</div>
+                      )}
+                      <div className="flex-1">
+                        <p className="font-bold" style={{ color: 'var(--text-main)' }}>{featuredProof.task_title || 'Quest proof'}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {children.find((child) => child.id === featuredProof.child_id)?.name || 'Child'} submitted this for review
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleProofDecision(featuredProof.id, 'approved')}>
+                          Approve
+                        </button>
+                        <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleProofDecision(featuredProof.id, 'rejected')}>
+                          Reject
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => { setApprovalStatus('approved'); setSuccess('Proof approved.'); }}>
-                        Approve
-                      </button>
-                      <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => { setApprovalStatus('rejected'); setInfo('Proof rejected and child can resubmit.'); }}>
-                        Reject
-                      </button>
+                  ) : (
+                    <div className="rounded-2xl p-4 border text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-muted)' }}>
+                      No proof submissions yet. Add a child account first, then submitted task proofs will show up here.
                     </div>
-                  </div>
+                  )}
                 </div>
               </section>
 
@@ -329,18 +409,18 @@ export default function ParentDashboard() {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
                       <BarChart3 className="mx-auto text-white" size={16} />
-                      <p className="text-white text-xs mt-1">Focus</p>
-                      <p className="text-white font-extrabold">Math</p>
+                      <p className="text-white text-xs mt-1">Profiles</p>
+                      <p className="text-white font-extrabold">{children.length}</p>
                     </div>
                     <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #06b6d4, #14b8a6)' }}>
                       <TrendingUp className="mx-auto text-white" size={16} />
-                      <p className="text-white text-xs mt-1">Trend</p>
-                      <p className="text-white font-extrabold">+12%</p>
+                      <p className="text-white text-xs mt-1">Status</p>
+                      <p className="text-white font-extrabold">{hasChildren ? 'Live' : 'Empty'}</p>
                     </div>
                     <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
                       <ShieldCheck className="mx-auto text-white" size={16} />
-                      <p className="text-white text-xs mt-1">Shields</p>
-                      <p className="text-white font-extrabold">2</p>
+                      <p className="text-white text-xs mt-1">Proofs</p>
+                      <p className="text-white font-extrabold">0</p>
                     </div>
                   </div>
                 </div>
@@ -384,6 +464,20 @@ export default function ParentDashboard() {
               <div className="kid-glass rounded-2xl p-3">
                 <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Secret Password</label>
                 <input required value={cPass} onChange={(e) => setCPass(e.target.value)} type="password" placeholder="Min 6 characters" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Date of Birth</label>
+                  <input required value={cDob} onChange={(e) => setCDob(e.target.value)} type="date" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Height (cm)</label>
+                  <input required min="30" value={cHeight} onChange={(e) => setCHeight(e.target.value)} type="number" placeholder="120" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Weight (kg)</label>
+                  <input required min="5" step="0.1" value={cWeight} onChange={(e) => setCWeight(e.target.value)} type="number" placeholder="22.5" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
               </div>
               <button disabled={loading} type="submit" className="w-full text-white font-bold py-3.5 rounded-xl transition mt-4" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                 {loading ? 'Registering...' : 'Create Child Account'}
