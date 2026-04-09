@@ -1,0 +1,102 @@
+export type Role = 'parent_admin' | 'child_user';
+
+export interface User {
+  id: string;
+  email: string;
+  role: Role;
+  parent_id?: string; // Optional if role is parent_admin
+}
+
+export interface ChildProfile {
+  id: string;
+  name: string;
+  date_of_birth: string; // ISO String
+  height_cm: number;
+  weight_kg: number;
+  streak_count: number;
+  streak_shields: number;
+  consistency_score: number;
+  total_stars: number;
+  is_sick_mode: boolean;
+  user_id: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  category: string;
+  priority: 'low' | 'medium' | 'high';
+  energy_level: 'low' | 'medium' | 'high';
+  difficulty_level: number;
+  star_value: number;
+  requires_proof: boolean;
+}
+
+export type TaskStatus = 'pending' | 'completed' | 'failed' | 'skipped';
+
+export interface TaskLog {
+  id: string;
+  task_id: string;
+  child_id: string;
+  date: string; // YYYY-MM-DD
+  status: TaskStatus;
+}
+
+export interface ProofLog {
+  id: string;
+  task_id: string;
+  image_url: string;
+  timestamp: string;
+  approval_status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface ExamResult {
+  id: string;
+  child_id: string;
+  subject: string;
+  marks_scored: number;
+  total_marks: number;
+  exam_date: string;
+}
+
+export interface GrowthLog {
+  id: string;
+  child_id: string;
+  height_cm: number;
+  weight_kg: number;
+  date: string;
+}
+
+export interface MoodLog {
+  id: string;
+  child_id: string;
+  date: string;
+  mood: 'happy' | 'sad' | 'angry' | 'neutral' | 'excited';
+}
+
+export interface DiaryEntry {
+  id: string;
+  child_id: string;
+  date: string;
+  content: string;
+}
+
+export interface Event {
+  id: string;
+  type: string;
+  title: string;
+  date: string;
+  reminder_days_before: number;
+}
+
+export interface Challenge {
+  id: string;
+  parent_score: number;
+  child_score: number;
+}
+
+export interface Shield {
+  id: string;
+  child_id: string;
+  count: number;
+}

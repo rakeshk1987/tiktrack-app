@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@500;700;800&display=swap');
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+:root,
+[data-theme='light'] {
+  --bg-main: #f3f5ff;
+  --bg-hero-a: #7c5cff;
+  --bg-hero-b: #3a9dff;
+  --surface: #ffffff;
+  --surface-soft: #f7f8fd;
+  --text-main: #1e2235;
+  --text-muted: #667085;
+  --border-main: #e4e8f3;
+  --card-shadow: 0 24px 70px rgba(30, 34, 53, 0.14);
+}
+
+[data-theme='dark'] {
+  --bg-main: #10131f;
+  --bg-hero-a: #6d42ff;
+  --bg-hero-b: #1f6fff;
+  --surface: #181d2d;
+  --surface-soft: #20263a;
+  --text-main: #f2f5ff;
+  --text-muted: #b8c0db;
+  --border-main: #303850;
+  --card-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
+}
+
+@layer base {
+  body {
+    @apply font-sans antialiased;
+    background: radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--bg-hero-a) 35%, transparent) 0%, transparent 45%),
+      radial-gradient(circle at 90% 20%, color-mix(in srgb, var(--bg-hero-b) 30%, transparent) 0%, transparent 40%),
+      var(--bg-main);
+    color: var(--text-main);
+    transition: background-color 250ms ease, color 250ms ease;
+  }
+}
+
+@layer components {
+  .kid-glass {
+    @apply backdrop-blur-sm shadow-sm;
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-main) 80%, transparent);
+  }
+}
+
+/* Gamified custom animations */
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(-2%);
+  }
+  50% {
+    transform: translateY(0);
+  }
+}
+
+.animate-float {
+  animation: bounce-subtle 2s infinite ease-in-out;
+}

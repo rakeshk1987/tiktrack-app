@@ -1,0 +1,273 @@
+{
+"skill_name": "TikTrack: The Quest for 6th Grade",
+"version": "1.6-final",
+"description": "A personalized, intelligent, gamified child development ecosystem combining habit tracking, academic planning, health monitoring, and emotional engagement.",
+
+"core_objective": "Create a personalized adaptive system that builds discipline, confidence, academic excellence, and healthy lifestyle habits through gamification and intelligent insights.",
+
+"target_users": {
+"primary": "Athmika (10-year-old student)",
+"secondary": ["Rakesh (Lead Admin)", "Mother (Co-Admin)"]
+},
+
+"roles": {
+"parent_admin": {
+"permissions": [
+"Create/edit/delete tasks",
+"Approve proofs",
+"Manage rewards",
+"Add exams/events",
+"Track health and marks",
+"Enable modes",
+"View insights"
+]
+},
+"child_user": {
+"permissions": [
+"View tasks",
+"Submit proof",
+"Track progress",
+"Write diary (private)",
+"Mood tracking",
+"Participate in challenges"
+]
+}
+},
+
+"technical_stack": {
+"frontend": "React + Tailwind CSS (PWA)",
+"backend": "Firebase (Firestore + Auth + Storage)",
+"deployment": "Vercel"
+},
+
+"child_profile_system": {
+"fields": [
+"name",
+"date_of_birth",
+"height_cm",
+"weight_kg",
+"created_at"
+],
+
+```
+"usage": [
+  "Display personalized greetings (e.g., 'Good morning Athmika!')",
+  "Calculate age dynamically",
+  "Track growth over time",
+  "Generate health insights",
+  "Adjust messaging tone based on age"
+],
+
+"calculations": {
+  "age": "current_date - date_of_birth",
+  "bmi": "weight / (height_in_meters^2)"
+},
+
+"personalization_rules": [
+  "Use child's name across UI for engagement",
+  "Display encouraging growth messages",
+  "Avoid negative or critical health messaging",
+  "Show progress-based positive feedback"
+]
+```
+
+},
+
+"routine_configuration": {
+"school_days": {
+"wake_up_prep": "06:45 - 08:15",
+"play_time": "15:30 - 18:30",
+"prayer": "18:30 - 18:45",
+"study": "18:45 - 20:00",
+"brain_gym": "20:00 - 20:30",
+"dinner": "20:30 - 21:00",
+"reading": "21:00 - 22:00"
+},
+"seasonal_modes": {
+"academic": "June - March",
+"vacation": "April - May"
+}
+},
+
+"database_schema": {
+"users": ["id", "email", "role", "parent_id"],
+
+```
+"child_profile": [
+  "id",
+  "name",
+  "date_of_birth",
+  "height_cm",
+  "weight_kg",
+  "streak_count",
+  "streak_shields",
+  "consistency_score",
+  "total_stars",
+  "is_sick_mode"
+],
+
+"tasks": ["id", "title", "category", "priority", "energy_level", "difficulty_level", "star_value", "requires_proof"],
+
+"task_logs": ["id", "task_id", "child_id", "date", "status"],
+
+"proof_logs": ["id", "task_id", "image_url", "timestamp", "approval_status"],
+
+"exam_results": ["id", "child_id", "subject", "marks_scored", "total_marks", "exam_date"],
+
+"growth_logs": ["id", "child_id", "height_cm", "weight_kg", "date"],
+
+"moods": ["id", "child_id", "date", "mood"],
+
+"diary": ["id", "child_id", "date", "content"],
+
+"events": ["id", "type", "title", "date", "reminder_days_before"],
+
+"challenges": ["id", "parent_score", "child_score"],
+
+"shields": ["id", "child_id", "count"]
+```
+
+},
+
+"core_logic_modules": {
+
+```
+"energy_sync": {
+  "morning": "High-focus tasks (study, maths, coaching)",
+  "evening": "Creative/light tasks (reading, diary, activities)"
+},
+
+"exam_planner": {
+  "start": "14 days before exam",
+  "light_day": "1 day before exam (reduce load by 40%)"
+},
+
+"habit_engine": {
+  "mastery": "21-day completion",
+  "struggle": "3 misses trigger adjustment"
+},
+
+"failure_handling": {
+  "logic": [
+    "No harsh penalties",
+    "Use shield if available",
+    "Suggest easier version"
+  ]
+},
+
+"difficulty_scaling": {
+  "increase": "consistent completion",
+  "decrease": "repeated failure"
+},
+
+"emotional_adaptation": {
+  "sad": "reduce task load",
+  "happy": "allow bonus tasks"
+}
+```
+
+},
+
+"gamification": {
+"stars": "1 per task, 2 for high-focus tasks",
+"conversion": "₹5 per star (configurable)",
+"bonuses": [
+"Perfect day",
+"Early bird",
+"Improvement bonus",
+"Weekly shield"
+]
+},
+
+"health_tracking": {
+"features": [
+"Height and weight logging",
+"Growth trend tracking",
+"BMI (optional, parent view only)"
+],
+
+```
+"child_view_rules": [
+  "Show positive growth messages",
+  "Avoid BMI display",
+  "Avoid comparisons"
+]
+```
+
+},
+
+"insight_engine": {
+"metrics": [
+"Consistency score",
+"Weak subject detection",
+"Task trends",
+"Growth trends"
+]
+},
+
+"automation": {
+"features": [
+"Auto task generation",
+"Auto exam planner",
+"Auto reminders",
+"Priority adjustment"
+]
+},
+
+"proof_image_optimization": {
+"storage_strategy": "Firebase Storage with URL reference",
+
+```
+"compression": {
+  "max_size_mb": 0.2,
+  "max_width_px": 800
+},
+
+"retention": "Optional cleanup after 60 days"
+```
+
+},
+
+"reminders": {
+"types": [
+"Morning greeting with name",
+"Task reminders",
+"Exam countdown",
+"Class reminders",
+"Missed task alerts"
+]
+},
+
+"ui_rules": {
+"child": [
+"Use name in UI",
+"Show only today's tasks",
+"Max 5–7 tasks",
+"Use icons and simple text"
+],
+"parent": [
+"Detailed analytics",
+"Control panel"
+]
+}
+,
+
+"quality_gates": {
+"phase_definition": "A phase is complete only when all planned features for that phase are implemented and verified.",
+"unit_test_policy": [
+"After each phase development, create or update unit tests for all new and modified logic.",
+"No phase can be marked complete without running unit tests successfully."
+],
+"coverage_policy": {
+"requirement": "100% unit test coverage",
+"scope": ["lines", "branches", "functions", "statements"],
+"enforcement": "Block progression to the next phase until 100% coverage is achieved and reported."
+},
+"definition_of_done_extension": [
+"Feature implementation complete",
+"Unit tests added/updated",
+"Coverage report shows 100% across required scope",
+"All tests pass in CI/local validation"
+]
+}}
+
