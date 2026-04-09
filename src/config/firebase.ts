@@ -1,13 +1,19 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
-import { getStorage } from "firebase/storage";
+import type { Analytics } from "firebase/analytics";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import type { Auth } from "firebase/auth";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
+import type { FirebaseStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
+import type { Messaging } from "firebase/messaging";
 import {
   getFirebaseClientConfig,
   resolveFirebaseRuntimeEnv,
+  type FirebaseClientConfig,
   type FirebaseRuntimeEnv
 } from "./firebaseEnvironment";
 
@@ -24,30 +30,44 @@ const isLocalRuntime =
   runtimeHostname.endsWith('.local');
 
 const requestedEnv = resolveFirebaseRuntimeEnv(import.meta.env.VITE_APP_ENV);
+export const isUsingFirebaseEmulators = isLocalRuntime;
 
-// Hard safety rule: local runtime must never use production Firebase.
-export const activeFirebaseEnv: FirebaseRuntimeEnv = isLocalRuntime ? 'test' : requestedEnv;
+// Local development uses Firebase emulators while hosted runtimes use the requested Firebase env.
+export const activeFirebaseEnv: FirebaseRuntimeEnv = requestedEnv;
 
-// Firebase configuration selected by VITE_APP_ENV ('prod' | 'test')
-export const firebaseConfig = getFirebaseClientConfig(activeFirebaseEnv, import.meta.env);
+let firebaseConfig: FirebaseClientConfig | null = null;
+let firebaseInitError = '';
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-let analytics = null;
-if (typeof window !== 'undefined') {
+try {
+  const configEnv: FirebaseRuntimeEnv = isUsingFirebaseEmulators ? 'prod' : activeFirebaseEnv;
+  firebaseConfig = getFirebaseClientConfig(configEnv, import.meta.env);
+} catch (error) {
+  firebaseInitError =
+    error instanceof Error ? error.message : 'Firebase configuration could not be loaded.';
+}
+
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+let analytics: Analytics | null = null;
+if (app && typeof window !== 'undefined') {
   try {
     analytics = getAnalytics(app);
   } catch (error) {
     console.warn("Firebase Analytics could not be initialized", error);
   }
 }
-const db = getFirestore(app);
-const auth = getAuth(app);
-const storage = getStorage(app);
+const dbInstance = app ? getFirestore(app) : null;
+const authInstance = app ? getAuth(app) : null;
+const storageInstance = app ? getStorage(app) : null;
+
+if (isUsingFirebaseEmulators && authInstance && dbInstance && storageInstance) {
+  connectAuthEmulator(authInstance, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(dbInstance, '127.0.0.1', 8080);
+  connectStorageEmulator(storageInstance, '127.0.0.1', 9199);
+}
 
 // Messaging setup (will be fully implemented in a later phase, requiring notification permissions)
-let messaging;
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+let messaging: Messaging | null = null;
+if (!isUsingFirebaseEmulators && app && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   // FCM relies on a complete browser environment for push notifications
   try {
     messaging = getMessaging(app);
@@ -56,4 +76,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   }
 }
 
-export { app, analytics, db, auth, storage, messaging };
+const db = dbInstance as Firestore;
+const auth = authInstance as Auth;
+const storage = storageInstance as FirebaseStorage;
+
+export { app, analytics, auth, db, firebaseConfig, firebaseInitError, storage, messaging };

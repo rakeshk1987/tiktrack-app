@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "emulators": "npx firebase-tools emulators:start --only auth,firestore,storage",
+    "emulators:data": "npx firebase-tools emulators:start --only auth,firestore,storage --import .firebase-data --export-on-exit",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

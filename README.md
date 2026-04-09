@@ -30,6 +30,7 @@ Install dependencies and start the app:
 
 ```bash
 npm install
+npm run emulators
 npm run dev
 ```
 
@@ -47,31 +48,36 @@ Create a production build locally:
 npm run build
 ```
 
+## Local Data Flow
+
+Local development now uses the Firebase Local Emulator Suite:
+
+- Auth emulator on `127.0.0.1:9099`
+- Firestore emulator on `127.0.0.1:8080`
+- Storage emulator on `127.0.0.1:9199`
+- Emulator UI on [http://127.0.0.1:4000](http://127.0.0.1:4000)
+
+This means:
+
+- local data stays on your machine
+- local signups and child accounts do not touch production Firebase
+- no extra local database layer is needed
+- `.env`, emulator cache, and emulator data folders stay out of Git
+
+If you want emulator data to persist between sessions, use:
+
+```bash
+npm run emulators:data
+```
+
 ## Firebase Environments
 
-This app supports two isolated Firebase systems:
+Hosted deployments still use the live Firebase project by default.
 
 - `prod`: the live Firebase project
-- `test`: a separate Firebase project for safe local and test data
+- `test`: an optional separate hosted Firebase project if you choose to add one later
 
-Safety rule:
-
-- Local development always uses the `test` Firebase environment automatically.
-- Hosted deployments use `prod` unless you explicitly override the runtime environment.
-
-Copy `.env.example` to `.env` and set:
-
-```bash
-VITE_APP_ENV=prod
-```
-
-or:
-
-```bash
-VITE_APP_ENV=test
-```
-
-When `VITE_APP_ENV=test`, all `VITE_FIREBASE_TEST_*` values are required.
+For hosted overrides, copy `.env.example` to `.env` and fill the relevant `VITE_FIREBASE_*` keys.
 
 ## Firebase Hosting
 

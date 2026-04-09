@@ -7,6 +7,9 @@ import { firebaseConfig } from "../config/firebase";
 // would automatically sign the Parent out of their session.
 export function getSecondaryAuth() {
   const secondaryAppName = "SecondaryAppForChildCreation";
+  if (!firebaseConfig) {
+    throw new Error('Firebase is not configured for local child account management yet.');
+  }
   
   // Check if it's already generated to prevent duplication errors
   const secondaryApp = getApps().find(app => app.name === secondaryAppName) 

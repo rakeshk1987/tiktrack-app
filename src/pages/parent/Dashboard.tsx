@@ -24,7 +24,7 @@ import {
 import { getSecondaryAuth } from '../../utils/secondaryAuth';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
-import { activeFirebaseEnv, auth, db } from '../../config/firebase';
+import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
 
 interface ChildAccount {
   id: string;
@@ -216,7 +216,7 @@ export default function ParentDashboard() {
                   Welcome, {user?.email || 'Parent'}
                 </p>
                 <p className="text-xs font-bold mt-1 inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                  {activeFirebaseEnv.toUpperCase()} DB
+                  {isUsingFirebaseEmulators ? 'LOCAL EMULATOR' : `${activeFirebaseEnv.toUpperCase()} DB`}
                 </p>
               </div>
               <div className="flex items-center gap-2">
