@@ -25,6 +25,7 @@ export interface Task {
   id: string;
   title: string;
   category: string;
+  child_id?: string;
   priority: 'low' | 'medium' | 'high';
   energy_level: 'low' | 'medium' | 'high';
   difficulty_level: number;
@@ -83,10 +84,18 @@ export interface DiaryEntry {
 
 export interface Event {
   id: string;
+  child_id?: string;
   type: string;
   title: string;
   date: string;
   reminder_days_before: number;
+}
+
+export interface RewardSetting {
+  id: string;
+  parent_id: string;
+  star_to_currency_rate: number;
+  weekly_bonus_enabled: boolean;
 }
 
 export interface Challenge {

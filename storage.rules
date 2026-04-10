@@ -2,9 +2,16 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Local emulator-friendly rules for development.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    match /proofs/{childId}/{allPaths=**} {
+      allow read, write: if signedIn();
+    }
+
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

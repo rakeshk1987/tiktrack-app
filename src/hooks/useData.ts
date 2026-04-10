@@ -123,7 +123,9 @@ export function useTodaysTasks(childId: string) {
       }
 
       const logByTaskId = new Map(taskLogs.map((log) => [log.task_id, log]));
-      const merged = taskDocs.map((task) => ({ task, log: logByTaskId.get(task.id) }));
+        const merged = taskDocs
+          .filter((task) => !task.child_id || task.child_id === childId)
+          .map((task) => ({ task, log: logByTaskId.get(task.id) }));
 
       if (merged.length > 0) {
         merged.sort((a, b) => {

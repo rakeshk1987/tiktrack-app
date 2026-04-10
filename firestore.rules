@@ -2,9 +2,104 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Local emulator-friendly rules for development.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isParent() {
+      return signedIn() && userDoc(request.auth.uid).data.role == 'parent_admin';
+    }
+
+    function isChild() {
+      return signedIn() && userDoc(request.auth.uid).data.role == 'child_user';
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isParentOf(childId) {
+      return signedIn() && userDoc(childId).data.parent_id == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if isSelf(userId) || isParent();
+      allow create: if signedIn() && (isSelf(userId) || isParent());
+      allow update: if isSelf(userId) || isParent();
+      allow delete: if isParent();
+    }
+
+    match /child_profile/{childId} {
+      allow read: if isSelf(childId) || isParentOf(childId) || isParent();
+      allow create, update: if isParentOf(childId) || isParent();
+      allow delete: if isParent();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isParent();
+    }
+
+    match /task_logs/{logId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if signedIn() && (
+        (isChild() && request.resource.data.child_id == request.auth.uid) ||
+        (isParent() && isParentOf(request.resource.data.child_id))
+      );
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /proof_logs/{proofId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isChild() && request.resource.data.child_id == request.auth.uid;
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /mood_logs/{moodId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update: if isChild() && request.resource.data.child_id == request.auth.uid;
+      allow delete: if isParent();
+    }
+
+    match /diary_entries/{entryId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update: if isChild() && request.resource.data.child_id == request.auth.uid;
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+    }
+
+    match /exam_results/{examId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update, delete: if isParent();
+    }
+
+    match /growth_logs/{growthId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update, delete: if isParent();
+    }
+
+    match /events/{eventId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isParent();
+    }
+
+    match /challenges/{challengeId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isParent();
+    }
+
+    match /shields/{shieldId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update, delete: if isParent();
+    }
+
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
