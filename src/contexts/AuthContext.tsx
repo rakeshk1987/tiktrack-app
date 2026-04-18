@@ -59,7 +59,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 id: firebaseUser.uid,
                 email: firebaseUser.email || '',
                 role: data.role ?? fallbackUser.role,
-                parent_id: data.parent_id
+                parent_id: data.parent_id,
+                linked_family_id: data.linked_family_id
               });
             } else {
               // Safeguard fallback if document creation lagged.

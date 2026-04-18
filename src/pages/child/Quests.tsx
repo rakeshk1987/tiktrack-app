@@ -1,4 +1,4 @@
-﻿import clsx from 'clsx';
+import clsx from 'clsx';
 import { useChildLayout } from './ChildLayout';
 
 export default function ChildQuests() {
@@ -15,7 +15,40 @@ export default function ChildQuests() {
           {proofQueueCount} proof{proofQueueCount === 1 ? '' : 's'} waiting
         </div>
       </div>
-      <div className="space-y-4">{tasks.map((item) => renderQuestCard(item))}</div>
+      <div className="space-y-8">
+        {tasks.filter(t => t.task.priority === 'high' && !t.task.id.includes('bonus_')).length > 0 && (
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-widest text-rose-400 mb-3 ml-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> Priority Quests
+            </h3>
+            <div className="space-y-4">
+              {tasks.filter(t => t.task.priority === 'high' && !t.task.id.includes('bonus_')).map((item) => renderQuestCard(item))}
+            </div>
+          </div>
+        )}
+
+        {tasks.filter(t => t.task.priority !== 'high' && !t.task.id.includes('bonus_')).length > 0 && (
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-widest text-sky-400 mb-3 ml-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-sky-500"></span> Standard Quests
+            </h3>
+            <div className="space-y-4">
+              {tasks.filter(t => t.task.priority !== 'high' && !t.task.id.includes('bonus_')).map((item) => renderQuestCard(item))}
+            </div>
+          </div>
+        )}
+
+        {tasks.filter(t => t.task.id.includes('bonus_')).length > 0 && (
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-widest text-emerald-400 mb-3 ml-2 flex items-center gap-2">
+              <span className="text-lg">✨</span> Bonus Quests
+            </h3>
+            <div className="space-y-4">
+              {tasks.filter(t => t.task.id.includes('bonus_')).map((item) => renderQuestCard(item))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

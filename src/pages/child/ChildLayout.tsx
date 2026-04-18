@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import {
@@ -13,7 +13,8 @@ import {
   Star,
   Sun,
   Upload,
-  UserRound
+  UserRound,
+  Mail
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,9 +27,13 @@ import {
   useChildProfile,
   useChildProofs,
   useQuestActions,
-  useTodaysTasks
+  useTodaysTasks,
+  useUpcomingEvents,
+  useMessages
 } from '../../hooks/useData';
+import { getExamPlannerStats } from '../../hooks/useCoreLogic';
 import type { MoodLog, Task } from '../../types/schema';
+import InboxPanel from '../../components/child/InboxPanel';
 
 export type ChildTab = 'home' | 'quests' | 'diary' | 'profile';
 
@@ -118,17 +123,22 @@ export default function ChildLayout() {
   const childId = user?.id || '';
   const { profile, loading: profileLoading } = useChildProfile(childId);
   const { tasks, loading: tasksLoading } = useTodaysTasks(childId);
+  const { events, loading: eventsLoading } = useUpcomingEvents(childId);
   const { moodLog, saving: moodSaving, saveMood } = useChildMood(childId);
   const { entries, saving: diarySaving, addEntry } = useDiaryEntries(childId);
   const { proofs, uploading, uploadProof } = useChildProofs(childId);
   const { completeTask, saving: questSaving } = useQuestActions(childId);
+  const { messages } = useMessages(childId, 'child');
 
   const [notice, setNotice] = useState('');
   const [diaryDraft, setDiaryDraft] = useState('');
   const [pendingProofTask, setPendingProofTask] = useState<Task | null>(null);
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  if (profileLoading || tasksLoading || !profile) {
+  const examStats = getExamPlannerStats(events, tasks);
+
+  if (profileLoading || tasksLoading || eventsLoading || !profile) {
     return <LoadingScreen />;
   }
 
@@ -143,13 +153,70 @@ export default function ChildLayout() {
 
   const isDark = theme === 'dark';
   const childName = profile.name || 'Athmika';
-  const completedCount = tasks.filter((item) => item.log?.status === 'completed').length;
-  const progressPercent = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+  
+  const isMoodNegative = moodLog?.mood === 'sad' || moodLog?.mood === 'tired' || moodLog?.mood === 'frustrated';
+  const isMoodPositive = moodLog?.mood === 'happy' || moodLog?.mood === 'excited';
+  
+  let adaptiveTasks = isMoodNegative 
+    ? tasks.filter(t => t.task.priority !== 'low' || t.log?.status === 'completed') 
+    : tasks;
+
+  // Emotional Adaptation: Add a bonus if they feel great!
+  if (isMoodPositive && adaptiveTasks.length > 0 && !adaptiveTasks.some(t => t.task.id === 'bonus_quest_happy')) {
+    adaptiveTasks = [...adaptiveTasks, {
+      task: {
+        id: 'bonus_quest_happy',
+        title: 'Happy Bonus: Dance for 1 minute!',
+        category: 'Creative',
+        priority: 'low',
+        energy_level: 'high',
+        difficulty_level: 1,
+        star_value: 3,
+        requires_proof: false
+      }
+    }];
+  }
+
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+
+  const isStruggling = (Number(profile.consistency_score) || 0) < 40;
+  const isMaster = (Number(profile.streak_count) || 0) >= 21;
+
+  if (isStruggling) {
+    // Difficulty Scaling: Decrease difficulty, boost rewards slightly to encourage
+    adaptiveTasks = adaptiveTasks.map(t => ({
+      ...t, 
+      task: { ...t.task, difficulty_level: Math.max(1, (t.task.difficulty_level || 1) - 1), star_value: (t.task.star_value || 1) + 1 }
+    }));
+  } else if (isMaster) {
+    // Difficulty Scaling: Increase difficulty subtly
+    adaptiveTasks = adaptiveTasks.map(t => ({
+      ...t, 
+      task: { ...t.task, difficulty_level: Math.min(5, (t.task.difficulty_level || 1) + 1) }
+    }));
+  }
+
+  // Priority Adjustment: Strip creatives if high-priority tasks pending in evening
+  if (timeOfDay === 'evening') {
+    const hasPendingHighPriority = adaptiveTasks.some(t => t.task.priority === 'high' && t.log?.status !== 'completed');
+    if (hasPendingHighPriority) {
+       adaptiveTasks = adaptiveTasks.filter(t => t.task.priority !== 'low' || t.log?.status === 'completed');
+    }
+  }
+
+  const completedCount = adaptiveTasks.filter((item) => item.log?.status === 'completed').length;
+  const progressPercent = adaptiveTasks.length ? Math.round((completedCount / adaptiveTasks.length) * 100) : 0;
   const levelProgress = Math.min(100, 20 + progressPercent);
   const currentMood = moodOptions.find((option) => option.value === moodLog?.mood) || null;
   const proofQueueCount = proofs.filter((proof) => proof.approval_status === 'pending').length;
   const latestProofs = proofs.slice(0, 3);
-  const remainingTasks = Math.max(tasks.length - completedCount, 0);
+  const remainingTasks = Math.max(adaptiveTasks.length - completedCount, 0);
+
+  const greetingMessage = timeOfDay === 'morning' ? `Good morning, ${childName}!` 
+    : timeOfDay === 'afternoon' ? `Good afternoon, ${childName}!` 
+    : `Good evening, ${childName}!`;
+  const missedTaskAlert = timeOfDay === 'evening' && remainingTasks > 0;
 
   const shellClass = isDark ? 'bg-[#100f24] text-white' : 'bg-[#f5f8ff] text-slate-900';
   const backdropBase = isDark
@@ -183,6 +250,25 @@ export default function ChildLayout() {
     void navigate(nextPath);
   };
 
+  const tabStorageKey = `tiktrack_child_${childId}_last_tab`;
+
+  useEffect(() => {
+    if (path === '/child') {
+      try {
+        const saved = localStorage.getItem(tabStorageKey);
+        if (saved && (['home', 'quests', 'diary', 'profile'] as string[]).includes(saved)) {
+          void navigate(saved === 'home' ? '/child' : `/child/${saved}`);
+        }
+      } catch (e) {}
+    }
+  }, [childId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(tabStorageKey, activeTab);
+    } catch (e) {}
+  }, [activeTab, childId]);
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -206,12 +292,30 @@ export default function ChildLayout() {
     try {
       await addEntry(diaryDraft);
       setDiaryDraft('');
+      try {
+        localStorage.removeItem(`tiktrack_child_${childId}_diary_draft`);
+      } catch {}
       setNotice('Diary note saved.');
     } catch (error) {
       console.error('Diary save failed:', error);
       setNotice('Diary note could not be saved right now.');
     }
   };
+
+  useEffect(() => {
+    const key = `tiktrack_child_${childId}_diary_draft`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved && !diaryDraft) setDiaryDraft(saved);
+    } catch {}
+
+    const handle = setInterval(() => {
+      try {
+        if (diaryDraft?.trim()) localStorage.setItem(key, diaryDraft);
+      } catch {}
+    }, 1500);
+    return () => clearInterval(handle);
+  }, [childId, diaryDraft]);
 
   const handleQuestComplete = async (task: Task) => {
     try {
@@ -231,7 +335,6 @@ export default function ChildLayout() {
   const handleProofFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !pendingProofTask) return;
-
     try {
       await uploadProof(pendingProofTask, file);
       await completeTask(pendingProofTask);
@@ -290,19 +393,11 @@ export default function ChildLayout() {
                 </div>
               </div>
               {item.task.requires_proof ? (
-                <button
-                  onClick={() => openProofPicker(item.task)}
-                  disabled={uploading || questSaving}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#ffd95e,#ffb347)] px-5 py-3 text-base font-black text-slate-900 shadow-[0_10px_25px_rgba(251,191,36,0.28)] transition hover:brightness-105 disabled:opacity-60"
-                >
+                <button onClick={() => openProofPicker(item.task)} disabled={uploading || questSaving} className="inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#ffd95e,#ffb347)] px-5 py-3 text-base font-black text-slate-900 shadow-[0_10px_25px_rgba(251,191,36,0.28)] transition hover:brightness-105 disabled:opacity-60">
                   <Upload size={16} /> Upload Proof
                 </button>
               ) : (
-                <button
-                  onClick={() => void handleQuestComplete(item.task)}
-                  disabled={isCompleted || questSaving}
-                  className={clsx('rounded-2xl px-5 py-3 text-base font-black transition disabled:opacity-60', isCompleted ? 'bg-emerald-400/20 text-emerald-100' : 'bg-[linear-gradient(135deg,#d9ffd2,#ffe5cf)] text-slate-900 shadow-[0_10px_25px_rgba(250,204,21,0.14)] hover:brightness-105')}
-                >
+                <button onClick={() => void handleQuestComplete(item.task)} disabled={isCompleted || questSaving} className={clsx('rounded-2xl px-5 py-3 text-base font-black transition disabled:opacity-60', isCompleted ? 'bg-emerald-400/20 text-emerald-100' : 'bg-[linear-gradient(135deg,#d9ffd2,#ffe5cf)] text-slate-900 shadow-[0_10px_25px_rgba(250,204,21,0.14)] hover:brightness-105')}>
                   {isCompleted ? 'Quest Complete' : 'Complete Quest'}
                 </button>
               )}
@@ -351,7 +446,9 @@ export default function ChildLayout() {
     renderQuestCard,
     setDiaryDraft,
     softTextClass,
-    tasks,
+    tasks: adaptiveTasks,
+    timeOfDay,
+    remainingTasks,
     uploading
   };
 
@@ -360,25 +457,21 @@ export default function ChildLayout() {
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleProofFile(event)} />
       <div className={clsx('absolute inset-0', backdropBase)} />
       <div className={clsx('absolute inset-0 opacity-80', backdropGlow)} />
-      <div className="pointer-events-none absolute inset-0">
-        <div className={clsx('absolute inset-x-0 top-0 h-72', isDark ? 'bg-[linear-gradient(180deg,rgba(147,51,234,0.18),transparent)]' : 'bg-[linear-gradient(180deg,rgba(129,140,248,0.15),transparent)]')} />
-        {Array.from({ length: 28 }).map((_, index) => (
-          <span key={index} className={clsx('absolute rounded-full animate-pulse', isDark ? 'bg-white/80' : 'bg-indigo-300/80')} style={{ top: `${6 + ((index * 13) % 54)}%`, left: `${3 + ((index * 17) % 92)}%`, width: `${index % 3 === 0 ? 3 : 2}px`, height: `${index % 3 === 0 ? 3 : 2}px`, opacity: 0.45 + (index % 4) * 0.1, animationDelay: `${index * 120}ms` }} />
-        ))}
-      </div>
+      
+      {isInboxOpen && (
+        <InboxPanel childId={childId} isDark={isDark} onClose={() => setIsInboxOpen(false)} />
+      )}
 
       <div className="mx-auto max-w-5xl px-4 pb-10 pt-6 relative z-10 sm:px-6">
         <div className={clsx('rounded-[2rem] border p-6 shadow-[0_24px_80px_rgba(6,8,30,0.45)] backdrop-blur-xl sm:p-8', heroClass)}>
           <div className="mb-6 hidden gap-4 rounded-[1.5rem] border border-black/10 bg-black/20 px-4 py-3 md:flex md:flex-col xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-3">
-                <div className={clsx('grid h-11 w-11 place-items-center rounded-2xl border', isDark ? 'border-white/15 bg-white/10 text-cyan-200' : 'border-slate-300/60 bg-slate-900 text-cyan-300')}>
-                  <UserRound size={18} />
-                </div>
-                <div>
-                  <p className={clsx('text-xs font-black uppercase tracking-[0.2em]', lowContrastTextClass)}>Profile</p>
-                  <p className="text-base font-bold">{childName}</p>
-                </div>
+              <div className={clsx('grid h-11 w-11 place-items-center rounded-2xl border', isDark ? 'border-white/15 bg-white/10 text-cyan-200' : 'border-slate-300/60 bg-slate-900 text-cyan-300')}>
+                <UserRound size={18} />
+              </div>
+              <div>
+                <p className={clsx('text-xs font-black uppercase tracking-[0.2em]', lowContrastTextClass)}>Profile</p>
+                <p className="text-base font-bold">{childName}</p>
               </div>
               <button onClick={handleLogout} className={clsx('rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>Logout</button>
               <button onClick={toggleTheme} className={clsx('inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>
@@ -386,8 +479,8 @@ export default function ChildLayout() {
                 {theme === 'light' ? 'Dark sky' : 'Light sky'}
               </button>
             </div>
-
-            <div className={clsx('grid grid-cols-4 rounded-[1.35rem] border px-2 py-2 shadow-sm', navShellClass)}>
+            
+            <div className={clsx('grid grid-cols-4 sm:grid-cols-5 rounded-[1.35rem] border px-2 py-2 shadow-sm', navShellClass)}>
               {[
                 { id: 'home', label: 'Home', icon: Home },
                 { id: 'quests', label: 'Quests', icon:MessageSquare },
@@ -397,27 +490,65 @@ export default function ChildLayout() {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
                 return (
-                  <button key={tab.id} onClick={() => goToTab(tab.id as ChildTab)} className={clsx('flex min-w-[92px] flex-col items-center gap-1 rounded-xl px-4 py-2 text-sm font-bold transition', active ? (isDark ? 'text-cyan-300 bg-white/6' : 'text-cyan-600 bg-slate-900/5') : lowContrastTextClass)}>
+                  <button key={tab.id} onClick={() => goToTab(tab.id as ChildTab)} className={clsx('flex min-w-[70px] sm:min-w-[92px] flex-col items-center gap-1 rounded-xl px-2 py-2 sm:px-4 text-sm font-bold transition', active ? (isDark ? 'text-cyan-300 bg-white/6' : 'text-cyan-600 bg-slate-900/5') : lowContrastTextClass)}>
                     <Icon size={18} />
-                    <span>{tab.label}</span>
+                    <span className="hidden sm:inline">{tab.label}</span>
                   </button>
                 );
               })}
+              <button onClick={() => setIsInboxOpen(true)} className={clsx('flex min-w-[70px] sm:min-w-[92px] flex-col items-center gap-1 rounded-xl px-2 py-2 sm:px-4 text-sm font-bold transition relative', lowContrastTextClass)}>
+                {messages.filter(m => !m.is_read).length > 0 && (
+                   <span className="absolute top-1 right-1/4 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-white dark:border-slate-900" />
+                )}
+                <Mail size={18} />
+                <span className="hidden sm:inline">Inbox</span>
+              </button>
             </div>
           </div>
 
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className={clsx('text-sm uppercase tracking-[0.24em] font-black', accentCaptionClass)}>Today is your quest day</p>
-              <h1 className="text-4xl font-display font-extrabold leading-tight mt-3 sm:text-6xl">Hi {childName}! <span className="inline-block align-middle">😊</span></h1>
-              <p className={clsx('text-lg mt-3 max-w-2xl', softTextClass)}>You are building strong habits, one tiny win at a time.</p>
+              <h1 className="text-4xl font-display font-extrabold leading-tight mt-3 sm:text-6xl">{greetingMessage} <span className="inline-block align-middle">😊</span></h1>
+              {remainingTasks === 0 && adaptiveTasks.length > 0 ? (
+                <div className="inline-flex mt-4 p-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold items-center gap-3 shadow-lg shadow-emerald-500/20">
+                  <span className="text-2xl animate-bounce">🌟</span> Perfect Day! You have completed all your quests!
+                </div>
+              ) : missedTaskAlert ? (
+                <p className={clsx('text-lg mt-3 max-w-2xl font-bold p-3 rounded-xl border border-rose-400/30 bg-rose-500/10 text-rose-500')}>It looks like you have some uncompleted quests. See if you can finish them before bedtime!</p>
+              ) : (
+                <p className={clsx('text-lg mt-3 max-w-2xl', softTextClass)}>You are building strong habits, one tiny win at a time.</p>
+              )}
             </div>
             <div className={clsx('grid h-16 w-16 place-items-center rounded-[1.4rem] border shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] sm:h-20 sm:w-20', isDark ? 'border-white/25 bg-white/12 text-white/95' : 'border-indigo-200/70 bg-white/75 text-indigo-700')}>
               <Sparkles size={30} />
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3 md:hidden">
+          {examStats.nearestExam && examStats.daysRemaining <= 14 && (
+            <div className={clsx(
+              'mt-6 rounded-2xl border px-5 py-4 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-4 duration-700 relative z-20',
+              examStats.daysRemaining <= 3 ? 'border-rose-400/30 bg-rose-500/10 text-rose-100' : 'border-amber-400/20 bg-amber-500/10 text-amber-100'
+            )}>
+              <div className="flex items-center gap-4">
+                <div className={clsx('grid h-12 w-12 place-items-center rounded-xl', examStats.daysRemaining <= 3 ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20')}>
+                  <ScrollText size={22} />
+                </div>
+                <div>
+                  <p className="font-black text-lg">{examStats.nearestExam.title} Challenge</p>
+                  <p className="text-sm opacity-80">
+                    {examStats.daysRemaining === 0 ? "Today is the big day! Good luck!" : examStats.daysRemaining === 1 ? "Exam is tomorrow! Light day mode active." : `${examStats.daysRemaining} days remaining for your challenge.`}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right hidden sm:block">
+                <p className="text-2xl font-black">{examStats.daysRemaining}d</p>
+                <p className="text-[10px] uppercase tracking-widest opacity-60 font-bold">Countdown</p>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-8 flex flex-wrap items-center gap-3 md:hidden">
             <button onClick={handleLogout} className={clsx('rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>Logout</button>
             <button onClick={toggleTheme} className={clsx('inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>
               {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
@@ -427,14 +558,28 @@ export default function ChildLayout() {
           </div>
 
           <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(255,222,189,0.88))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]"><div className="flex items-center justify-center gap-2 text-amber-500"><Star className="fill-current" size={20} /><span className="text-4xl font-black">{profile.total_stars ?? 0}</span></div><p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Stars</p></div>
-            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(255,240,189,0.88))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]"><div className="flex items-center justify-center gap-2 text-orange-500"><Flame className="fill-current" size={20} /><span className="text-4xl font-black">{profile.streak_count ?? 0}</span></div><p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Streak</p></div>
-            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(226,239,255,0.9))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]"><div className="flex items-center justify-center gap-2 text-sky-600"><Shield className="fill-current" size={20} /><span className="text-4xl font-black">{profile.streak_shields ?? 0}</span></div><p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Shields</p></div>
+            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(255,222,189,0.88))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]">
+              <div className="flex items-center justify-center gap-2 text-amber-500"><Star className="fill-current" size={20} /><span className="text-4xl font-black">{profile.total_stars ?? 0}</span></div>
+              <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Stars</p>
+            </div>
+            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(255,240,189,0.88))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]">
+              <div className="flex items-center justify-center gap-2 text-orange-500"><Flame className="fill-current" size={20} /><span className="text-4xl font-black">{profile.streak_count ?? 0}</span></div>
+              <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Streak</p>
+            </div>
+            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(226,239,255,0.9))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]">
+              <div className="flex items-center justify-center gap-2 text-sky-600"><Shield className="fill-current" size={20} /><span className="text-4xl font-black">{profile.streak_shields ?? 0}</span></div>
+              <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Shields</p>
+            </div>
           </div>
 
           <div className={clsx('mt-6 rounded-[1.5rem] border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]', subPanelClass)}>
-            <div className={clsx('flex flex-wrap items-center justify-between gap-3 text-sm font-black uppercase tracking-[0.18em]', softTextClass)}><span>Adventure Meter</span><div className="flex items-center gap-3"><span className={isDark ? 'text-amber-200' : 'text-amber-500'}>{'★'.repeat(Math.max(1, Math.min(5, Math.ceil(progressPercent / 20) || 1)))}</span><span>{progressPercent}%</span></div></div>
-            <div className="mt-4 h-4 rounded-full bg-white/10 p-1"><div className="h-full rounded-full bg-[linear-gradient(90deg,#5ee7ff_0%,#7c83ff_55%,#ff7bc0_100%)] transition-all" style={{ width: `${progressPercent}%` }} /></div>
+            <div className={clsx('flex flex-wrap items-center justify-between gap-3 text-sm font-black uppercase tracking-[0.18em]', softTextClass)}>
+              <span>Adventure Meter</span>
+              <div className="flex items-center gap-3"><span className={isDark ? 'text-amber-200' : 'text-amber-500'}>{'★'.repeat(Math.max(1, Math.min(5, Math.ceil(progressPercent / 20) || 1)))}</span><span>{progressPercent}%</span></div>
+            </div>
+            <div className="mt-4 h-4 rounded-full bg-white/10 p-1">
+              <div className="h-full rounded-full bg-[linear-gradient(90deg,#5ee7ff_0%,#7c83ff_55%,#ff7bc0_100%)] transition-all" style={{ width: `${progressPercent}%` }} />
+            </div>
           </div>
         </div>
 

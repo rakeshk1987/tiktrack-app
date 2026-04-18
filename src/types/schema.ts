@@ -4,7 +4,17 @@ export interface User {
   id: string;
   email: string;
   role: Role;
-  parent_id?: string; // Optional if role is parent_admin
+  parent_id?: string;
+  linked_family_id?: string; // For Co-parenting link
+}
+
+export interface InboxMessage {
+  id: string;
+  child_id: string;
+  parent_id: string;
+  content: string;
+  timestamp: string; // ISO String
+  is_read: boolean;
 }
 
 export interface ChildProfile {
@@ -18,6 +28,8 @@ export interface ChildProfile {
   consistency_score: number;
   total_stars: number;
   is_sick_mode: boolean;
+  last_streak_eval: string; // ISO Date YYYY-MM-DD
+  last_task_date?: string; // ISO Date YYYY-MM-DD
   user_id: string;
 }
 
