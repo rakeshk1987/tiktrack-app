@@ -34,6 +34,7 @@ import {
 import { getExamPlannerStats } from '../../hooks/useCoreLogic';
 import type { MoodLog, Task } from '../../types/schema';
 import InboxPanel from '../../components/child/InboxPanel';
+import { useChallenges } from '../../hooks/useChallenges';
 
 export type ChildTab = 'home' | 'quests' | 'diary' | 'profile';
 
@@ -129,6 +130,8 @@ export default function ChildLayout() {
   const { proofs, uploading, uploadProof } = useChildProofs(childId);
   const { completeTask, saving: questSaving } = useQuestActions(childId);
   const { messages } = useMessages(childId, 'child');
+  const parentId = profile?.user_id || '';
+  const { activeChallenges, incrementScore: incrementChallengeScore } = useChallenges(parentId);
 
   const [notice, setNotice] = useState('');
   const [diaryDraft, setDiaryDraft] = useState('');
@@ -571,6 +574,33 @@ export default function ChildLayout() {
               <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Shields</p>
             </div>
           </div>
+
+          {activeChallenges.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <h3 className={clsx('text-sm font-black uppercase tracking-[0.2em] ml-1', isDark ? 'text-amber-200' : 'text-amber-600')}>⚔️ Active Challenges</h3>
+              {activeChallenges.filter(ch => ch.child_id === childId).map((ch) => (
+                <div key={ch.id} className={clsx('rounded-[1.6rem] border px-5 py-4 shadow-[0_12px_30px_rgba(10,10,30,0.18)]', isDark ? 'border-white/12 bg-white/6' : 'border-indigo-200/60 bg-white/85')}>
+                  <p className="font-bold text-lg">{ch.title}</p>
+                  {ch.description && <p className={clsx('text-sm mt-1', mutedTextClass)}>{ch.description}</p>}
+                  <div className="flex items-center gap-4 mt-3">
+                    <div className="flex-1">
+                      <p className={clsx('text-xs font-bold', mutedTextClass)}>You: {ch.child_score}/{ch.target_score}</p>
+                      <div className={clsx('h-3 rounded-full mt-1', isDark ? 'bg-white/10' : 'bg-indigo-100')}>
+                        <div className="h-full rounded-full bg-[linear-gradient(90deg,#ec4899,#f472b6)] transition-all" style={{ width: `${Math.min(100, (ch.child_score / ch.target_score) * 100)}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className={clsx('text-xs font-bold', mutedTextClass)}>Parent: {ch.parent_score}/{ch.target_score}</p>
+                      <div className={clsx('h-3 rounded-full mt-1', isDark ? 'bg-white/10' : 'bg-indigo-100')}>
+                        <div className="h-full rounded-full bg-[linear-gradient(90deg,#8b5cf6,#6366f1)] transition-all" style={{ width: `${Math.min(100, (ch.parent_score / ch.target_score) * 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => void incrementChallengeScore(ch.id, 'child')} className="mt-3 rounded-xl bg-[linear-gradient(135deg,#ec4899,#8b5cf6)] px-4 py-2 text-sm font-bold text-white shadow-md hover:brightness-110 transition">+1 My Score</button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className={clsx('mt-6 rounded-[1.5rem] border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]', subPanelClass)}>
             <div className={clsx('flex flex-wrap items-center justify-between gap-3 text-sm font-black uppercase tracking-[0.18em]', softTextClass)}>

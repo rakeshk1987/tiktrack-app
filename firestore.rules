@@ -78,6 +78,11 @@ service cloud.firestore {
       allow create, update, delete: if isParent();
     }
 
+    match /exams/{examId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isParent();
+    }
+
     match /growth_logs/{growthId} {
       allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
       allow create, update, delete: if isParent();
@@ -96,6 +101,17 @@ service cloud.firestore {
     match /shields/{shieldId} {
       allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
       allow create, update, delete: if isParent();
+    }
+
+    match /reward_settings/{settingId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isParent();
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if isParent();
     }
 
     match /{document=**} {

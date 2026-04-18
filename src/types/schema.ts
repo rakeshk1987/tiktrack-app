@@ -112,8 +112,17 @@ export interface RewardSetting {
 
 export interface Challenge {
   id: string;
+  title: string;
+  description?: string;
+  parent_id: string;
+  child_id: string;
   parent_score: number;
   child_score: number;
+  target_score: number;
+  status: 'active' | 'completed';
+  winner?: 'parent' | 'child' | 'draw';
+  created_at: string;
+  completed_at?: string;
 }
 
 export interface Shield {

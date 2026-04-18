@@ -26,6 +26,7 @@ import AcademicHeatmap from '../../components/insights/AcademicHeatmap';
 import { getSecondaryAuth } from '../../utils/secondaryAuth';
 import { computeLevelFromStars, evaluateBadges, applyTaskCompletionToProfile } from '../../hooks/useCoreLogic';
 import { useMessages } from '../../hooks/useData';
+import { useChallenges } from '../../hooks/useChallenges';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
@@ -112,8 +113,15 @@ export default function ParentDashboard() {
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
 
+  const [chTitle, setChTitle] = useState('');
+  const [chChild, setChChild] = useState('');
+  const [chTarget, setChTarget] = useState<number | ''>('');
+  const [chDesc, setChDesc] = useState('');
+  const [challengeLoading, setChallengeLoading] = useState(false);
+
   const familyId = user?.linked_family_id || user?.id || '';
   const { messages, sendMessage } = useMessages(familyId, 'parent');
+  const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
 
   useEffect(() => {
     if (!user) {
@@ -1445,6 +1453,86 @@ export default function ParentDashboard() {
                       + Invite Co-Parent
                     </button>
                   </div>
+                </div>
+
+                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                  <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                    <Activity size={18} /> Challenges
+                  </h2>
+
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!chTitle || !chChild || !chTarget) return;
+                    setChallengeLoading(true);
+                    try {
+                      await createChallenge(chTitle, chChild, Number(chTarget), chDesc);
+                      setChTitle(''); setChChild(''); setChTarget(''); setChDesc('');
+                      setSuccess('Challenge created!');
+                    } catch (err) {
+                      setError('Could not create challenge.');
+                    } finally {
+                      setChallengeLoading(false);
+                    }
+                  }} className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                    <select required value={chChild} onChange={(e) => setChChild(e.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <option value="">-- Child --</option>
+                      {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                    </select>
+                    <input required value={chTitle} onChange={(e) => setChTitle(e.target.value)} placeholder="Challenge title" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    <input required value={chTarget as any} onChange={(e) => setChTarget(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Target score" type="number" min="1" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    <input value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Description (optional)" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    <div className="col-span-1 sm:col-span-2 flex gap-2">
+                      <button disabled={challengeLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{challengeLoading ? 'Creating...' : '+ New Challenge'}</button>
+                      <button type="button" onClick={() => { setChTitle(''); setChChild(''); setChTarget(''); setChDesc(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                    </div>
+                  </form>
+
+                  {activeChallenges.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Active</p>
+                      {activeChallenges.map((ch) => (
+                        <div key={ch.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{ch.description || 'No description'} • Target: {ch.target_score}</p>
+                          <div className="flex items-center gap-3 mt-2">
+                            <div className="flex-1">
+                              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Parent: {ch.parent_score}</p>
+                              <div className="h-2 rounded-full mt-1" style={{ background: 'var(--border-main)' }}>
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (ch.parent_score / ch.target_score) * 100)}%`, background: 'linear-gradient(90deg, #8b5cf6, #6366f1)' }} />
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Child: {ch.child_score}</p>
+                              <div className="h-2 rounded-full mt-1" style={{ background: 'var(--border-main)' }}>
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (ch.child_score / ch.target_score) * 100)}%`, background: 'linear-gradient(90deg, #ec4899, #f472b6)' }} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={() => void incrementScore(ch.id, 'parent')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-100 text-violet-700">+1 Parent</button>
+                            <button onClick={() => void incrementScore(ch.id, 'child')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-pink-100 text-pink-700">+1 Child</button>
+                            <button onClick={() => void deleteChallenge(ch.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-100 text-rose-700 ml-auto">Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {completedChallenges.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-500">Completed</p>
+                      {completedChallenges.slice(0, 3).map((ch) => (
+                        <div key={ch.id} className="rounded-xl border p-3 opacity-75" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Winner: {ch.winner === 'parent' ? '👨 Parent' : ch.winner === 'child' ? '🧒 Child' : '🤝 Draw'} • {ch.parent_score} vs {ch.child_score}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeChallenges.length === 0 && completedChallenges.length === 0 && (
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No challenges yet. Create one above!</p>
+                  )}
                 </div>
               </section>
             </div>
