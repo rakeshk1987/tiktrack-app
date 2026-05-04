@@ -1,8 +1,10 @@
 import { initializeApp, getApps } from "firebase/app";
-import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectAuthEmulator, inMemoryPersistence, initializeAuth } from "firebase/auth";
+import type { Auth } from "firebase/auth";
 import { firebaseConfig, isUsingFirebaseEmulators } from "../config/firebase";
 
 let secondaryAuthEmulatorConnected = false;
+let secondaryAuthInstance: Auth | null = null;
 
 // This creates a secondary Firebase instance specifically for creating child accounts.
 // Without it, calling createUserWithEmailAndPassword on the primary `auth` instance
@@ -17,7 +19,13 @@ export function getSecondaryAuth() {
   const secondaryApp = getApps().find(app => app.name === secondaryAppName) 
     || initializeApp(firebaseConfig, secondaryAppName);
 
-  const secondaryAuth = getAuth(secondaryApp);
+  if (!secondaryAuthInstance) {
+    secondaryAuthInstance = initializeAuth(secondaryApp, {
+      persistence: inMemoryPersistence
+    });
+  }
+
+  const secondaryAuth = secondaryAuthInstance;
 
   if (isUsingFirebaseEmulators && !secondaryAuthEmulatorConnected) {
     connectAuthEmulator(secondaryAuth, 'http://127.0.0.1:9099', { disableWarnings: true });

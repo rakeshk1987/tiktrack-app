@@ -1,4 +1,4 @@
-import type { Event, ExamResult, MoodLog, Task } from '../types/schema';
+import type { Event, ExamResult, MoodLog, Task, RoutineSlot } from '../types/schema';
 
 // Energy Sync logic based on time of day
 export function useEnergySync(tasks: Task[]) {
@@ -20,6 +20,47 @@ export function useEnergySync(tasks: Task[]) {
   });
 
   return { timeOfDay, recommendedTasks };
+}
+
+/**
+ * Routine-aware energy sync based on current routine slot
+ * Returns tasks that match the current routine slot's category
+ */
+export function useRoutineAwareEnergySync(tasks: Task[], currentSlot: RoutineSlot | null) {
+  if (!currentSlot) {
+    return useEnergySync(tasks);
+  }
+
+  const slotCategory = currentSlot.category || 'leisure';
+  const categoryEnergyMap: Record<string, 'high' | 'medium' | 'low'> = {
+    'study': 'high',
+    'prayer': 'low',
+    'health': 'medium',
+    'leisure': 'low',
+  };
+
+  const recommendedEnergy = categoryEnergyMap[slotCategory] || 'medium';
+
+  const recommendedTasks = tasks.filter(task => {
+    if (slotCategory === 'study') {
+      return task.energy_level === 'high' || task.priority === 'high';
+    }
+    if (slotCategory === 'leisure') {
+      return task.energy_level === 'low' || task.priority === 'low';
+    }
+    if (slotCategory === 'health') {
+      return task.category === 'Health' || task.energy_level === 'medium';
+    }
+    return true;
+  });
+
+  return { 
+    timeOfDay: 'routine',
+    currentSlot,
+    slotCategory,
+    recommendedEnergy,
+    recommendedTasks 
+  };
 }
 
 export function evaluateStreak(completedDaysInARow: number) {

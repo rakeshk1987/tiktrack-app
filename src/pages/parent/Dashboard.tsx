@@ -23,14 +23,17 @@ import {
 } from 'lucide-react';
 import GrowthChart from '../../components/insights/GrowthChart';
 import AcademicHeatmap from '../../components/insights/AcademicHeatmap';
-import { getSecondaryAuth } from '../../utils/secondaryAuth';
+import { createOrReuseChildAccount } from '../../utils/childAccountAuth';
 import { computeLevelFromStars, evaluateBadges, applyTaskCompletionToProfile } from '../../hooks/useCoreLogic';
 import { useMessages } from '../../hooks/useData';
 import { useChallenges } from '../../hooks/useChallenges';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
+import { RealTimeProvider } from '../../contexts/RealTimeContext';
+import RealTimeNotifications from '../../components/RealTimeNotifications';
+import RealTimeDashboard from '../../components/RealTimeDashboard';
 
 interface ChildAccount {
   id: string;
@@ -48,7 +51,7 @@ interface PendingProof {
   timestamp?: string;
 }
 
-export default function ParentDashboard() {
+function ParentDashboardContent() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
@@ -59,7 +62,7 @@ export default function ParentDashboard() {
   const [cDob, setCDob] = useState('');
   const [cHeight, setCHeight] = useState('');
   const [cWeight, setCWeight] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [childRegistering, setChildRegistering] = useState(false);
   const [taskLoading, setTaskLoading] = useState(false);
   const [examLoading, setExamLoading] = useState(false);
   const [growthLoading2, setGrowthLoading2] = useState(false);
@@ -338,7 +341,11 @@ export default function ParentDashboard() {
   const formatChildCreationError = (code?: string) => {
     switch (code) {
       case 'auth/email-already-in-use':
+      case 'auth/email-exists':
         return 'That username already exists. Use the same password to link it, or choose another username.';
+      case 'auth/email-not-found':
+      case 'auth/invalid-password':
+      case 'auth/invalid-login-credentials':
       case 'auth/invalid-credential':
       case 'auth/wrong-password':
         return 'This username already exists, but the password does not match.';
@@ -349,68 +356,114 @@ export default function ParentDashboard() {
     }
   };
 
+  const withOperationTimeout = async <T,>(promise: Promise<T>, label: string, timeoutMs = 12000): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`${label}-timeout`)), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
+  };
+
+  const resetChildModalForm = () => {
+    setIsModaling(false);
+    setCUser('');
+    setCName('');
+    setCPass('');
+    setCDob('');
+    setCHeight('');
+    setCWeight('');
+  };
+
   const handleCreateChild = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setError('');
     setSuccess('');
-    setLoading(true);
+    setChildRegistering(true);
+    let childUid = '';
+    let dummyEmail = '';
+
+    const childProfilePayload = {
+      id: '',
+      user_id: user.id,
+      name: cName,
+      date_of_birth: new Date(cDob).toISOString(),
+      height_cm: Number(cHeight),
+      weight_kg: Number(cWeight),
+      streak_count: 0,
+      streak_shields: 0,
+      consistency_score: 0,
+      total_stars: 0,
+      is_sick_mode: false
+    };
 
     try {
-      const secAuth = getSecondaryAuth();
       const cleanUser = cUser.trim().toLowerCase().split('@')[0];
-      const dummyEmail = `${cleanUser}@tiktrack.family`;
-      let childUid = '';
+      dummyEmail = `${cleanUser}@tiktrack.family`;
+      const authResult = await withOperationTimeout(
+        createOrReuseChildAccount(dummyEmail, cPass),
+        'create-child-auth'
+      );
+      childUid = authResult.uid;
 
-      try {
-        const creds = await createUserWithEmailAndPassword(secAuth, dummyEmail, cPass);
-        childUid = creds.user.uid;
-      } catch (createErr: any) {
-        if (createErr?.code === 'auth/email-already-in-use') {
-          const creds = await signInWithEmailAndPassword(secAuth, dummyEmail, cPass);
-          childUid = creds.user.uid;
-        } else {
-          throw createErr;
+      await withOperationTimeout(
+        setDoc(doc(db, 'users', childUid), {
+          id: childUid,
+          email: dummyEmail,
+          name: cName,
+          role: 'child_user',
+          parent_id: user.id
+        }, { merge: true }),
+        'create-child-user-doc'
+      );
+
+      await withOperationTimeout(
+        setDoc(doc(db, 'child_profile', childUid), {
+          ...childProfilePayload,
+          id: childUid
+        }, { merge: true }),
+        'create-child-profile-doc'
+      );
+
+      resetChildModalForm();
+      setSuccess('Child account is ready and linked to your Family Hub.');
+    } catch (err: any) {
+      const message = String(err?.message || '');
+      if (childUid) {
+        try {
+          const userDocSnap = await getDoc(doc(db, 'users', childUid));
+          if (userDocSnap.exists()) {
+            setDoc(doc(db, 'child_profile', childUid), {
+              ...childProfilePayload,
+              id: childUid
+            }, { merge: true }).catch((profileRepairError) => {
+              console.warn('Background child profile repair failed:', profileRepairError);
+            });
+
+            resetChildModalForm();
+            setSuccess('Child account is ready and linked to your Family Hub.');
+            if (message.includes('timeout')) {
+              setInfo('Child profile is finishing setup in the background.');
+            }
+            return;
+          }
+        } catch (reconcileError) {
+          console.warn('Child registration reconciliation failed:', reconcileError);
         }
       }
 
-      await setDoc(doc(db, 'users', childUid), {
-        id: childUid,
-        email: dummyEmail,
-        name: cName,
-        role: 'child_user',
-        parent_id: user.id
-      }, { merge: true });
-
-      await setDoc(doc(db, 'child_profile', childUid), {
-        id: childUid,
-        user_id: user.id,
-        name: cName,
-        date_of_birth: new Date(cDob).toISOString(),
-        height_cm: Number(cHeight),
-        weight_kg: Number(cWeight),
-        streak_count: 0,
-        streak_shields: 0,
-        consistency_score: 0,
-        total_stars: 0,
-        is_sick_mode: false
-      }, { merge: true });
-
-      await signOut(secAuth);
-
-      setIsModaling(false);
-      setCUser('');
-      setCName('');
-      setCPass('');
-      setCDob('');
-      setCHeight('');
-      setCWeight('');
-      setSuccess('Child account is ready and linked to your Family Hub.');
-    } catch (err: any) {
-      alert(`Backend threw an error: ${err?.message || err}`);
-      setError(formatChildCreationError(err?.code));
+      if (message.includes('timeout')) {
+        setError('Child registration is taking too long. Please try again in a moment.');
+      } else {
+        setError(formatChildCreationError(err?.code));
+      }
     } finally {
-      setLoading(false);
+      setChildRegistering(false);
     }
   };
 
@@ -932,7 +985,7 @@ export default function ParentDashboard() {
 
   return (
     <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
-      <div className="mx-auto max-w-7xl rounded-[2rem] border bg-[var(--surface)]/95 backdrop-blur-md p-3 sm:p-4" style={{ borderColor: 'var(--border-main)' }}>
+      <div className="mx-auto max-w-[1680px] rounded-[2rem] border bg-[var(--surface)]/95 backdrop-blur-md p-3 sm:p-4 lg:p-5" style={{ borderColor: 'var(--border-main)' }}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[92px_1fr]">
           <aside
             className="rounded-[1.6rem] p-4 text-white"
@@ -1002,8 +1055,17 @@ export default function ParentDashboard() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-              <section className="xl:col-span-7 space-y-4">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5">
+              <section className="xl:col-span-7 2xl:col-span-8 space-y-4">
+                {/* Real-time Dashboards for each child */}
+                {children.map((child) => (
+                  <RealTimeDashboard
+                    key={child.id}
+                    childId={child.id}
+                    childName={child.name || (child.email || '').replace('@tiktrack.family', '')}
+                  />
+                ))}
+
                 <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                   <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Analytics</h2>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1329,7 +1391,7 @@ export default function ParentDashboard() {
                 </div>
               </section>
 
-              <section className="xl:col-span-5 space-y-4">
+              <section className="xl:col-span-5 2xl:col-span-4 space-y-4">
                 <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                   <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
                     <Users2 size={18} /> Child Accounts
@@ -1381,7 +1443,7 @@ export default function ParentDashboard() {
                 </div>
 
                 <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Exams</h2>
                     <div className="flex items-center gap-2">
                       <select value={filterChild} onChange={(ev) => setFilterChild(ev.target.value)} className="rounded-xl py-1 px-3 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
@@ -1393,17 +1455,17 @@ export default function ParentDashboard() {
                   </div>
 
                   <div className="space-y-3">
-                    <form onSubmit={handleCreateExam} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <select value={eChild} onChange={(ev) => setEChild(ev.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                    <form onSubmit={handleCreateExam} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      <select value={eChild} onChange={(ev) => setEChild(ev.target.value)} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">-- Child --</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                       </select>
-                      <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
 
-                      <input required value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <input required value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <div className="col-span-1 sm:col-span-3 flex gap-2">
+                      <input required value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input required value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <div className="md:col-span-2 flex flex-wrap gap-2">
                         <button disabled={examLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{examLoading ? 'Saving...' : (editExamId ? 'Save Changes' : '+ Record Exam')}</button>
                         {editExamId ? (
                           <button type="button" onClick={cancelEdit} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
@@ -1542,7 +1604,7 @@ export default function ParentDashboard() {
 
       {isModaling && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="rounded-3xl w-full max-w-md p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
+          <div className="rounded-3xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
             <button onClick={() => setIsModaling(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
             <p className="text-xs font-bold uppercase tracking-wider text-cyan-500 mb-2">Family Hub</p>
             <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--text-main)' }}>Create Child Adventure Account</h2>
@@ -1551,34 +1613,36 @@ export default function ParentDashboard() {
             {error && <div className="bg-red-100 text-red-700 text-sm p-3 rounded-lg mb-4">{error}</div>}
 
             <form onSubmit={handleCreateChild} className="space-y-4">
-              <div className="kid-glass rounded-2xl p-3">
-                <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Child's Name</label>
-                <input required value={cName} onChange={(e) => setCName(e.target.value)} type="text" placeholder="e.g. Athmika" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-              </div>
-              <div className="kid-glass rounded-2xl p-3">
-                <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Unique Username</label>
-                <input required value={cUser} onChange={(e) => setCUser(e.target.value.replace(/\s+/g, ''))} type="text" placeholder="e.g. athmikastar" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Child's Name</label>
+                  <input required value={cName} onChange={(e) => setCName(e.target.value)} type="text" placeholder="e.g. Athmika" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Unique Username</label>
+                  <input required value={cUser} onChange={(e) => setCUser(e.target.value.replace(/\s+/g, ''))} type="text" placeholder="e.g. athmikastar" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
               </div>
               <div className="kid-glass rounded-2xl p-3">
                 <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Secret Password</label>
                 <input required value={cPass} onChange={(e) => setCPass(e.target.value)} type="password" placeholder="Min 6 characters" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4">
                 <div className="kid-glass rounded-2xl p-3">
                   <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Date of Birth</label>
-                  <input required value={cDob} onChange={(e) => setCDob(e.target.value)} type="date" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                  <input required value={cDob} onChange={(e) => setCDob(e.target.value)} type="date" className="mt-1 w-full min-w-0 rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                 </div>
                 <div className="kid-glass rounded-2xl p-3">
                   <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Height (cm)</label>
-                  <input required min="30" value={cHeight} onChange={(e) => setCHeight(e.target.value)} type="number" placeholder="120" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                  <input required min="30" max="250" value={cHeight} onChange={(e) => setCHeight(e.target.value)} type="number" placeholder="120" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                 </div>
                 <div className="kid-glass rounded-2xl p-3">
                   <label className="text-sm font-bold ml-1" style={{ color: 'var(--text-muted)' }}>Weight (kg)</label>
-                  <input required min="5" step="0.1" value={cWeight} onChange={(e) => setCWeight(e.target.value)} type="number" placeholder="22.5" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                  <input required min="5" max="200" step="0.1" value={cWeight} onChange={(e) => setCWeight(e.target.value)} type="number" placeholder="22.5" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                 </div>
               </div>
-              <button disabled={loading} type="submit" className="w-full text-white font-bold py-3.5 rounded-xl transition mt-4" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
-                {loading ? 'Registering...' : 'Create Child Account'}
+              <button disabled={childRegistering} type="submit" className="w-full text-white font-bold py-3.5 rounded-xl transition mt-4 disabled:opacity-70" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                {childRegistering ? 'Registering...' : 'Create Child Account'}
               </button>
             </form>
           </div>
@@ -1661,5 +1725,20 @@ export default function ParentDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ParentDashboard() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <ParentDashboardContent />;
+  }
+
+  return (
+    <RealTimeProvider userId={user.id} userRole="parent_admin">
+      <RealTimeNotifications />
+      <ParentDashboardContent />
+    </RealTimeProvider>
   );
 }

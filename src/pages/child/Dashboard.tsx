@@ -1,6 +1,8 @@
 ﻿import { BadgeCheck, Smile } from 'lucide-react';
 import clsx from 'clsx';
 import { moodOptions, useChildLayout } from './ChildLayout';
+import { RealTimeProvider } from '../../contexts/RealTimeContext';
+import RealTimeNotifications from '../../components/RealTimeNotifications';
 
 export default function ChildDashboard() {
   const {
@@ -119,3 +121,15 @@ export default function ChildDashboard() {
     </>
   );
 }
+
+// Wrapper component with real-time functionality
+function ChildDashboardWithRealTime() {
+  return (
+    <RealTimeProvider>
+      <RealTimeNotifications />
+      <ChildDashboard />
+    </RealTimeProvider>
+  );
+}
+
+export { ChildDashboardWithRealTime };

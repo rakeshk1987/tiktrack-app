@@ -31,6 +31,7 @@ export interface ChildProfile {
   last_streak_eval: string; // ISO Date YYYY-MM-DD
   last_task_date?: string; // ISO Date YYYY-MM-DD
   user_id: string;
+  fcm_token?: string; // Added for push notifications
 }
 
 export interface Task {
@@ -43,6 +44,10 @@ export interface Task {
   difficulty_level: number;
   star_value: number;
   requires_proof: boolean;
+  generated_at?: string;
+  generation_reason?: string;
+  expires_at?: string;
+  is_generated?: boolean;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'failed' | 'skipped';
@@ -164,7 +169,10 @@ export interface Reminder {
   task_id?: string;
   exam_event_id?: string;
   is_enabled: boolean;
+  is_active: boolean; // Added for backgroundJobs
   frequency: 'once' | 'daily' | 'weekly';
+  scheduled_day?: number; // 0-6, Sunday=0 for weekly reminders
+  scheduled_time?: number; // Hour 0-23 for daily/weekly reminders
   days_of_week?: number[]; // 0-6, Sunday=0
   next_send_at?: string; // ISO timestamp
   created_at: string;

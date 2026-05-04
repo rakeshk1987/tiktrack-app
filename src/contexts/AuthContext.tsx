@@ -21,6 +21,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const PROFILE_FETCH_TIMEOUT_MS = 2500;
+    const AUTH_INIT_TIMEOUT_MS = 1500;
+    let isActive = true;
+    let authStateResolved = false;
+
+    const buildFallbackUser = (firebaseUser: NonNullable<typeof auth.currentUser>): User => ({
+      id: firebaseUser.uid,
+      email: firebaseUser.email || '',
+      role: inferRoleFromEmail(firebaseUser.email || '')
+    });
 
     const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
       let timeoutId: ReturnType<typeof setTimeout>;
@@ -35,24 +44,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setLoading(true); // Prevent instant redirect
-        try {
-          const fallbackUser: User = {
-            id: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            role: inferRoleFromEmail(firebaseUser.email || '')
-          };
+    const authInitTimer = setTimeout(() => {
+      if (!isActive || authStateResolved) {
+        return;
+      }
 
+      authStateResolved = true;
+      if (auth.currentUser) {
+        console.warn('Auth state listener timed out; falling back to auth.currentUser.');
+        setUser(buildFallbackUser(auth.currentUser));
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    }, AUTH_INIT_TIMEOUT_MS);
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!isActive) {
+        return;
+      }
+
+      authStateResolved = true;
+      clearTimeout(authInitTimer);
+
+      if (firebaseUser) {
+        const fallbackUser = buildFallbackUser(firebaseUser);
+
+        // Let routing continue immediately after Firebase Auth confirms the session.
+        setUser(fallbackUser);
+        setLoading(false);
+
+        try {
           const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
           if (isOffline) {
-            setUser(fallbackUser);
+            return;
           } else {
             const userDoc = await withTimeout(
               getDoc(doc(db, 'users', firebaseUser.uid)),
               PROFILE_FETCH_TIMEOUT_MS
             );
+            if (!isActive) {
+              return;
+            }
+
             if (userDoc.exists()) {
               const data = userDoc.data();
               setUser({
@@ -68,23 +102,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           }
         } catch (error) {
-           // Keep authenticated users signed in even if Firestore profile read fails.
-           const offline = isOfflineLikeAuthError(error);
-           const logger = offline ? console.warn : console.error;
-           logger("Auth profile fetch failed; using auth fallback:", error);
-           setUser({
-             id: firebaseUser.uid,
-             email: firebaseUser.email || '',
-             role: inferRoleFromEmail(firebaseUser.email || '')
-           });
+          if (!isActive) {
+            return;
+          }
+
+          // Keep authenticated users signed in even if Firestore profile read fails.
+          const offline = isOfflineLikeAuthError(error);
+          const logger = offline ? console.warn : console.error;
+          logger("Auth profile fetch failed; using auth fallback:", error);
+          setUser(fallbackUser);
         }
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isActive = false;
+      clearTimeout(authInitTimer);
+      unsubscribe();
+    };
   }, []);
 
   return (
