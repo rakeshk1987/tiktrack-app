@@ -125,7 +125,7 @@ export const processAllReminders = async (parentId: string): Promise<void> => {
  * Start a reminder checker that runs periodically
  * Returns an interval ID that can be used to stop the checker
  */
-export const startReminderChecker = (childId: string, intervalMs: number = 60000): NodeJS.Timer => {
+export const startReminderChecker = (childId: string, intervalMs: number = 60000): ReturnType<typeof setInterval> => {
   // Process immediately
   processChildReminders(childId);
 
@@ -138,7 +138,7 @@ export const startReminderChecker = (childId: string, intervalMs: number = 60000
 /**
  * Stop the reminder checker
  */
-export const stopReminderChecker = (intervalId: NodeJS.Timer): void => {
+export const stopReminderChecker = (intervalId: ReturnType<typeof setInterval>): void => {
   clearInterval(intervalId);
 };
 

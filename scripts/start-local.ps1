@@ -64,4 +64,5 @@ npm run emulators:data
 }
 
 Set-Location $repoRoot
+$env:VITE_USE_FIREBASE_EMULATORS = "true"
 npm run dev

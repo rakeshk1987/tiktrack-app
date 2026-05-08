@@ -48,6 +48,7 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
+  const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const shouldReconnectRef = useRef(shouldReconnect);
 
@@ -56,6 +57,8 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
     try {
       setConnectionState('connecting');
       const ws = new WebSocket(url, protocols);
+      socketRef.current = ws;
+      setSocket(ws);
 
       ws.onopen = (event) => {
         console.log('WebSocket connected');
@@ -68,6 +71,7 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
 
       ws.onclose = (event) => {
         console.log('WebSocket disconnected:', event.code, event.reason);
+        socketRef.current = null;
         setSocket(null);
         setIsConnected(false);
         setConnectionState('disconnected');
@@ -108,13 +112,15 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
 
   // Send message
   const sendMessage = useCallback((type: string, payload: any) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    const currentSocket = socketRef.current || socket;
+    const openState = typeof WebSocket.OPEN === 'number' ? WebSocket.OPEN : 1;
+    if (currentSocket && currentSocket.readyState === openState) {
       const message: WebSocketMessage = {
         type,
         payload,
         timestamp: Date.now(),
       };
-      socket.send(JSON.stringify(message));
+      currentSocket.send(JSON.stringify(message));
     } else {
       console.warn('WebSocket is not connected. Message not sent:', type, payload);
     }
@@ -135,8 +141,9 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
-    if (socket) {
-      socket.close();
+    const currentSocket = socketRef.current || socket;
+    if (currentSocket) {
+      currentSocket.close();
     }
   }, [socket]);
 

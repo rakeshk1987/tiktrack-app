@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useRealTime, useRealTimeNotifications } from '../contexts/RealTimeContext';
-import type { Task, Challenge } from '../types/schema';
 
 interface RealTimeDashboardProps {
   childId: string;
@@ -11,11 +10,6 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
   const {
     liveTasks,
     liveChallenges,
-    liveMessages,
-    isConnected,
-    connectionStatus,
-    lastUpdate,
-    updateCount,
   } = useRealTime();
 
   const { notifyTaskCompleted, notifyChallengeUpdate } = useRealTimeNotifications();
@@ -92,37 +86,14 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
     }
   };
 
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'text-green-600 bg-green-100';
-      case 'connecting': return 'text-yellow-600 bg-yellow-100';
-      case 'disconnected': return 'text-red-600 bg-red-100';
-      case 'error': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6" data-child-id={childId}>
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            📊 Live Dashboard - {childName}
+            Child Overview - {childName}
           </h2>
-          <div className={`px-3 py-1 rounded-full text-sm font-semibold ${getConnectionStatusColor()}`}>
-            {connectionStatus === 'connected' && '🟢'}
-            {connectionStatus === 'connecting' && '🟡'}
-            {connectionStatus === 'disconnected' && '🔴'}
-            {connectionStatus === 'error' && '❌'}
-            {connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}
-          </div>
         </div>
-
-        {lastUpdate && (
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Last updated: {lastUpdate.toLocaleTimeString()} • {updateCount} updates
-          </p>
-        )}
       </div>
 
       {/* Live Stats */}
@@ -308,19 +279,6 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
         </div>
       </div>
 
-      {/* Connection Info */}
-      <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-          🔗 Real-time Connection
-        </h4>
-        <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
-          <p>• Status: {connectionStatus}</p>
-          <p>• Updates received: {updateCount}</p>
-          <p>• Tasks monitored: {liveTasks.length}</p>
-          <p>• Challenges monitored: {liveChallenges.length}</p>
-          <p>• Messages received: {liveMessages.length}</p>
-        </div>
-      </div>
     </div>
   );
 };

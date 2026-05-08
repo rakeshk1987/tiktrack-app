@@ -116,6 +116,27 @@ function LoadingScreen() {
   );
 }
 
+function MissingProfileScreen() {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-bg px-6">
+      <div className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-soft">
+        <Star className="mx-auto mb-4 h-10 w-10 text-accent" />
+        <h1 className="text-2xl font-display font-bold text-textMain">Profile setup is still syncing</h1>
+        <p className="mt-3 text-sm leading-6 text-textMuted">
+          Ask your parent to open Family Hub and confirm this child profile was saved.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-5 rounded-xl border border-border px-4 py-2 text-sm font-semibold text-textMain transition hover:bg-bgSoft"
+        >
+          Retry sync
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ChildLayout() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -130,7 +151,7 @@ export default function ChildLayout() {
   const { proofs, uploading, uploadProof } = useChildProofs(childId);
   const { completeTask, saving: questSaving } = useQuestActions(childId);
   const { messages } = useMessages(childId, 'child');
-  const parentId = profile?.user_id || '';
+  const parentId = profile?.family_id || profile?.parent_id || '';
   const { activeChallenges, incrementScore: incrementChallengeScore } = useChallenges(parentId);
 
   const [notice, setNotice] = useState('');
@@ -140,11 +161,6 @@ export default function ChildLayout() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const examStats = getExamPlannerStats(events, tasks);
-
-  if (profileLoading || tasksLoading || eventsLoading || !profile) {
-    return <LoadingScreen />;
-  }
-
   const path = location.pathname;
   const activeTab: ChildTab = path.endsWith('/quests')
     ? 'quests'
@@ -153,11 +169,62 @@ export default function ChildLayout() {
       : path.endsWith('/profile')
         ? 'profile'
         : 'home';
+  const tabStorageKey = `tiktrack_child_${childId}_last_tab`;
+
+  useEffect(() => {
+    if (!childId || path !== '/child') {
+      return;
+    }
+
+    try {
+      const saved = localStorage.getItem(tabStorageKey);
+      if (saved && (['home', 'quests', 'diary', 'profile'] as string[]).includes(saved)) {
+        void navigate(saved === 'home' ? '/child' : `/child/${saved}`);
+      }
+    } catch {}
+  }, [childId, navigate, path, tabStorageKey]);
+
+  useEffect(() => {
+    if (!childId) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(tabStorageKey, activeTab);
+    } catch {}
+  }, [activeTab, childId, tabStorageKey]);
+
+  useEffect(() => {
+    if (!childId) {
+      return;
+    }
+
+    const key = `tiktrack_child_${childId}_diary_draft`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved && !diaryDraft) setDiaryDraft(saved);
+    } catch {}
+
+    const handle = setInterval(() => {
+      try {
+        if (diaryDraft?.trim()) localStorage.setItem(key, diaryDraft);
+      } catch {}
+    }, 1500);
+    return () => clearInterval(handle);
+  }, [childId, diaryDraft]);
+
+  if (profileLoading || tasksLoading || eventsLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!profile) {
+    return <MissingProfileScreen />;
+  }
 
   const isDark = theme === 'dark';
-  const childName = profile.name || 'Athmika';
+  const childName = profile.name || 'Explorer';
   
-  const isMoodNegative = moodLog?.mood === 'sad' || moodLog?.mood === 'tired' || moodLog?.mood === 'frustrated';
+  const isMoodNegative = moodLog?.mood === 'sad' || moodLog?.mood === 'angry';
   const isMoodPositive = moodLog?.mood === 'happy' || moodLog?.mood === 'excited';
   
   let adaptiveTasks = isMoodNegative 
@@ -229,8 +296,8 @@ export default function ChildLayout() {
     ? 'bg-[radial-gradient(circle_at_20%_15%,rgba(236,72,153,0.22),transparent_22%),radial-gradient(circle_at_82%_18%,rgba(96,165,250,0.20),transparent_24%),radial-gradient(circle_at_50%_70%,rgba(251,191,36,0.12),transparent_26%)]'
     : 'bg-[radial-gradient(circle_at_20%_15%,rgba(244,114,182,0.18),transparent_22%),radial-gradient(circle_at_82%_18%,rgba(59,130,246,0.16),transparent_24%),radial-gradient(circle_at_50%_70%,rgba(250,204,21,0.12),transparent_26%)]';
   const heroClass = isDark
-    ? 'border-white/15 bg-[linear-gradient(135deg,rgba(28,30,74,0.96),rgba(27,79,151,0.85)_48%,rgba(244,114,182,0.62)_100%)] text-white'
-    : 'border-indigo-200/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(216,238,255,0.95)_44%,rgba(255,222,242,0.88)_100%)] text-slate-900';
+    ? 'border-white/15 bg-[linear-gradient(135deg,rgba(28,30,74,0.94),rgba(27,79,151,0.82)_48%,rgba(244,114,182,0.56)_100%)] text-white'
+    : 'border-indigo-200/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(216,238,255,0.92)_44%,rgba(255,222,242,0.84)_100%)] text-slate-900';
   const subPanelClass = isDark
     ? 'border-white/15 bg-[#2b2058]/55 text-white'
     : 'border-indigo-200/70 bg-white/70 text-slate-900';
@@ -247,30 +314,17 @@ export default function ChildLayout() {
   const mutedTextClass = isDark ? 'text-white/72' : 'text-slate-600';
   const lowContrastTextClass = isDark ? 'text-white/55' : 'text-slate-500';
   const accentCaptionClass = isDark ? 'text-amber-200/90' : 'text-fuchsia-600';
+  const childTabs = [
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'quests', label: 'Quests', icon: MessageSquare },
+    { id: 'diary', label: 'Diary', icon: ScrollText },
+    { id: 'profile', label: 'Profile', icon: Orbit }
+  ] as const;
 
   const goToTab = (tab: ChildTab) => {
     const nextPath = tab === 'home' ? '/child' : `/child/${tab}`;
     void navigate(nextPath);
   };
-
-  const tabStorageKey = `tiktrack_child_${childId}_last_tab`;
-
-  useEffect(() => {
-    if (path === '/child') {
-      try {
-        const saved = localStorage.getItem(tabStorageKey);
-        if (saved && (['home', 'quests', 'diary', 'profile'] as string[]).includes(saved)) {
-          void navigate(saved === 'home' ? '/child' : `/child/${saved}`);
-        }
-      } catch (e) {}
-    }
-  }, [childId]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(tabStorageKey, activeTab);
-    } catch (e) {}
-  }, [activeTab, childId]);
 
   const handleLogout = async () => {
     try {
@@ -304,21 +358,6 @@ export default function ChildLayout() {
       setNotice('Diary note could not be saved right now.');
     }
   };
-
-  useEffect(() => {
-    const key = `tiktrack_child_${childId}_diary_draft`;
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved && !diaryDraft) setDiaryDraft(saved);
-    } catch {}
-
-    const handle = setInterval(() => {
-      try {
-        if (diaryDraft?.trim()) localStorage.setItem(key, diaryDraft);
-      } catch {}
-    }, 1500);
-    return () => clearInterval(handle);
-  }, [childId, diaryDraft]);
 
   const handleQuestComplete = async (task: Task) => {
     try {
@@ -450,13 +489,11 @@ export default function ChildLayout() {
     setDiaryDraft,
     softTextClass,
     tasks: adaptiveTasks,
-    timeOfDay,
-    remainingTasks,
     uploading
   };
 
   return (
-    <div className={clsx('min-h-screen overflow-x-hidden pb-28 relative', shellClass)}>
+    <div className={clsx('min-h-screen overflow-x-hidden pb-24 lg:pb-12 relative', shellClass)}>
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleProofFile(event)} />
       <div className={clsx('absolute inset-0', backdropBase)} />
       <div className={clsx('absolute inset-0 opacity-80', backdropGlow)} />
@@ -465,66 +502,61 @@ export default function ChildLayout() {
         <InboxPanel childId={childId} isDark={isDark} onClose={() => setIsInboxOpen(false)} />
       )}
 
-      <div className="mx-auto max-w-5xl px-4 pb-10 pt-6 relative z-10 sm:px-6">
-        <div className={clsx('rounded-[2rem] border p-6 shadow-[0_24px_80px_rgba(6,8,30,0.45)] backdrop-blur-xl sm:p-8', heroClass)}>
-          <div className="mb-6 hidden gap-4 rounded-[1.5rem] border border-black/10 bg-black/20 px-4 py-3 md:flex md:flex-col xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className={clsx('grid h-11 w-11 place-items-center rounded-2xl border', isDark ? 'border-white/15 bg-white/10 text-cyan-200' : 'border-slate-300/60 bg-slate-900 text-cyan-300')}>
-                <UserRound size={18} />
-              </div>
-              <div>
-                <p className={clsx('text-xs font-black uppercase tracking-[0.2em]', lowContrastTextClass)}>Profile</p>
-                <p className="text-base font-bold">{childName}</p>
-              </div>
-              <button onClick={handleLogout} className={clsx('rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>Logout</button>
-              <button onClick={toggleTheme} className={clsx('inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>
-                {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-                {theme === 'light' ? 'Dark sky' : 'Light sky'}
-              </button>
+      <div className="mx-auto max-w-[1500px] px-3 pb-10 pt-4 relative z-10 sm:px-5 lg:px-8 lg:pt-6">
+        <div className={clsx('sticky top-3 z-30 mb-4 hidden gap-3 rounded-[1.35rem] border px-3 py-2 shadow-[0_16px_45px_rgba(15,23,42,0.16)] backdrop-blur-xl md:flex md:flex-col xl:flex-row xl:items-center xl:justify-between', navShellClass)}>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={clsx('grid h-10 w-10 place-items-center rounded-2xl border', isDark ? 'border-white/15 bg-white/10 text-cyan-200' : 'border-slate-300/60 bg-slate-900 text-cyan-300')}>
+              <UserRound size={17} />
             </div>
-            
-            <div className={clsx('grid grid-cols-4 sm:grid-cols-5 rounded-[1.35rem] border px-2 py-2 shadow-sm', navShellClass)}>
-              {[
-                { id: 'home', label: 'Home', icon: Home },
-                { id: 'quests', label: 'Quests', icon:MessageSquare },
-                { id: 'diary', label: 'Diary', icon: ScrollText },
-                { id: 'profile', label: 'Profile', icon: Orbit }
-              ].map((tab) => {
-                const Icon = tab.icon;
-                const active = activeTab === tab.id;
-                return (
-                  <button key={tab.id} onClick={() => goToTab(tab.id as ChildTab)} className={clsx('flex min-w-[70px] sm:min-w-[92px] flex-col items-center gap-1 rounded-xl px-2 py-2 sm:px-4 text-sm font-bold transition', active ? (isDark ? 'text-cyan-300 bg-white/6' : 'text-cyan-600 bg-slate-900/5') : lowContrastTextClass)}>
-                    <Icon size={18} />
-                    <span className="hidden sm:inline">{tab.label}</span>
-                  </button>
-                );
-              })}
-              <button onClick={() => setIsInboxOpen(true)} className={clsx('flex min-w-[70px] sm:min-w-[92px] flex-col items-center gap-1 rounded-xl px-2 py-2 sm:px-4 text-sm font-bold transition relative', lowContrastTextClass)}>
-                {messages.filter(m => !m.is_read).length > 0 && (
-                   <span className="absolute top-1 right-1/4 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-white dark:border-slate-900" />
-                )}
-                <Mail size={18} />
-                <span className="hidden sm:inline">Inbox</span>
-              </button>
+            <div>
+              <p className={clsx('text-[10px] font-black uppercase tracking-[0.2em]', lowContrastTextClass)}>Explorer</p>
+              <p className="text-sm font-black">{childName}</p>
             </div>
+            <button onClick={handleLogout} className={clsx('rounded-2xl border px-4 py-2 text-sm font-bold shadow-sm transition', buttonClass)}>Logout</button>
+            <button onClick={toggleTheme} className={clsx('inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-bold shadow-sm transition', buttonClass)}>
+              {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+              {theme === 'light' ? 'Dark sky' : 'Light sky'}
+            </button>
           </div>
 
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex rounded-[1.15rem] p-1">
+            {childTabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
+              return (
+                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('flex min-w-[92px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition', active ? (isDark ? 'bg-white/12 text-cyan-200 shadow-sm' : 'bg-white text-cyan-700 shadow-sm') : lowContrastTextClass)}>
+                  <Icon size={17} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+            <button onClick={() => setIsInboxOpen(true)} className={clsx('relative flex min-w-[92px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition', lowContrastTextClass)}>
+              {messages.filter(m => !m.is_read).length > 0 && (
+                <span className="absolute right-3 top-2 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
+              )}
+              <Mail size={17} />
+              <span>Inbox</span>
+            </button>
+          </div>
+        </div>
+
+        <div className={clsx('rounded-[1.75rem] border p-4 shadow-[0_22px_70px_rgba(6,8,30,0.32)] backdrop-blur-xl sm:p-5 lg:p-6', heroClass)}>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
               <p className={clsx('text-sm uppercase tracking-[0.24em] font-black', accentCaptionClass)}>Today is your quest day</p>
-              <h1 className="text-4xl font-display font-extrabold leading-tight mt-3 sm:text-6xl">{greetingMessage} <span className="inline-block align-middle">😊</span></h1>
+              <h1 className="text-3xl font-display font-extrabold leading-tight mt-2 sm:text-4xl xl:text-5xl">{greetingMessage} <span className="inline-block align-middle">😊</span></h1>
               {remainingTasks === 0 && adaptiveTasks.length > 0 ? (
-                <div className="inline-flex mt-4 p-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold items-center gap-3 shadow-lg shadow-emerald-500/20">
-                  <span className="text-2xl animate-bounce">🌟</span> Perfect Day! You have completed all your quests!
+                <div className="inline-flex mt-4 p-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold items-center gap-3 shadow-lg shadow-emerald-500/20">
+                  <span className="text-xl animate-bounce">🌟</span> Perfect day! You finished every quest.
                 </div>
               ) : missedTaskAlert ? (
-                <p className={clsx('text-lg mt-3 max-w-2xl font-bold p-3 rounded-xl border border-rose-400/30 bg-rose-500/10 text-rose-500')}>It looks like you have some uncompleted quests. See if you can finish them before bedtime!</p>
+                <p className={clsx('text-base mt-3 max-w-3xl font-bold p-3 rounded-xl border border-rose-400/30 bg-rose-500/10 text-rose-500')}>Some quests are still open. Try finishing one before bedtime.</p>
               ) : (
-                <p className={clsx('text-lg mt-3 max-w-2xl', softTextClass)}>You are building strong habits, one tiny win at a time.</p>
+                <p className={clsx('text-base mt-3 max-w-3xl', softTextClass)}>Pick a small win, collect stars, and keep your adventure moving.</p>
               )}
             </div>
-            <div className={clsx('grid h-16 w-16 place-items-center rounded-[1.4rem] border shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] sm:h-20 sm:w-20', isDark ? 'border-white/25 bg-white/12 text-white/95' : 'border-indigo-200/70 bg-white/75 text-indigo-700')}>
-              <Sparkles size={30} />
+            <div className={clsx('hidden h-16 w-16 place-items-center rounded-[1.4rem] border shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] sm:grid xl:h-20 xl:w-20', isDark ? 'border-white/25 bg-white/12 text-white/95' : 'border-indigo-200/70 bg-white/75 text-indigo-700')}>
+              <Sparkles size={28} />
             </div>
           </div>
 
@@ -551,7 +583,7 @@ export default function ChildLayout() {
             </div>
           )}
 
-          <div className="mt-8 flex flex-wrap items-center gap-3 md:hidden">
+          <div className="mt-5 flex flex-wrap items-center gap-3 md:hidden">
             <button onClick={handleLogout} className={clsx('rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>Logout</button>
             <button onClick={toggleTheme} className={clsx('inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition', buttonClass)}>
               {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
@@ -560,18 +592,18 @@ export default function ChildLayout() {
             <div className={clsx('ml-auto rounded-2xl border px-4 py-3 text-sm font-bold', isDark ? 'border-white/15 bg-black/15 text-white/80' : 'border-indigo-200/70 bg-white/75 text-slate-700')}>Profile: {childName}</div>
           </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(255,222,189,0.88))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]">
-              <div className="flex items-center justify-center gap-2 text-amber-500"><Star className="fill-current" size={20} /><span className="text-4xl font-black">{profile.total_stars ?? 0}</span></div>
-              <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Stars</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[1.35rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(255,222,189,0.88))] px-4 py-3 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.16)]">
+              <div className="flex items-center justify-center gap-2 text-amber-500"><Star className="fill-current" size={18} /><span className="text-3xl font-black">{profile.total_stars ?? 0}</span></div>
+              <p className="mt-1 text-center text-xs font-black uppercase tracking-[0.18em]">Stars</p>
             </div>
-            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(255,240,189,0.88))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]">
-              <div className="flex items-center justify-center gap-2 text-orange-500"><Flame className="fill-current" size={20} /><span className="text-4xl font-black">{profile.streak_count ?? 0}</span></div>
-              <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Streak</p>
+            <div className="rounded-[1.35rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(255,240,189,0.88))] px-4 py-3 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.16)]">
+              <div className="flex items-center justify-center gap-2 text-orange-500"><Flame className="fill-current" size={18} /><span className="text-3xl font-black">{profile.streak_count ?? 0}</span></div>
+              <p className="mt-1 text-center text-xs font-black uppercase tracking-[0.18em]">Streak</p>
             </div>
-            <div className="rounded-[1.6rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(226,239,255,0.9))] px-5 py-4 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.18)]">
-              <div className="flex items-center justify-center gap-2 text-sky-600"><Shield className="fill-current" size={20} /><span className="text-4xl font-black">{profile.streak_shields ?? 0}</span></div>
-              <p className="mt-2 text-center text-sm font-black uppercase tracking-[0.2em]">Shields</p>
+            <div className="rounded-[1.35rem] border border-white/15 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(226,239,255,0.9))] px-4 py-3 text-slate-900 shadow-[0_12px_30px_rgba(10,10,30,0.16)]">
+              <div className="flex items-center justify-center gap-2 text-sky-600"><Shield className="fill-current" size={18} /><span className="text-3xl font-black">{profile.streak_shields ?? 0}</span></div>
+              <p className="mt-1 text-center text-xs font-black uppercase tracking-[0.18em]">Shields</p>
             </div>
           </div>
 
@@ -602,7 +634,7 @@ export default function ChildLayout() {
             </div>
           )}
 
-          <div className={clsx('mt-6 rounded-[1.5rem] border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]', subPanelClass)}>
+          <div className={clsx('mt-5 rounded-[1.35rem] border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]', subPanelClass)}>
             <div className={clsx('flex flex-wrap items-center justify-between gap-3 text-sm font-black uppercase tracking-[0.18em]', softTextClass)}>
               <span>Adventure Meter</span>
               <div className="flex items-center gap-3"><span className={isDark ? 'text-amber-200' : 'text-amber-500'}>{'★'.repeat(Math.max(1, Math.min(5, Math.ceil(progressPercent / 20) || 1)))}</span><span>{progressPercent}%</span></div>
@@ -617,23 +649,25 @@ export default function ChildLayout() {
 
         <Outlet context={contextValue} />
 
-        <div className="mx-auto mt-8 max-w-3xl md:hidden">
-          <div className={clsx('grid grid-cols-4 rounded-[2rem] border px-3 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.28)]', navShellClass)}>
-            {[
-              { id: 'home', label: 'Home', icon: Home },
-              { id: 'quests', label: 'Quests', icon: MessageSquare },
-              { id: 'diary', label: 'Diary', icon: ScrollText },
-              { id: 'profile', label: 'Profile', icon: Orbit }
-            ].map((tab) => {
+        <div className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-lg md:hidden">
+          <div className={clsx('grid grid-cols-5 rounded-[1.6rem] border px-2 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl', navShellClass)}>
+            {childTabs.map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => goToTab(tab.id as ChildTab)} className={clsx('flex flex-col items-center gap-2', active ? (isDark ? 'text-cyan-300' : 'text-cyan-600') : lowContrastTextClass)}>
-                  <Icon size={22} />
-                  <span className="text-sm font-bold">{tab.label}</span>
+                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', active ? (isDark ? 'bg-white/10 text-cyan-300' : 'bg-white text-cyan-600') : lowContrastTextClass)}>
+                  <Icon size={20} />
+                  <span className="text-[11px] font-black">{tab.label}</span>
                 </button>
               );
             })}
+            <button onClick={() => setIsInboxOpen(true)} className={clsx('relative flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', lowContrastTextClass)}>
+              {messages.filter(m => !m.is_read).length > 0 && (
+                <span className="absolute right-3 top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
+              )}
+              <Mail size={20} />
+              <span className="text-[11px] font-black">Inbox</span>
+            </button>
           </div>
         </div>
       </div>

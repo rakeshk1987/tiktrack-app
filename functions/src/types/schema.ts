@@ -169,7 +169,7 @@ export interface Reminder {
   task_id?: string;
   exam_event_id?: string;
   is_enabled: boolean;
-  is_active: boolean; // Added for backgroundJobs
+  is_active?: boolean; // Legacy compatibility
   frequency: 'once' | 'daily' | 'weekly';
   scheduled_day?: number; // 0-6, Sunday=0 for weekly reminders
   scheduled_time?: number; // Hour 0-23 for daily/weekly reminders

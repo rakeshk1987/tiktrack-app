@@ -1,4 +1,4 @@
-import type { ChildProfile, Task, TaskLog, ExamResult, GrowthLog, MoodLog } from '../types/schema';
+import type { ChildProfile, TaskLog, ExamResult, GrowthLog, MoodLog } from '../types/schema';
 
 export interface DashboardMetrics {
   consistency_score: number;
@@ -227,9 +227,12 @@ export const analyzeMood = (moodLogs: MoodLog[], days: number = 7): MoodAnalysis
   recentDate.setDate(recentDate.getDate() - days);
   const recentDateStr = recentDate.toISOString().split('T')[0];
 
-  const recentMoods = moodLogs
+  let recentMoods = moodLogs
     .filter(log => log.date >= recentDateStr)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  if (recentMoods.length === 0) {
+    recentMoods = [...moodLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
 
   // Find dominant mood
   const moodCounts = new Map<string, number>();

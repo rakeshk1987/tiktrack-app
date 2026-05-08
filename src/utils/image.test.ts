@@ -19,7 +19,7 @@ describe('optimizeImage', () => {
       width: 0,
       height: 0,
       getContext: vi.fn(() => mockCtx),
-      toBlob: vi.fn((callback: (blob: Blob | null) => void, type: string, quality: number) => {
+      toBlob: vi.fn((callback: (blob: Blob | null) => void, _type: string, quality: number) => {
         // Simulate compression: smaller blobs at lower quality
         const size = quality > 0.5 ? 300_000 : 100_000;
         callback(createMockBlob(size));
@@ -45,7 +45,7 @@ describe('optimizeImage', () => {
 
     // Mock Image
     const MockImage = vi.fn().mockImplementation(() => {
-      const img = {
+      const img: any = {
         width: 1200,
         height: 900,
         src: '',

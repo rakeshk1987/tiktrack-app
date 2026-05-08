@@ -31,7 +31,7 @@ export async function optimizeImage(file: File): Promise<Blob> {
   let blob = await canvasToBlob(canvas, quality);
 
   while (blob.size > MAX_SIZE_BYTES && quality > 0.1) {
-    quality -= 0.15;
+    quality = Math.max(0.1, quality - 0.3);
     blob = await canvasToBlob(canvas, quality);
   }
 

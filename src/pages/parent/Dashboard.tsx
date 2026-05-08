@@ -4,7 +4,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 import {
   Activity,
   BarChart3,
-  CheckSquare,
   Circle,
   Home,
   LogOut,
@@ -21,6 +20,7 @@ import {
   Users2,
   X
 } from 'lucide-react';
+import clsx from 'clsx';
 import GrowthChart from '../../components/insights/GrowthChart';
 import AcademicHeatmap from '../../components/insights/AcademicHeatmap';
 import { createOrReuseChildAccount } from '../../utils/childAccountAuth';
@@ -28,12 +28,21 @@ import { computeLevelFromStars, evaluateBadges, applyTaskCompletionToProfile } f
 import { useMessages } from '../../hooks/useData';
 import { useChallenges } from '../../hooks/useChallenges';
 import { signOut } from 'firebase/auth';
-import { useNavigate } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
 import { RealTimeProvider } from '../../contexts/RealTimeContext';
 import RealTimeNotifications from '../../components/RealTimeNotifications';
 import RealTimeDashboard from '../../components/RealTimeDashboard';
+import RoutineConfigurationUI from '../../components/RoutineConfigurationUI';
+import TaskSchedulerUI from '../../components/TaskSchedulerUI';
+import ReminderManagement from '../../components/ReminderManagement';
+import RewardManagement from '../../components/RewardManagement';
+import RedemptionHistory from '../../components/RedemptionHistory';
+import { useRoutineConfiguration } from '../../hooks/useRoutineConfiguration';
+import { useTaskScheduler } from '../../hooks/useTaskScheduler';
+import { getDefaultReminders, useReminders } from '../../hooks/useReminders';
+import { getDefaultRewards, useRedemptions, useRewards } from '../../hooks/useRedemptions';
+import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
 
 interface ChildAccount {
   id: string;
@@ -80,6 +89,7 @@ function ParentDashboardContent() {
   const [tDesc, setTDesc] = useState('');
   const [tPoints, setTPoints] = useState<number | ''>('');
   const [tDue, setTDue] = useState('');
+  const [tChild, setTChild] = useState('');
   const [exams, setExams] = useState<Array<any>>([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [eChild, setEChild] = useState('');
@@ -110,20 +120,41 @@ function ParentDashboardContent() {
   const [rWeeklyBonus, setRWeeklyBonus] = useState(false);
   const [editRewardId, setEditRewardId] = useState<string | null>(null);
 
-  const [isInboxOpen, setIsInboxOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'growth' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings'
+  >('dashboard');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
+  const isInboxOpen = activeTab === 'communication';
+  const isSettingsOpen = activeTab === 'settings';
+  const setIsInboxOpen = (open: boolean) => setActiveTab(open ? 'communication' : 'dashboard');
+  const setIsSettingsOpen = (open: boolean) => setActiveTab(open ? 'settings' : 'dashboard');
 
   const [chTitle, setChTitle] = useState('');
   const [chChild, setChChild] = useState('');
   const [chTarget, setChTarget] = useState<number | ''>('');
   const [chDesc, setChDesc] = useState('');
   const [challengeLoading, setChallengeLoading] = useState(false);
+  const [automationChildId, setAutomationChildId] = useState('');
+
+  const parentTabs = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'family', label: 'Family' },
+    { id: 'tasks', label: 'Tasks' },
+    { id: 'automation', label: 'Automation' },
+    { id: 'proofs', label: 'Proofs' },
+    { id: 'events', label: 'Events' },
+    { id: 'growth', label: 'Growth' },
+    { id: 'rewards', label: 'Rewards' },
+    { id: 'exams', label: 'Exams' },
+    { id: 'challenges', label: 'Challenges' },
+    { id: 'communication', label: 'Communication' },
+    { id: 'settings', label: 'Settings' }
+  ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
-  const { messages, sendMessage } = useMessages(familyId, 'parent');
+  const { sendMessage } = useMessages(familyId, 'parent');
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
 
   useEffect(() => {
@@ -156,7 +187,47 @@ function ParentDashboardContent() {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, familyId]);
+
+  useEffect(() => {
+    if (!user || children.length === 0) {
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    children.forEach((child) => {
+      void (async () => {
+        try {
+          const profileRef = doc(db, 'child_profile', child.id);
+          const existingProfile = await getDoc(profileRef);
+          if (existingProfile.exists()) {
+            return;
+          }
+
+          await setDoc(profileRef, {
+            id: child.id,
+            user_id: child.id,
+            parent_id: familyId,
+            family_id: familyId,
+            name: child.name || (child.email || '').split('@')[0] || 'Explorer',
+            date_of_birth: new Date('2015-01-01').toISOString(),
+            height_cm: 120,
+            weight_kg: 25,
+            streak_count: 0,
+            streak_shields: 0,
+            consistency_score: 0,
+            total_stars: 0,
+            is_sick_mode: false,
+            last_streak_eval: today
+          }, { merge: true });
+          console.info('Backfilled missing child_profile for child:', child.id);
+        } catch (error) {
+          console.warn('Failed to backfill child_profile for child:', child.id, error);
+        }
+      })();
+    });
+  }, [user, children, familyId]);
 
   // Derived pending proofs visible to this parent (initialized before analytics reads it)
   const visiblePendingProofs = pendingProofs.filter((proof) => children.some((child) => child.id === proof.child_id));
@@ -172,7 +243,7 @@ function ParentDashboardContent() {
     setTasksLoading(true);
     const tasksQuery = query(
       collection(db, 'tasks'),
-      where('parent_id', '==', user.id),
+      where('parent_id', '==', familyId),
       orderBy('created_at', 'desc')
     );
 
@@ -190,7 +261,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user]);
+  }, [user, familyId]);
 
   useEffect(() => {
     if (!user) {
@@ -202,7 +273,7 @@ function ParentDashboardContent() {
     setExamsLoading(true);
     const examsQuery = query(
       collection(db, 'exams'),
-      where('parent_id', '==', user.id),
+      where('parent_id', '==', familyId),
       orderBy('exam_date', 'desc')
     );
 
@@ -220,7 +291,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user]);
+  }, [user, familyId]);
 
   useEffect(() => {
     if (!user) {
@@ -232,7 +303,7 @@ function ParentDashboardContent() {
     setGrowthLoading(true);
     const gql = query(
       collection(db, 'growth_logs'),
-      where('parent_id', '==', user.id),
+      where('parent_id', '==', familyId),
       orderBy('date', 'desc')
     );
 
@@ -250,7 +321,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user]);
+  }, [user, familyId]);
 
   useEffect(() => {
     if (!user) {
@@ -262,7 +333,7 @@ function ParentDashboardContent() {
     setEventsLoading(true);
     const evq = query(
       collection(db, 'events'),
-      where('parent_id', '==', user.id),
+      where('parent_id', '==', familyId),
       orderBy('date', 'desc')
     );
 
@@ -280,7 +351,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user]);
+  }, [user, familyId]);
 
   useEffect(() => {
     if (!user) {
@@ -292,7 +363,7 @@ function ParentDashboardContent() {
     setRewardsLoading(true);
     const rq = query(
       collection(db, 'reward_settings'),
-      where('parent_id', '==', user.id),
+      where('parent_id', '==', familyId),
       orderBy('created_at', 'desc')
     );
 
@@ -310,7 +381,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user]);
+  }, [user, familyId]);
 
   useEffect(() => {
     if (!user) {
@@ -336,7 +407,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, familyId]);
 
   const formatChildCreationError = (code?: string) => {
     switch (code) {
@@ -351,8 +422,15 @@ function ParentDashboardContent() {
         return 'This username already exists, but the password does not match.';
       case 'auth/weak-password':
         return 'Password must be at least 6 characters.';
+      case 'auth/network-request-failed':
+        return isUsingFirebaseEmulators
+          ? 'Firebase emulators are not reachable. Start the app with npm run local, or run npm run emulators:data before npm run dev.'
+          : 'Network error while contacting Firebase. Please try again.';
+      case 'auth/operation-not-allowed':
+      case 'auth/admin-restricted-operation':
+        return 'Firebase Email/Password sign-in is not enabled for this project.';
       default:
-        return 'Failed to create child account. Please try again.';
+        return `Failed to create child account${code ? ` (${code})` : ''}. Please try again.`;
     }
   };
 
@@ -390,7 +468,9 @@ function ParentDashboardContent() {
 
     const childProfilePayload = {
       id: '',
-      user_id: user.id,
+      user_id: '',
+      parent_id: familyId,
+      family_id: familyId,
       name: cName,
       date_of_birth: new Date(cDob).toISOString(),
       height_cm: Number(cHeight),
@@ -399,7 +479,8 @@ function ParentDashboardContent() {
       streak_shields: 0,
       consistency_score: 0,
       total_stars: 0,
-      is_sick_mode: false
+      is_sick_mode: false,
+      last_streak_eval: new Date().toISOString().slice(0, 10)
     };
 
     try {
@@ -411,13 +492,28 @@ function ParentDashboardContent() {
       );
       childUid = authResult.uid;
 
+      if (authResult.wasExisting) {
+        const existingUserDoc = await withOperationTimeout(
+          getDoc(doc(db, 'users', childUid)),
+          'check-existing-child-user-doc'
+        );
+        const existingUser = existingUserDoc.exists() ? existingUserDoc.data() : null;
+        const existingFamilyId = existingUser?.linked_family_id || existingUser?.parent_id;
+
+        if (existingFamilyId !== familyId) {
+          throw new Error('child-username-already-used');
+        }
+      }
+
       await withOperationTimeout(
         setDoc(doc(db, 'users', childUid), {
           id: childUid,
           email: dummyEmail,
           name: cName,
           role: 'child_user',
-          parent_id: user.id
+          parent_id: familyId,
+          linked_family_id: familyId,
+          updated_at: new Date().toISOString()
         }, { merge: true }),
         'create-child-user-doc'
       );
@@ -425,31 +521,35 @@ function ParentDashboardContent() {
       await withOperationTimeout(
         setDoc(doc(db, 'child_profile', childUid), {
           ...childProfilePayload,
-          id: childUid
+          id: childUid,
+          user_id: childUid
         }, { merge: true }),
         'create-child-profile-doc'
       );
 
       resetChildModalForm();
-      setSuccess('Child account is ready and linked to your Family Hub.');
+      setSuccess(
+        authResult.wasExisting
+          ? 'Existing child account is linked to your Family Hub. Previous activity is still attached to this username.'
+          : 'Child account is ready and linked to your Family Hub.'
+      );
     } catch (err: any) {
+      console.error('Child account creation failed:', err);
       const message = String(err?.message || '');
-      if (childUid) {
+      if (childUid && !message.includes('child-username-already-used')) {
         try {
           const userDocSnap = await getDoc(doc(db, 'users', childUid));
           if (userDocSnap.exists()) {
             setDoc(doc(db, 'child_profile', childUid), {
               ...childProfilePayload,
-              id: childUid
+              id: childUid,
+              user_id: childUid
             }, { merge: true }).catch((profileRepairError) => {
               console.warn('Background child profile repair failed:', profileRepairError);
             });
 
             resetChildModalForm();
             setSuccess('Child account is ready and linked to your Family Hub.');
-            if (message.includes('timeout')) {
-              setInfo('Child profile is finishing setup in the background.');
-            }
             return;
           }
         } catch (reconcileError) {
@@ -459,6 +559,8 @@ function ParentDashboardContent() {
 
       if (message.includes('timeout')) {
         setError('Child registration is taking too long. Please try again in a moment.');
+      } else if (message.includes('child-username-already-used')) {
+        setError('That child username is already linked to another Family Hub. Choose a different username.');
       } else {
         setError(formatChildCreationError(err?.code));
       }
@@ -496,7 +598,12 @@ function ParentDashboardContent() {
             const profileRef = doc(db, 'child_profile', childId);
             const profileSnap = await getDoc(profileRef);
             const existing = profileSnap.exists() ? (profileSnap.data() as any) : {};
-            const { updatedProfile } = applyTaskCompletionToProfile(existing || {}, starValue, true);
+            const { updatedProfile } = applyTaskCompletionToProfile(
+              existing || {},
+              starValue,
+              true,
+              new Date().toISOString().slice(0, 10)
+            );
             await updateDoc(profileRef, {
               total_stars: updatedProfile.total_stars,
               streak_count: updatedProfile.streak_count,
@@ -519,28 +626,52 @@ function ParentDashboardContent() {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || taskLoading) return;
     setError('');
+    setSuccess('');
+    setInfo('');
     setTaskLoading(true);
 
     try {
-      await addDoc(collection(db, 'tasks'), {
-        title: tTitle,
-        description: tDesc,
-        points: tPoints || 0,
-        due_date: tDue ? new Date(tDue).toISOString() : null,
-        parent_id: user.id,
-        created_at: new Date().toISOString()
-      });
+      const selectedChild = children.find((child) => child.id === tChild);
+      if (!selectedChild) {
+        setError('Select a child before creating the task.');
+        return;
+      }
+
+      const starValue = Number(tPoints) || 1;
+
+      await withOperationTimeout(
+        addDoc(collection(db, 'tasks'), {
+          title: tTitle,
+          description: tDesc,
+          points: starValue,
+          star_value: starValue,
+          category: 'General',
+          priority: 'medium',
+          energy_level: 'medium',
+          difficulty_level: 1,
+          requires_proof: false,
+          status: 'pending',
+          child_id: tChild,
+          child_name: selectedChild.name || selectedChild.email || '',
+          due_date: tDue ? new Date(tDue).toISOString() : null,
+          parent_id: familyId,
+          family_id: familyId,
+          created_at: new Date().toISOString()
+        }),
+        'create-task'
+      );
 
       setTTitle('');
       setTDesc('');
       setTPoints('');
       setTDue('');
-      setSuccess('Task created successfully.');
+      setTChild('');
+      setSuccess('Task created and assigned to the child.');
     } catch (err) {
       console.error('Failed to create task:', err);
-      setError('Could not create task.');
+      setError(String((err as Error)?.message || '').includes('timeout') ? 'Task save is taking too long. Please try again.' : 'Could not create task.');
     } finally {
       setTaskLoading(false);
     }
@@ -580,7 +711,8 @@ function ParentDashboardContent() {
           marks_scored: eMarks || 0,
           total_marks: eTotal || 0,
           exam_date: eDate ? new Date(eDate).toISOString() : new Date().toISOString(),
-          parent_id: user.id,
+          parent_id: familyId,
+          family_id: familyId,
           created_at: new Date().toISOString()
         });
         setSuccess('Exam result recorded.');
@@ -651,7 +783,8 @@ function ParentDashboardContent() {
           height_cm: gHeight || 0,
           weight_kg: gWeight || 0,
           date: gDate ? new Date(gDate).toISOString() : new Date().toISOString(),
-          parent_id: user.id,
+          parent_id: familyId,
+          family_id: familyId,
           created_at: new Date().toISOString()
         });
         setSuccess('Growth log saved.');
@@ -691,31 +824,40 @@ function ParentDashboardContent() {
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || eventLoading) return;
     setError('');
+    setSuccess('');
+    setInfo('');
     setEventLoading(true);
 
     try {
       if (editEventId) {
-        await updateDoc(doc(db, 'events', editEventId), {
-          child_id: evChild || null,
-          title: evTitle,
-          type: evType,
-          date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
-          reminder_days_before: evReminderDays || 0,
-          updated_at: new Date().toISOString()
-        });
+        await withOperationTimeout(
+          updateDoc(doc(db, 'events', editEventId), {
+            child_id: evChild || null,
+            title: evTitle,
+            type: evType,
+            date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
+            reminder_days_before: evReminderDays || 0,
+            updated_at: new Date().toISOString()
+          }),
+          'update-event'
+        );
         setSuccess('Event updated.');
       } else {
-        await addDoc(collection(db, 'events'), {
-          child_id: evChild || null,
-          title: evTitle,
-          type: evType,
-          date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
-          reminder_days_before: evReminderDays || 0,
-          parent_id: user.id,
-          created_at: new Date().toISOString()
-        });
+        await withOperationTimeout(
+          addDoc(collection(db, 'events'), {
+            child_id: evChild || null,
+            title: evTitle,
+            type: evType,
+            date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
+            reminder_days_before: evReminderDays || 0,
+            parent_id: familyId,
+            family_id: familyId,
+            created_at: new Date().toISOString()
+          }),
+          'create-event'
+        );
         setSuccess('Event created.');
       }
 
@@ -727,7 +869,7 @@ function ParentDashboardContent() {
       setEditEventId(null);
     } catch (err) {
       console.error('Failed to save event:', err);
-      setError('Could not save event.');
+      setError(String((err as Error)?.message || '').includes('timeout') ? 'Event save is taking too long. Please try again.' : 'Could not save event.');
     } finally {
       setEventLoading(false);
     }
@@ -770,7 +912,8 @@ function ParentDashboardContent() {
 
     try {
       const payload = {
-        parent_id: user.id,
+        parent_id: familyId,
+        family_id: familyId,
         star_to_currency_rate: Number(rStarRate) || 0,
         weekly_bonus_enabled: Boolean(rWeeklyBonus),
         updated_at: new Date().toISOString()
@@ -822,7 +965,6 @@ function ParentDashboardContent() {
   const [childProfiles, setChildProfiles] = useState<Array<any>>([]);
   const [enrichedChildProfiles, setEnrichedChildProfiles] = useState<Array<any>>([]);
   const [weeklyStarsTrend, setWeeklyStarsTrend] = useState<number[]>([]);
-  const [badgesSummary, setBadgesSummary] = useState<Record<string, number>>({});
   const [selectedTrendChild, setSelectedTrendChild] = useState<string>('');
   const [totalTasksCount, setTotalTasksCount] = useState(0);
   const [tasksCompletedCount, setTasksCompletedCount] = useState(0);
@@ -831,6 +973,68 @@ function ParentDashboardContent() {
   const [pendingProofCount, setPendingProofCount] = useState(0);
   const [upcomingEventsCount, setUpcomingEventsCount] = useState(0);
   const [examsCount, setExamsCount] = useState(0);
+  const selectedAutomationChildId = automationChildId || children[0]?.id || '';
+  const selectedAutomationProfile = (childProfiles.find((profile) => profile.id === selectedAutomationChildId) || null) as ChildProfile | null;
+  const selectedAutomationName = children.find((child) => child.id === selectedAutomationChildId)?.name || 'Child';
+  const selectedChildEvents = events.filter((event) => !event.child_id || event.child_id === selectedAutomationChildId) as AppEvent[];
+  const selectedChildExams = exams
+    .filter((exam) => !exam.child_id || exam.child_id === selectedAutomationChildId)
+    .map((exam) => ({
+      id: exam.id,
+      child_id: exam.child_id || selectedAutomationChildId,
+      subject: exam.subject,
+      marks_scored: Number(exam.marks_scored) || 0,
+      total_marks: Number(exam.total_marks) || 0,
+      exam_date: exam.exam_date || exam.date || new Date().toISOString()
+    })) as ExamResult[];
+  const upcomingExamEvents = selectedChildEvents.filter((event) => event.type === 'exam' && event.date && new Date(event.date) >= new Date(new Date().toDateString()));
+  const {
+    routine,
+    loading: routineLoading,
+    createRoutine,
+    updateRoutine
+  } = useRoutineConfiguration(familyId, selectedAutomationChildId);
+  const {
+    scheduledTasks,
+    loading: schedulerLoading,
+    error: schedulerError,
+    generateTodaysTasks,
+    generateExamTasks
+  } = useTaskScheduler(
+    selectedAutomationChildId,
+    familyId,
+    routine,
+    selectedAutomationProfile,
+    selectedChildExams,
+    selectedChildEvents
+  );
+  const {
+    reminders,
+    loading: remindersLoading,
+    createReminder,
+    updateReminder,
+    deleteReminder,
+    requestPermission,
+    notificationPermission
+  } = useReminders(selectedAutomationChildId, familyId);
+  const {
+    rewards: rewardItems,
+    loading: rewardItemsLoading,
+    createReward,
+    updateReward,
+    deleteReward
+  } = useRewards(familyId);
+  const {
+    redemptions,
+    loading: redemptionsLoading,
+    updateRedemptionStatus
+  } = useRedemptions(selectedAutomationChildId, familyId);
+
+  useEffect(() => {
+    if (!automationChildId && children[0]?.id) {
+      setAutomationChildId(children[0].id);
+    }
+  }, [automationChildId, children]);
 
   useEffect(() => {
     if (!user) {
@@ -838,7 +1042,7 @@ function ParentDashboardContent() {
       return;
     }
 
-    const cpq = query(collection(db, 'child_profile'), where('user_id', '==', familyId));
+    const cpq = query(collection(db, 'child_profile'), where('parent_id', '==', familyId));
     const unsub = onSnapshot(
       cpq,
       (snap) => {
@@ -849,7 +1053,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user]);
+  }, [user, familyId]);
 
   // Subscribe to approved proofs to compute completed tasks and recent stars
   useEffect(() => {
@@ -916,14 +1120,6 @@ function ParentDashboardContent() {
 
         setWeeklyStarsTrend(days);
 
-        // aggregate badge counts
-        const badgeCounts: Record<string, number> = {};
-        enriched.forEach((p) => {
-          (p.badges || []).forEach((b: string) => {
-            badgeCounts[b] = (badgeCounts[b] || 0) + 1;
-          });
-        });
-        setBadgesSummary(badgeCounts);
       },
       (err) => console.error('Failed to subscribe to approved proofs for analytics:', err)
     );
@@ -979,9 +1175,69 @@ function ParentDashboardContent() {
 
   const cardBase = 'rounded-3xl border p-5 shadow-[var(--card-shadow)]';
   const hasChildren = children.length > 0;
-  const tasksCompleted = tasksCompletedCount;
-  const consistencyPercent = avgConsistency;
-  
+  const getChildName = (childId?: string) => children.find((c) => c.id === childId)?.name || 'Child';
+  const latestExams = [...exams]
+    .sort((a, b) => new Date(b.exam_date || 0).getTime() - new Date(a.exam_date || 0).getTime())
+    .slice(0, 3);
+  const upcomingEventsPreview = events
+    .filter((ev) => ev.date && new Date(ev.date) >= new Date(new Date().toDateString()))
+    .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+    .slice(0, 3);
+  const latestGrowthLogs = [...growthLogs]
+    .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+    .slice(0, 3);
+
+  const saveRoutineConfiguration = async (updates: Parameters<typeof updateRoutine>[0]) => {
+    if (!routine?.id) {
+      await createRoutine({
+        parent_id: familyId,
+        child_id: selectedAutomationChildId,
+        school_days_routine: updates.school_days_routine || routine?.school_days_routine || [],
+        vacation_routine: updates.vacation_routine || routine?.vacation_routine || [],
+        academic_mode_start: updates.academic_mode_start || routine?.academic_mode_start || '06-01',
+        academic_mode_end: updates.academic_mode_end || routine?.academic_mode_end || '03-31',
+        current_mode: updates.current_mode || routine?.current_mode || 'academic'
+      });
+      setSuccess('Routine created.');
+      return;
+    }
+
+    await updateRoutine(updates);
+    setSuccess('Routine updated.');
+  };
+
+  const createReminderForSelectedChild = async (reminder: Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>) => {
+    await createReminder({
+      ...reminder,
+      child_id: selectedAutomationChildId,
+      parent_id: familyId
+    });
+    setSuccess('Reminder saved.');
+  };
+
+  const seedDefaultReminders = async () => {
+    if (!selectedAutomationChildId) return;
+    for (const reminder of getDefaultReminders(selectedAutomationChildId, familyId)) {
+      await createReminder(reminder);
+    }
+    setSuccess(`Default reminders added for ${selectedAutomationName}.`);
+  };
+
+  const createRewardForFamily = async (reward: Omit<RewardItem, 'id' | 'created_at' | 'updated_at'>) => {
+    await createReward({
+      ...reward,
+      parent_id: familyId
+    });
+    setSuccess('Reward saved.');
+  };
+
+  const seedDefaultRewards = async () => {
+    for (const reward of getDefaultRewards(familyId)) {
+      await createReward(reward);
+    }
+    setSuccess('Default reward marketplace added.');
+  };
+
 
   return (
     <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -993,13 +1249,13 @@ function ParentDashboardContent() {
           >
             <div className="flex lg:flex-col items-center justify-between gap-3 h-full">
               <div className="flex lg:flex-col items-center gap-3">
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Menu sections will be connected to routes next.')}> 
+                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Menu sections will be connected to routes next.')}>
                   <Menu size={20} />
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/25 grid place-items-center">
                   <Home size={20} />
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition relative" onClick={() => setIsInboxOpen(true)}>
+                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition relative" onClick={() => setActiveTab('communication')}>
                   <Mail size={18} />
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Quick call reminders will be added in reminders phase.')}>
@@ -1011,7 +1267,7 @@ function ParentDashboardContent() {
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Chat assistant will be added in automation phase.')}>
                   <MessageCircle size={18} />
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setIsSettingsOpen(true)}> 
+                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('settings')}>
                   <Settings size={18} />
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={toggleTheme} aria-label="toggle-theme">
@@ -1047,6 +1303,26 @@ function ParentDashboardContent() {
               </div>
             </div>
 
+            <div className="mb-4 overflow-x-auto">
+              <div className="inline-flex min-w-max gap-2 rounded-full bg-slate-100 p-1 dark:bg-slate-800">
+                {parentTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={clsx(
+                      'rounded-full px-4 py-2 text-sm font-semibold transition',
+                      activeTab === tab.id
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+                        : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700'
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {(error || success || info) && (
               <div className="space-y-2 mb-4">
                 {error && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-red-100 text-red-700">{error}</div>}
@@ -1056,8 +1332,9 @@ function ParentDashboardContent() {
             )}
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5">
-              <section className="xl:col-span-7 2xl:col-span-8 space-y-4">
-                {/* Real-time Dashboards for each child */}
+              <div className={activeTab === 'dashboard' ? 'xl:col-span-7 2xl:col-span-8 space-y-4' : 'hidden'}>
+                <section className="xl:col-span-7 2xl:col-span-8 space-y-4">
+                  {/* Real-time Dashboards for each child */}
                 {children.map((child) => (
                   <RealTimeDashboard
                     key={child.id}
@@ -1123,10 +1400,13 @@ function ParentDashboardContent() {
                     </div>
                   </div>
                 </div>
+              </section>
+            </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Growth & Health</h2>
+                <div className={activeTab === 'growth' ? 'xl:col-span-12' : 'hidden'}>
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Growth & Health</h2>
                     <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{growthLogs.length}</span>
                   </div>
 
@@ -1172,13 +1452,15 @@ function ParentDashboardContent() {
                           ))}
                         </div>
                       )}
-                    </div>
-                  </div>
-                </div>
+	                    </div>
+	                  </div>
+	                </div>
+	              </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Events Planner</h2>
+                <div className={activeTab === 'events' ? 'xl:col-span-12' : 'hidden'}>
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Events Planner</h2>
                     <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{events.length}</span>
                   </div>
 
@@ -1233,10 +1515,12 @@ function ParentDashboardContent() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Rewards Configuration</h2>
+                <div className={activeTab === 'rewards' ? 'xl:col-span-12' : 'hidden'}>
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Rewards Configuration</h2>
                     <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length}</span>
                   </div>
 
@@ -1258,8 +1542,8 @@ function ParentDashboardContent() {
                       </div>
                     </form>
 
-                    <div>
-                      {rewardsLoading ? (
+	                    <div>
+	                      {rewardsLoading ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading reward settings...</p>
                       ) : rewards.length === 0 ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No rewards configured yet.</p>
@@ -1278,14 +1562,45 @@ function ParentDashboardContent() {
                             </div>
                           ))}
                         </div>
-                      )}
+	                      )}
+	                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                        Add Default Reward Items
+                      </button>
                     </div>
-                  </div>
-                </div>
+                    <div className="mt-4 space-y-4">
+                      <RewardManagement
+                        rewards={rewardItems}
+                        onCreateReward={createRewardForFamily}
+                        onUpdateReward={updateReward}
+                        onDeleteReward={deleteReward}
+                        loading={rewardItemsLoading}
+                      />
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Redemption Approvals</h2>
+                            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Review reward requests for the selected child.</p>
+                          </div>
+                          <select value={selectedAutomationChildId} onChange={(event) => setAutomationChildId(event.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <option value="">Select child</option>
+                            {children.map((child) => (
+                              <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <RedemptionHistory redemptions={redemptions} onUpdateStatus={updateRedemptionStatus} loading={redemptionsLoading} />
+                      </div>
+                    </div>
+	                  </div>
+	                </div>
+              </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Manage Tasks</h2>
+                <div className={activeTab === 'tasks' ? 'xl:col-span-12' : 'hidden'}>
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Manage Tasks</h2>
                     <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
                       {tasks.length}
                     </span>
@@ -1293,13 +1608,17 @@ function ParentDashboardContent() {
 
                   <div className="space-y-3">
                     <form onSubmit={handleCreateTask} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <select required value={tChild} onChange={(e) => setTChild(e.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">-- Child --</option>
+                        {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                      </select>
                       <input required value={tTitle} onChange={(e) => setTTitle(e.target.value)} placeholder="Task title" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Points" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tDue} onChange={(e) => setTDue(e.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tDesc} onChange={(e) => setTDesc(e.target.value)} placeholder="Short description" className="col-span-1 sm:col-span-3 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <div className="col-span-1 sm:col-span-3 flex gap-2">
                         <button disabled={taskLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{taskLoading ? 'Saving...' : '+ Create Task'}</button>
-                        <button type="button" onClick={() => { setTTitle(''); setTDesc(''); setTPoints(''); setTDue(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                        <button type="button" onClick={() => { setTChild(''); setTTitle(''); setTDesc(''); setTPoints(''); setTDue(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
                       </div>
                     </form>
 
@@ -1315,7 +1634,7 @@ function ParentDashboardContent() {
                               <div>
                                 <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{t.title}</p>
                                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.description}</p>
-                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t.points} pts • {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'no due date'}</p>
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{getChildName(t.child_id)} • {t.points ?? t.star_value} pts • {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'no due date'}</p>
                               </div>
                               <div className="flex gap-2">
                                 <button onClick={() => handleDeleteTask(t.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
@@ -1327,36 +1646,67 @@ function ParentDashboardContent() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className={activeTab === 'automation' ? 'xl:col-span-12 space-y-4' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>Consistency</p>
-                      <Activity size={18} className="text-cyan-500" />
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Automation Center</h2>
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Routine, smart task generation, and reminders for one selected child.</p>
+                      </div>
+                      <select value={selectedAutomationChildId} onChange={(event) => setAutomationChildId(event.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">Select child</option>
+                        {children.map((child) => (
+                          <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                        ))}
+                      </select>
                     </div>
-                    <p className="text-3xl font-black mt-2" style={{ color: 'var(--text-main)' }}>{consistencyPercent}%</p>
-                    <div className="mt-3 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                      <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${consistencyPercent}%` }} />
+                    {schedulerError && <div className="mt-3 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700">{schedulerError}</div>}
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Selected Child</p>
+                        <p className="mt-1 font-bold" style={{ color: 'var(--text-main)' }}>{selectedAutomationChildId ? selectedAutomationName : 'None'}</p>
+                      </div>
+                      <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Generated Tasks</p>
+                        <p className="mt-1 font-bold" style={{ color: 'var(--text-main)' }}>{scheduledTasks.length}</p>
+                      </div>
+                      <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Notifications</p>
+                        <button type="button" onClick={() => void requestPermission()} className="mt-1 text-sm font-bold text-cyan-600">
+                          {notificationPermission === 'granted' ? 'Enabled' : 'Enable browser alerts'}
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-                      {hasChildren ? 'Live child consistency will appear here as activity starts.' : 'Add a child account to begin tracking consistency.'}
-                    </p>
                   </div>
-                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>Tasks Completed</p>
-                      <CheckSquare size={18} className="text-emerald-500" />
-                    </div>
-                    <p className="text-3xl font-black mt-2" style={{ color: 'var(--text-main)' }}>{tasksCompleted}</p>
-                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-                      {hasChildren ? 'Task completion totals will update from real logs.' : 'No child activity yet.'}
-                    </p>
+
+                  <RoutineConfigurationUI routine={routine} onUpdate={saveRoutineConfiguration} loading={routineLoading} />
+                  <TaskSchedulerUI
+                    routine={routine}
+                    upcomingExams={upcomingExamEvents}
+                    onGenerateTodaysTasks={generateTodaysTasks}
+                    onGenerateExamTasks={generateExamTasks}
+                    loading={schedulerLoading}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void seedDefaultReminders()} disabled={!selectedAutomationChildId || remindersLoading} className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                      Add Default Reminders
+                    </button>
                   </div>
+                  <ReminderManagement
+                    reminders={reminders}
+                    onCreate={createReminderForSelectedChild}
+                    onUpdate={updateReminder}
+                    onDelete={deleteReminder}
+                    loading={remindersLoading}
+                  />
                 </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Pending Proof Approval</h2>
+                <div className={activeTab === 'proofs' ? 'xl:col-span-12' : 'hidden'}>
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Pending Proof Approval</h2>
                     <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
                       {visiblePendingProofs.length > 0 ? `${visiblePendingProofs.length} waiting` : 'none'}
                     </span>
@@ -1389,213 +1739,292 @@ function ParentDashboardContent() {
                     </div>
                   )}
                 </div>
-              </section>
+              </div>
 
-              <section className="xl:col-span-5 2xl:col-span-4 space-y-4">
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-                    <Users2 size={18} /> Child Accounts
-                  </h2>
-                  {childrenLoading ? (
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading child accounts...</p>
-                  ) : children.length === 0 ? (
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No child accounts yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {children.map((child) => {
-                        const meta = enrichedChildProfiles.find((p) => p.id === child.id) as any;
-                        return (
-                          <div key={child.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                            <div>
-                              <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{child.name || 'Child'}</p>
-                              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
-                              {meta ? (
-                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★</p>
-                              ) : null}
+              <section className={clsx(
+                'space-y-4',
+                activeTab === 'dashboard' && 'xl:col-span-5 2xl:col-span-4',
+                ['family', 'exams', 'challenges'].includes(activeTab) && 'xl:col-span-12',
+                !['dashboard', 'family', 'exams', 'challenges'].includes(activeTab) && 'hidden'
+              )}>
+                {(activeTab === 'dashboard' || activeTab === 'family') && (
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                      <Users2 size={18} /> Child Accounts
+                    </h2>
+                    {childrenLoading ? (
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading child accounts...</p>
+                    ) : children.length === 0 ? (
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No child accounts yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {children.map((child) => {
+                          const meta = enrichedChildProfiles.find((p) => p.id === child.id) as any;
+                          return (
+                            <div key={child.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                              <div>
+                                <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{child.name || 'Child'}</p>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
+                                {meta ? (
+                                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★</p>
+                                ) : null}
+                              </div>
+                              <Circle size={14} className="text-emerald-500 fill-current" />
                             </div>
-                            <Circle size={14} className="text-emerald-500 fill-current" />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(activeTab === 'dashboard' || activeTab === 'family') && (
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Quick Metrics</h2>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
+                        <BarChart3 className="mx-auto text-white" size={16} />
+                        <p className="text-white text-xs mt-1">Profiles</p>
+                        <p className="text-white font-extrabold">{children.length}</p>
+                      </div>
+                      <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #06b6d4, #14b8a6)' }}>
+                        <TrendingUp className="mx-auto text-white" size={16} />
+                        <p className="text-white text-xs mt-1">Status</p>
+                        <p className="text-white font-extrabold">{hasChildren ? 'Live' : 'Empty'}</p>
+                      </div>
+                      <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
+                        <ShieldCheck className="mx-auto text-white" size={16} />
+                        <p className="text-white text-xs mt-1">Proofs</p>
+                        <p className="text-white font-extrabold">{tasksCompletedCount}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'dashboard' && (
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Family Snapshot</h2>
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Recent Exams</p>
+                          <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>{examsCount}</span>
+                        </div>
+                        {latestExams.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No exam results recorded yet.</p>
+                        ) : latestExams.map((ex) => (
+                          <div key={ex.id} className="py-2 border-t first:border-t-0" style={{ borderColor: 'var(--border-main)' }}>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored}/{ex.total_marks} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                        ))}
+                      </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Quick Metrics</h2>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
-                      <BarChart3 className="mx-auto text-white" size={16} />
-                      <p className="text-white text-xs mt-1">Profiles</p>
-                      <p className="text-white font-extrabold">{children.length}</p>
-                    </div>
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #06b6d4, #14b8a6)' }}>
-                      <TrendingUp className="mx-auto text-white" size={16} />
-                      <p className="text-white text-xs mt-1">Status</p>
-                      <p className="text-white font-extrabold">{hasChildren ? 'Live' : 'Empty'}</p>
-                    </div>
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
-                      <ShieldCheck className="mx-auto text-white" size={16} />
-                      <p className="text-white text-xs mt-1">Proofs</p>
-                      <p className="text-white font-extrabold">{tasksCompletedCount}</p>
+                      <div className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Active Challenges</p>
+                          <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>{activeChallenges.length}</span>
+                        </div>
+                        {activeChallenges.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{completedChallenges.length > 0 ? `${completedChallenges.length} completed challenge${completedChallenges.length === 1 ? '' : 's'}.` : 'No active challenges.'}</p>
+                        ) : activeChallenges.slice(0, 3).map((ch) => (
+                          <div key={ch.id} className="py-2 border-t first:border-t-0" style={{ borderColor: 'var(--border-main)' }}>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Parent {ch.parent_score} vs Child {ch.child_score} • Target {ch.target_score}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Upcoming Events</p>
+                          <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>{upcomingEventsCount}</span>
+                        </div>
+                        {upcomingEventsPreview.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No upcoming events.</p>
+                        ) : upcomingEventsPreview.map((ev) => (
+                          <div key={ev.id} className="py-2 border-t first:border-t-0" style={{ borderColor: 'var(--border-main)' }}>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{ev.title}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ev.child_id ? getChildName(ev.child_id) : 'Family'} • {ev.date ? new Date(ev.date).toLocaleDateString() : 'No date'}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Growth Updates</p>
+                          <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>{growthLogs.length}</span>
+                        </div>
+                        {latestGrowthLogs.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No growth logs yet.</p>
+                        ) : latestGrowthLogs.map((g) => (
+                          <div key={g.id} className="py-2 border-t first:border-t-0" style={{ borderColor: 'var(--border-main)' }}>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{getChildName(g.child_id)}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{g.height_cm} cm • {g.weight_kg} kg • {g.date ? new Date(g.date).toLocaleDateString() : 'No date'}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Exams</h2>
-                    <div className="flex items-center gap-2">
-                      <select value={filterChild} onChange={(ev) => setFilterChild(ev.target.value)} className="rounded-xl py-1 px-3 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                        <option value="">All Children</option>
-                        {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
-                      </select>
-                      <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{exams.length}</span>
+                {activeTab === 'exams' && (
+                  <>
+                    <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Exams</h2>
+                        <div className="flex items-center gap-2">
+                          <select value={filterChild} onChange={(ev) => setFilterChild(ev.target.value)} className="rounded-xl py-1 px-3 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <option value="">All Children</option>
+                            {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                          </select>
+                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{exams.length}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <form onSubmit={handleCreateExam} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          <select value={eChild} onChange={(ev) => setEChild(ev.target.value)} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <option value="">-- Child --</option>
+                            {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                          </select>
+                          <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input required value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input required value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <div className="md:col-span-2 flex flex-wrap gap-2">
+                            <button disabled={examLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{examLoading ? 'Saving...' : (editExamId ? 'Save Changes' : '+ Record Exam')}</button>
+                            {editExamId ? (
+                              <button type="button" onClick={cancelEdit} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
+                            ) : (
+                              <button type="button" onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                            )}
+                          </div>
+                        </form>
+
+                        <div>
+                          {examsLoading ? (
+                            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading exams...</p>
+                          ) : (filterChild ? exams.filter((x) => x.child_id === filterChild) : exams).length === 0 ? (
+                            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No exam results recorded yet.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {(filterChild ? exams.filter((x) => x.child_id === filterChild) : exams).map((ex) => (
+                                <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                  <div>
+                                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
+                                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored}/{ex.total_marks} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                    <button onClick={() => handleDeleteExam(ex.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <GrowthChart logs={filterChild ? growthLogs.filter((x) => x.child_id === filterChild) : growthLogs} isDark={theme === 'dark'} />
+                      <AcademicHeatmap exams={filterChild ? exams.filter((x) => x.child_id === filterChild) : exams} isDark={theme === 'dark'} />
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'family' && (
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--text-main)' }}>Family Hub Actions</h2>
+                    <div className="space-y-2">
+                      <button onClick={() => setIsModaling(true)} className="w-full py-2 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                        + Add Child Account
+                      </button>
+                      <button onClick={() => setInfo('Co-parent invite flow is in pending implementation list.')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)', background: 'var(--surface-soft)' }}>
+                        + Invite Co-Parent
+                      </button>
                     </div>
                   </div>
+                )}
 
-                  <div className="space-y-3">
-                    <form onSubmit={handleCreateExam} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                      <select value={eChild} onChange={(ev) => setEChild(ev.target.value)} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                {activeTab === 'challenges' && (
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                      <Activity size={18} /> Challenges
+                    </h2>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!chTitle || !chChild || !chTarget) return;
+                      setChallengeLoading(true);
+                      try {
+                        await createChallenge(chTitle, chChild, Number(chTarget), chDesc);
+                        setChTitle(''); setChChild(''); setChTarget(''); setChDesc('');
+                        setSuccess('Challenge created!');
+                      } catch (err) {
+                        setError('Could not create challenge.');
+                      } finally {
+                        setChallengeLoading(false);
+                      }
+                    }} className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                      <select required value={chChild} onChange={(e) => setChChild(e.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">-- Child --</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                       </select>
-                      <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-
-                      <input required value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <input required value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <div className="md:col-span-2 flex flex-wrap gap-2">
-                        <button disabled={examLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{examLoading ? 'Saving...' : (editExamId ? 'Save Changes' : '+ Record Exam')}</button>
-                        {editExamId ? (
-                          <button type="button" onClick={cancelEdit} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
-                        ) : (
-                          <button type="button" onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
-                        )}
+                      <input required value={chTitle} onChange={(e) => setChTitle(e.target.value)} placeholder="Challenge title" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input required value={chTarget as any} onChange={(e) => setChTarget(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Target score" type="number" min="1" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Description (optional)" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <div className="col-span-1 sm:col-span-2 flex gap-2">
+                        <button disabled={challengeLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{challengeLoading ? 'Creating...' : '+ New Challenge'}</button>
+                        <button type="button" onClick={() => { setChTitle(''); setChChild(''); setChTarget(''); setChDesc(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
                       </div>
                     </form>
-
-                    <div>
-                      {examsLoading ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading exams...</p>
-                      ) : (filterChild ? exams.filter((x) => x.child_id === filterChild) : exams).length === 0 ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No exam results recorded yet.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {(filterChild ? exams.filter((x) => x.child_id === filterChild) : exams).map((ex) => (
-                            <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                              <div>
-                                <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {children.find((c) => c.id === ex.child_id)?.name || 'Child'}</p>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored}/{ex.total_marks} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : '—'}</p>
+                    {activeChallenges.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Active</p>
+                        {activeChallenges.map((ch) => (
+                          <div key={ch.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{ch.description || 'No description'} • Target: {ch.target_score}</p>
+                            <div className="flex items-center gap-3 mt-2">
+                              <div className="flex-1">
+                                <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Parent: {ch.parent_score}</p>
+                                <div className="h-2 rounded-full mt-1" style={{ background: 'var(--border-main)' }}>
+                                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, (ch.parent_score / ch.target_score) * 100)}%`, background: 'linear-gradient(90deg, #8b5cf6, #6366f1)' }} />
+                                </div>
                               </div>
-                              <div className="flex gap-2">
-                                <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
-                                <button onClick={() => handleDeleteExam(ex.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <GrowthChart logs={filterChild ? growthLogs.filter((x) => x.child_id === filterChild) : growthLogs} isDark={theme === 'dark'} />
-                  <AcademicHeatmap exams={filterChild ? exams.filter((x) => x.child_id === filterChild) : exams} isDark={theme === 'dark'} />
-                </div>
-
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--text-main)' }}>Family Hub Actions</h2>
-                  <div className="space-y-2">
-                    <button onClick={() => setIsModaling(true)} className="w-full py-2 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
-                      + Add Child Account
-                    </button>
-                    <button onClick={() => setInfo('Co-parent invite flow is in pending implementation list.')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)', background: 'var(--surface-soft)' }}>
-                      + Invite Co-Parent
-                    </button>
-                  </div>
-                </div>
-
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-                    <Activity size={18} /> Challenges
-                  </h2>
-
-                  <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!chTitle || !chChild || !chTarget) return;
-                    setChallengeLoading(true);
-                    try {
-                      await createChallenge(chTitle, chChild, Number(chTarget), chDesc);
-                      setChTitle(''); setChChild(''); setChTarget(''); setChDesc('');
-                      setSuccess('Challenge created!');
-                    } catch (err) {
-                      setError('Could not create challenge.');
-                    } finally {
-                      setChallengeLoading(false);
-                    }
-                  }} className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                    <select required value={chChild} onChange={(e) => setChChild(e.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                      <option value="">-- Child --</option>
-                      {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
-                    </select>
-                    <input required value={chTitle} onChange={(e) => setChTitle(e.target.value)} placeholder="Challenge title" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                    <input required value={chTarget as any} onChange={(e) => setChTarget(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Target score" type="number" min="1" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                    <input value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Description (optional)" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                    <div className="col-span-1 sm:col-span-2 flex gap-2">
-                      <button disabled={challengeLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{challengeLoading ? 'Creating...' : '+ New Challenge'}</button>
-                      <button type="button" onClick={() => { setChTitle(''); setChChild(''); setChTarget(''); setChDesc(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
-                    </div>
-                  </form>
-
-                  {activeChallenges.length > 0 && (
-                    <div className="space-y-2 mb-3">
-                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Active</p>
-                      {activeChallenges.map((ch) => (
-                        <div key={ch.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{ch.description || 'No description'} • Target: {ch.target_score}</p>
-                          <div className="flex items-center gap-3 mt-2">
-                            <div className="flex-1">
-                              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Parent: {ch.parent_score}</p>
-                              <div className="h-2 rounded-full mt-1" style={{ background: 'var(--border-main)' }}>
-                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (ch.parent_score / ch.target_score) * 100)}%`, background: 'linear-gradient(90deg, #8b5cf6, #6366f1)' }} />
+                              <div className="flex-1">
+                                <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Child: {ch.child_score}</p>
+                                <div className="h-2 rounded-full mt-1" style={{ background: 'var(--border-main)' }}>
+                                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, (ch.child_score / ch.target_score) * 100)}%`, background: 'linear-gradient(90deg, #ec4899, #f472b6)' }} />
+                                </div>
                               </div>
                             </div>
-                            <div className="flex-1">
-                              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Child: {ch.child_score}</p>
-                              <div className="h-2 rounded-full mt-1" style={{ background: 'var(--border-main)' }}>
-                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (ch.child_score / ch.target_score) * 100)}%`, background: 'linear-gradient(90deg, #ec4899, #f472b6)' }} />
-                              </div>
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={() => void incrementScore(ch.id, 'parent')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-100 text-violet-700">+1 Parent</button>
+                              <button onClick={() => void incrementScore(ch.id, 'child')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-pink-100 text-pink-700">+1 Child</button>
+                              <button onClick={() => void deleteChallenge(ch.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-100 text-rose-700 ml-auto">Delete</button>
                             </div>
                           </div>
-                          <div className="flex gap-2 mt-2">
-                            <button onClick={() => void incrementScore(ch.id, 'parent')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-100 text-violet-700">+1 Parent</button>
-                            <button onClick={() => void incrementScore(ch.id, 'child')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-pink-100 text-pink-700">+1 Child</button>
-                            <button onClick={() => void deleteChallenge(ch.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-100 text-rose-700 ml-auto">Delete</button>
+                        ))}
+                      </div>
+                    )}
+                    {completedChallenges.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-amber-500">Completed</p>
+                        {completedChallenges.slice(0, 3).map((ch) => (
+                          <div key={ch.id} className="rounded-xl border p-3 opacity-75" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Winner: {ch.winner === 'parent' ? 'Parent' : ch.winner === 'child' ? 'Child' : 'Draw'} • {ch.parent_score} vs {ch.child_score}</p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {completedChallenges.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold uppercase tracking-wider text-amber-500">Completed</p>
-                      {completedChallenges.slice(0, 3).map((ch) => (
-                        <div key={ch.id} className="rounded-xl border p-3 opacity-75" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                          <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Winner: {ch.winner === 'parent' ? '👨 Parent' : ch.winner === 'child' ? '🧒 Child' : '🤝 Draw'} • {ch.parent_score} vs {ch.child_score}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {activeChallenges.length === 0 && completedChallenges.length === 0 && (
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No challenges yet. Create one above!</p>
-                  )}
-                </div>
+                        ))}
+                      </div>
+                    )}
+                    {activeChallenges.length === 0 && completedChallenges.length === 0 && (
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No challenges yet. Create one above!</p>
+                    )}
+                  </div>
+                )}
               </section>
             </div>
           </main>
@@ -1654,11 +2083,11 @@ function ParentDashboardContent() {
           <div className="rounded-3xl w-full max-w-md p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
             <button onClick={() => setIsInboxOpen(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
             <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Send Message</h2>
-            
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!inboxChildId || !inboxMessage.trim() || !user) return;
-              await sendMessage(inboxChildId, user.id, inboxMessage.trim());
+              await sendMessage(inboxChildId, familyId, inboxMessage.trim());
               setInboxMessage('');
               setSuccess('Message sent successfully!');
               setTimeout(() => setSuccess(''), 3000);
@@ -1667,9 +2096,9 @@ function ParentDashboardContent() {
                 <option value="">Select Child...</option>
                 {children.map(c => <option key={c.id} value={c.id}>{c.name || c.email}</option>)}
               </select>
-              <textarea 
-                required 
-                value={inboxMessage} 
+              <textarea
+                required
+                value={inboxMessage}
                 onChange={(e) => setInboxMessage(e.target.value)}
                 placeholder="Write an encouraging message..."
                 className="w-full rounded-xl py-3 px-4 border focus:outline-none min-h-[100px]"
@@ -1688,7 +2117,7 @@ function ParentDashboardContent() {
           <div className="rounded-3xl w-full max-w-md p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
             <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
             <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Parent Settings & Co-Parenting</h2>
-            
+
             <div className="space-y-4">
               <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                  <p className="text-sm font-bold mb-1">Your Family Link Code</p>
@@ -1708,9 +2137,9 @@ function ParentDashboardContent() {
               }} className="p-4 rounded-xl border mt-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                  <p className="text-sm font-bold mb-1" style={{ color: 'var(--text-main)' }}>Join a Family Account</p>
                  <p className="text-xs opacity-70 mb-3" style={{ color: 'var(--text-main)' }}>Enter your co-parent's Family Link Code here.</p>
-                 <input 
-                   required 
-                   value={coParentCode} 
+                 <input
+                   required
+                   value={coParentCode}
                    onChange={(e) => setCoParentCode(e.target.value)}
                    placeholder="Enter Family Code"
                    className="w-full rounded-xl py-3 px-4 border focus:outline-none mb-3"

@@ -9,6 +9,7 @@ import {
   updateDoc,
   doc,
   deleteDoc,
+  getDoc,
 } from 'firebase/firestore';
 import type { RewardItem, Redemption } from '../types/schema';
 
@@ -117,7 +118,7 @@ export const useRewards = (parentId: string) => {
         );
 
         const snapshot = await getDocs(q);
-        const fetchedRewards = snapshot.docs.map(doc => doc.data() as RewardItem);
+        const fetchedRewards = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<RewardItem, 'id'>) }));
         setRewards(fetchedRewards.sort((a, b) => a.star_cost - b.star_cost));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch rewards');
@@ -221,7 +222,7 @@ export const useRedemptions = (childId: string, parentId: string) => {
         );
 
         const snapshot = await getDocs(q);
-        const fetchedRedemptions = snapshot.docs.map(doc => doc.data() as Redemption);
+        const fetchedRedemptions = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Redemption, 'id'>) }));
         setRedemptions(fetchedRedemptions);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch redemptions');
@@ -291,6 +292,29 @@ export const useRedemptions = (childId: string, parentId: string) => {
 
       if (status === 'completed') {
         updates.completed_at = new Date().toISOString();
+      }
+
+      const existingRedemption = redemptions.find(r => r.id === id);
+      if (status === 'approved' && existingRedemption && existingRedemption.status === 'pending') {
+        const profileRef = doc(db, 'child_profile', existingRedemption.child_id);
+        const profileSnap = await getDoc(profileRef);
+        if (profileSnap.exists()) {
+          const totalStars = Number(profileSnap.data().total_stars) || 0;
+          await updateDoc(profileRef, {
+            total_stars: Math.max(0, totalStars - existingRedemption.stars_spent),
+          });
+        }
+      }
+
+      if (status === 'rejected' && existingRedemption && ['approved', 'completed'].includes(existingRedemption.status)) {
+        const profileRef = doc(db, 'child_profile', existingRedemption.child_id);
+        const profileSnap = await getDoc(profileRef);
+        if (profileSnap.exists()) {
+          const totalStars = Number(profileSnap.data().total_stars) || 0;
+          await updateDoc(profileRef, {
+            total_stars: totalStars + existingRedemption.stars_spent,
+          });
+        }
       }
 
       if (notes) {

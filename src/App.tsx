@@ -4,13 +4,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ErrorBoundary } from './ErrorBoundary';
 import { activeFirebaseEnv, firebaseInitError, isUsingFirebaseEmulators } from './config/firebase';
+import ParentDashboard from './pages/parent/Dashboard';
 
 const ChildHome = lazy(() => import('./pages/child/Dashboard'));
 const ChildLayout = lazy(() => import('./pages/child/ChildLayout'));
 const ChildQuests = lazy(() => import('./pages/child/Quests'));
 const ChildDiary = lazy(() => import('./pages/child/Diary'));
 const ChildProfile = lazy(() => import('./pages/child/Profile'));
-const ParentDashboard = lazy(() => import('./pages/parent/Dashboard'));
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
 

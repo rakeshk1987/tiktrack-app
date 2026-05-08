@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChildDashboardRecommendations, TaskRecommendation } from '../utils/childRecommendations';
+import type { ChildDashboardRecommendations } from '../utils/childRecommendations';
 
 interface RecommendationsPanelProps {
   recommendations: ChildDashboardRecommendations;

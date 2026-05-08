@@ -18,16 +18,17 @@ interface BackgroundJobsUIProps {
 const BackgroundJobsUI: React.FC<BackgroundJobsUIProps> = ({ parentId }) => {
   const [jobLogs, setJobLogs] = useState<JobLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [manualTriggerLoading, setManualTriggerLoading] = useState<string | null>(null);
 
   // Fetch recent job execution logs
   useEffect(() => {
     const fetchJobLogs = async () => {
       try {
+        setLoading(true);
         const logsRef = collection(db, 'job_logs');
         const q = query(
           logsRef,
+          where('parent_id', '==', parentId),
           orderBy('executed_at', 'desc'),
           limit(20)
         );
@@ -41,11 +42,13 @@ const BackgroundJobsUI: React.FC<BackgroundJobsUIProps> = ({ parentId }) => {
         setJobLogs(logs);
       } catch (error) {
         console.error('Error fetching job logs:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchJobLogs();
-  }, []);
+  }, [parentId]);
 
   // Manual trigger functions
   const triggerJob = async (jobName: string, endpoint: string) => {
@@ -67,7 +70,8 @@ const BackgroundJobsUI: React.FC<BackgroundJobsUIProps> = ({ parentId }) => {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (error) {
-      alert(`❌ Failed to trigger ${jobName}: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      alert(`❌ Failed to trigger ${jobName}: ${message}`);
     } finally {
       setManualTriggerLoading(null);
     }
@@ -164,7 +168,11 @@ const BackgroundJobsUI: React.FC<BackgroundJobsUIProps> = ({ parentId }) => {
           📋 Recent Job Executions
         </h3>
 
-        {jobLogs.length === 0 ? (
+        {loading ? (
+          <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+            Loading job logs...
+          </p>
+        ) : jobLogs.length === 0 ? (
           <p className="text-gray-500 dark:text-gray-400 text-center py-4">
             No job logs available yet
           </p>

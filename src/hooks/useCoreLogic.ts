@@ -252,16 +252,20 @@ export function processDailyConsistency(profile: any, todayStr: string) {
   return { updated, shieldUsed, streakReset, pointsReduced, missedDays, adjustmentTrigger };
 }
 
-export function getExamPlannerStats(events: Event[], tasksVisible: { task: Task; log?: any }[]) {
+export function getExamPlannerStats(events: Event[], _tasksVisible: { task: Task; log?: any }[]) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const upcomingExams = events
     .filter((e) => e.type === 'exam' || e.type === 'Exam')
-    .map((e) => ({
-      ...e,
-      dateObj: new Date(e.date)
-    }))
+    .map((e) => {
+      const dateObj = new Date(e.date);
+      dateObj.setHours(0, 0, 0, 0);
+      return {
+        ...e,
+        dateObj
+      };
+    })
     .filter((e) => e.dateObj >= today)
     .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 

@@ -5,7 +5,7 @@ export default function ChildQuests() {
   const { isDark, mutedTextClass, proofQueueCount, renderQuestCard, tasks } = useChildLayout();
 
   return (
-    <div className="mt-8 space-y-5">
+    <div className="mt-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-3xl font-display font-bold">Quest board</h2>
@@ -21,7 +21,7 @@ export default function ChildQuests() {
             <h3 className="text-sm font-black uppercase tracking-widest text-rose-400 mb-3 ml-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> Priority Quests
             </h3>
-            <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2">
               {tasks.filter(t => t.task.priority === 'high' && !t.task.id.includes('bonus_')).map((item) => renderQuestCard(item))}
             </div>
           </div>
@@ -32,7 +32,7 @@ export default function ChildQuests() {
             <h3 className="text-sm font-black uppercase tracking-widest text-sky-400 mb-3 ml-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-sky-500"></span> Standard Quests
             </h3>
-            <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2">
               {tasks.filter(t => t.task.priority !== 'high' && !t.task.id.includes('bonus_')).map((item) => renderQuestCard(item))}
             </div>
           </div>
@@ -43,7 +43,7 @@ export default function ChildQuests() {
             <h3 className="text-sm font-black uppercase tracking-widest text-emerald-400 mb-3 ml-2 flex items-center gap-2">
               <span className="text-lg">✨</span> Bonus Quests
             </h3>
-            <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2">
               {tasks.filter(t => t.task.id.includes('bonus_')).map((item) => renderQuestCard(item))}
             </div>
           </div>

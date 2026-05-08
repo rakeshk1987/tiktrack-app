@@ -5,8 +5,8 @@ import {
   getCurrentRoutineSlot,
   getNextRoutineSlot,
   getDefaultRoutine,
-} from '../hooks/useRoutineConfiguration';
-import { RoutineSlot } from '../types/schema';
+} from '../src/hooks/useRoutineConfiguration';
+import type { RoutineSlot } from '../src/types/schema';
 
 describe('Routine Configuration', () => {
   describe('isAcademicMode', () => {

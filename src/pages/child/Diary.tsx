@@ -16,8 +16,8 @@ export default function ChildDiary() {
   } = useChildLayout();
 
   return (
-    <div className="mt-8 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-      <div className={clsx('rounded-[2rem] border p-5 shadow-[0_20px_50px_rgba(0,0,0,0.18)]', panelClass)}>
+    <div className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h2 className="text-3xl font-display font-bold">Quest diary</h2>
         <p className={clsx('mt-2 text-sm', mutedTextClass)}>Write one brave thing, one fun thing, or one tiny win from today.</p>
         <textarea
@@ -34,7 +34,7 @@ export default function ChildDiary() {
         </div>
       </div>
 
-      <div className={clsx('rounded-[2rem] border p-5 shadow-[0_20px_50px_rgba(0,0,0,0.18)]', panelClass)}>
+      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h3 className="text-2xl font-display font-bold">Recent notes</h3>
         <div className="mt-4 space-y-3">
           {entries.map((entry) => (

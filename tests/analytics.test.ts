@@ -6,14 +6,14 @@ import {
   analyzeMood,
   generateAlerts,
   generateRecommendations,
-} from '../utils/dashboardAnalytics';
+} from '../src/utils/dashboardAnalytics';
 import {
   getTaskRecommendations,
   generateMotivationalMessage,
   suggestFocusArea,
   suggestChallenge,
   suggestReward,
-} from '../utils/childRecommendations';
+} from '../src/utils/childRecommendations';
 
 describe('Dashboard Analytics', () => {
   describe('calculateMetrics', () => {

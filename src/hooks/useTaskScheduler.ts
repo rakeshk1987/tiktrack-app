@@ -6,15 +6,12 @@ import {
   where,
   getDocs,
   addDoc,
-  updateDoc,
-  doc,
   deleteDoc,
 } from 'firebase/firestore';
 import type { Task, RoutineConfiguration, ChildProfile, ExamResult, Event, MoodLog } from '../types/schema';
 import {
   generateSmartDailyTasks,
   generateExamPrepTasks,
-  GeneratedTask,
 } from '../utils/taskScheduler';
 
 interface ScheduledTask extends Task {
@@ -106,12 +103,14 @@ export const useTaskScheduler = (
           const docRef = await addDoc(tasksRef, {
             ...generated,
             child_id: childId,
+            parent_id: parentId,
             is_generated: true,
           });
 
           savedTasks.push({
             id: docRef.id,
             child_id: childId,
+            parent_id: parentId,
             ...generated,
             is_generated: true,
           } as ScheduledTask);
@@ -124,7 +123,7 @@ export const useTaskScheduler = (
     } finally {
       setLoading(false);
     }
-  }, [routine, profile, exams, events, currentMood, childId, calculateWeeklyRate]);
+  }, [routine, profile, exams, events, currentMood, childId, parentId, calculateWeeklyRate]);
 
   // Generate exam prep tasks
   const generateExamTasks = useCallback(async (exam: Event, daysUntil: number) => {
@@ -144,12 +143,14 @@ export const useTaskScheduler = (
         const docRef = await addDoc(tasksRef, {
           ...generated,
           child_id: childId,
+          parent_id: parentId,
           is_generated: true,
         });
 
         savedTasks.push({
           id: docRef.id,
           child_id: childId,
+          parent_id: parentId,
           ...generated,
           is_generated: true,
         } as ScheduledTask);
@@ -161,7 +162,7 @@ export const useTaskScheduler = (
     } finally {
       setLoading(false);
     }
-  }, [childId, profile]);
+  }, [childId, parentId, profile]);
 
   // Clean up expired tasks
   const cleanupExpiredTasks = useCallback(async () => {

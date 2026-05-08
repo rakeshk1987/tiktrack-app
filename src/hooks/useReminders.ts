@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { db } from '../config/firebase';
 import {
   collection,
@@ -10,13 +10,15 @@ import {
   doc,
   deleteDoc,
 } from 'firebase/firestore';
-import type { Reminder, ReminderLog, Task, Event, MoodLog } from '../types/schema';
+import type { Reminder, Task, Event, MoodLog } from '../types/schema';
+
+type ReminderDraft = Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>;
 
 /**
  * Calculate next reminder send time based on frequency and schedule
  */
 const calculateNextSendTime = (
-  reminder: Omit<Reminder, 'id'>,
+  reminder: Pick<Reminder, 'frequency'> & Partial<Pick<Reminder, 'schedule_time' | 'days_of_week'>>,
   fromTime: Date = new Date()
 ): Date => {
   const now = new Date(fromTime);
@@ -92,8 +94,8 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
 export const sendNotification = (title: string, options?: NotificationOptions) => {
   if (Notification.permission === 'granted') {
     // Use service worker if available
-    if ('serviceWorker' in navigator && 'ready' in navigator.serviceWorkerContainer) {
-      navigator.serviceWorkerContainer.ready.then(registration => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
         registration.showNotification(title, {
           badge: '/tiktrack-badge.png',
           icon: '/tiktrack-icon.png',
@@ -117,7 +119,7 @@ export const sendNotification = (title: string, options?: NotificationOptions) =
 export const getDefaultReminders = (
   childId: string,
   parentId: string
-): Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>[] => {
+): ReminderDraft[] => {
   return [
     {
       child_id: childId,
@@ -173,7 +175,7 @@ export const useReminders = (childId: string, parentId: string) => {
         );
 
         const snapshot = await getDocs(q);
-        const fetchedReminders = snapshot.docs.map(doc => doc.data() as Reminder);
+        const fetchedReminders = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Reminder, 'id'>) }));
         setReminders(fetchedReminders);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch reminders');
@@ -192,7 +194,7 @@ export const useReminders = (childId: string, parentId: string) => {
     }
   }, [childId, parentId]);
 
-  const createReminder = async (newReminder: Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>) => {
+  const createReminder = async (newReminder: ReminderDraft) => {
     try {
       const remindersRef = collection(db, 'reminders');
       const now = new Date();
@@ -306,8 +308,21 @@ export const createAutoReminders = (
   tasks: Task[],
   exams: Event[],
   recentMood?: MoodLog
-): Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>[] => {
-  const autoReminders: Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>[] = [];
+): ReminderDraft[] => {
+  const autoReminders: ReminderDraft[] = [];
+
+  if (tasks.some(task => task.status !== 'completed')) {
+    autoReminders.push({
+      child_id: childId,
+      parent_id: parentId,
+      type: 'task_reminder',
+      title: 'Quest check-in',
+      message: 'You still have quests waiting for you today.',
+      schedule_time: '18:00',
+      is_enabled: true,
+      frequency: 'daily',
+    });
+  }
 
   // Create exam countdown reminders
   exams.forEach(exam => {

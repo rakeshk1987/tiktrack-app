@@ -7,8 +7,8 @@ import {
   generateMotivationalTasks,
   generateSmartDailyTasks,
   DEFAULT_TASK_RULES,
-} from '../utils/taskScheduler';
-import { RoutineSlot, ChildProfile } from '../types/schema';
+} from '../src/utils/taskScheduler';
+import type { RoutineSlot, ChildProfile } from '../src/types/schema';
 
 describe('Task Scheduler', () => {
   const mockProfile: ChildProfile = {
@@ -250,7 +250,7 @@ describe('Task Scheduler', () => {
       );
 
       expect(tasks.length).toBeGreaterThan(0);
-      expect(tasks.length).toBeLessThanOrEqual(12);
+      expect(tasks.length).toBeLessThanOrEqual(7);
     });
 
     it('should combine routine, exam, and challenge tasks', () => {

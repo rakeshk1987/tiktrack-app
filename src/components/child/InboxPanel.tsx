@@ -1,6 +1,5 @@
 import { X, Mail, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
-import type { InboxMessage } from '../../types/schema';
 import { useMessages } from '../../hooks/useData';
 
 interface Props {

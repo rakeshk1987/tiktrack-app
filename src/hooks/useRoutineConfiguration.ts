@@ -120,7 +120,8 @@ export const useRoutineConfiguration = (parentId: string, childId?: string) => {
 
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-          setRoutine(snapshot.docs[0].data() as RoutineConfiguration);
+          const routineDoc = snapshot.docs[0];
+          setRoutine({ id: routineDoc.id, ...(routineDoc.data() as Omit<RoutineConfiguration, 'id'>) });
         } else {
           // No routine found, set default
           setRoutine(getDefaultRoutine(parentId, childId));
@@ -171,17 +172,30 @@ export const useRoutineConfiguration = (parentId: string, childId?: string) => {
     }
 
     try {
-      const routineRef = doc(db, 'routine_configurations', routine.id);
-      await updateDoc(routineRef, {
-        ...updates,
-        updated_at: new Date().toISOString(),
-      });
-
       const updated: RoutineConfiguration = {
         ...routine,
         ...updates,
         updated_at: new Date().toISOString(),
       };
+
+      if (!routine.id) {
+        const created = await createRoutine({
+          parent_id: updated.parent_id,
+          child_id: updated.child_id,
+          school_days_routine: updated.school_days_routine,
+          vacation_routine: updated.vacation_routine,
+          academic_mode_start: updated.academic_mode_start,
+          academic_mode_end: updated.academic_mode_end,
+          current_mode: updated.current_mode,
+        });
+        return created;
+      }
+
+      const routineRef = doc(db, 'routine_configurations', routine.id);
+      await updateDoc(routineRef, {
+        ...updates,
+        updated_at: updated.updated_at,
+      });
 
       setRoutine(updated);
       return updated;

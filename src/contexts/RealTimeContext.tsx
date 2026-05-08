@@ -11,7 +11,6 @@ import {
   addDoc,
   updateDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore';
 import type { Task, Challenge } from '../types/schema';
 
@@ -51,15 +50,15 @@ const RealTimeContext = createContext<RealTimeContextType | undefined>(undefined
 
 interface RealTimeProviderProps {
   children: ReactNode;
-  userId: string;
-  userRole: 'parent_admin' | 'child_user';
+  userId?: string;
+  userRole?: 'parent_admin' | 'child_user';
   childId?: string; // For child-specific subscriptions
 }
 
 export const RealTimeProvider: React.FC<RealTimeProviderProps> = ({
   children,
-  userId,
-  userRole,
+  userId = '',
+  userRole = 'child_user',
   childId,
 }) => {
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
@@ -161,6 +160,7 @@ export const RealTimeProvider: React.FC<RealTimeProviderProps> = ({
     const challengesQuery = query(
       collection(db, 'challenges'),
       where(userRole === 'parent_admin' ? 'parent_id' : 'child_id', '==', userId),
+      where('child_id', '==', targetChildId),
       orderBy('created_at', 'desc')
     );
 

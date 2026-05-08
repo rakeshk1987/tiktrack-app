@@ -15,6 +15,29 @@ TikTrack helps families manage chores and rewards with separate parent and child
 - Firebase-backed auth, data, storage, analytics, and messaging foundations
 - Theme support and unit-tested Firebase environment selection
 
+## Current Status (May 8, 2026)
+
+- Core parent/child product flows are implemented and working
+- Background job schema alignment has been completed for app + functions collections
+- Child daily task limit is enforced at 7 tasks in scheduler and child-visible task list
+- Proof retention cleanup now includes 60-day cleanup for `proof_logs` and best-effort Storage asset deletion
+- Test suite currently passes: `204/204` tests
+- Remaining known gap: coverage gate requires 100% across global scope and is not yet satisfied
+
+## Project Structure
+
+- `src/`: React app source code
+- `functions/`: Firebase Cloud Functions source code
+- `tests/`: Vitest suites
+- `scripts/`: Local automation scripts
+- `docs/guides/`: Implementation guides (`BACKGROUND_JOBS_GUIDE.md`, `TASK_SCHEDULING_GUIDE.md`, `REAL_TIME_SYNC_GUIDE.md`)
+- `docs/reports/`: Project status/report documents (`PROJECT_COMPLETION_SUMMARY.md`)
+- `docs/spec/`: Product skill/spec file (`TikTrack.skill`)
+
+## User Documentation
+
+- End-user walkthrough: `docs/guides/USER_GUIDE.md`
+
 ## Tech Stack
 
 - React 19
@@ -35,7 +58,7 @@ npm run local
 
 This repository uses `legacy-peer-deps` during install because the current Vite 8 toolchain is ahead of some package peer version declarations used by Vitest and the PWA plugin.
 
-`npm run local` does all of this for you on Windows:
+`npm run local` does all of this for you:
 
 - finds your local Java install
 - starts Firebase emulators with persisted data

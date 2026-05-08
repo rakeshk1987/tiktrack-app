@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, isUsingFirebaseEmulators } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   ArrowRight,
   Heart,
@@ -75,6 +76,7 @@ function saveQuickAccessChild(username: string) {
 }
 
 export default function Login() {
+  const { user } = useAuth();
   const [role, setRole] = useState<LoginRole>('child');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -86,6 +88,15 @@ export default function Login() {
   useEffect(() => {
     setQuickAccessChildren(readQuickAccessChildren());
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    setLoading(false);
+    navigate(user.role === 'child_user' ? '/child' : '/parent', { replace: true });
+  }, [navigate, user]);
 
   const formatAuthError = (code?: string) => {
     switch (code) {
@@ -149,16 +160,37 @@ export default function Login() {
             ? normalized
             : `${normalized}@tiktrack.family`;
 
-      await signInWithEmailAndPassword(auth, formattedEmail, password);
+      const signInWithTimeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('auth-sign-in-timeout')), 8000);
+      });
+
+      await Promise.race([
+        signInWithEmailAndPassword(auth, formattedEmail, password),
+        signInWithTimeout
+      ]);
 
       if (role === 'child' && !normalized.includes('@')) {
         saveQuickAccessChild(normalized);
         setQuickAccessChildren(readQuickAccessChildren());
       }
 
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err: any) {
-      setError(formatAuthError(err?.code));
+      if (auth.currentUser) {
+        const normalized = identifier.trim().toLowerCase();
+        if (role === 'child' && !normalized.includes('@')) {
+          saveQuickAccessChild(normalized);
+          setQuickAccessChildren(readQuickAccessChildren());
+        }
+        navigate('/', { replace: true });
+        return;
+      }
+
+      setError(
+        err?.message === 'auth-sign-in-timeout'
+          ? 'Sign-in is taking too long. Please check Firebase/emulator connectivity and try again.'
+          : formatAuthError(err?.code)
+      );
     } finally {
       setLoading(false);
     }

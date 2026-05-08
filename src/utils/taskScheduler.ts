@@ -1,9 +1,8 @@
-import {
+import type {
   Task,
   RoutineSlot,
   ChildProfile,
   ExamResult,
-  MoodLog,
   Event,
 } from '../types/schema';
 
@@ -308,6 +307,7 @@ export const generateExamPrepTasks = (
   if (daysUntilExam <= 1) taskCount = 4; // Final day push
   else if (daysUntilExam <= 3) taskCount = 3; // 3 days before
   else if (daysUntilExam <= 7) taskCount = 2; // 1 week before
+  const streakBonus = profile.streak_count >= 14 ? 1 : 0;
 
   for (let i = 0; i < taskCount; i++) {
     const reviewTypes = [
@@ -322,8 +322,8 @@ export const generateExamPrepTasks = (
       category: subject,
       priority: 'high',
       energy_level: 'high',
-      difficulty_level: Math.min(8, 5 + Math.floor((7 - daysUntilExam) * 0.5)),
-      star_value: 4 + (7 - daysUntilExam), // Bonus stars as exam approaches
+      difficulty_level: Math.min(8, 5 + Math.floor((7 - daysUntilExam) * 0.5) + streakBonus),
+      star_value: 4 + (7 - daysUntilExam) + streakBonus, // Bonus stars as exam approaches
       requires_proof: true,
       generated_at: new Date().toISOString(),
       generation_reason: `Exam prep for ${subject} (${daysUntilExam} days away)`,
@@ -386,6 +386,7 @@ export const generateMotivationalTasks = (
   mood?: string
 ): GeneratedTask[] => {
   if (
+    mood !== 'sad' &&
     (profile.consistency_score === undefined || profile.consistency_score > 60) &&
     (profile.streak_count === undefined || profile.streak_count > 2)
   ) {
@@ -436,6 +437,7 @@ export const generateSmartDailyTasks = (
   currentMood?: string,
   weeklyCompletionRate: number = 50
 ): GeneratedTask[] => {
+  const MAX_CHILD_DAILY_TASKS = 7;
   let tasks: GeneratedTask[] = [];
 
   // Generate routine-based tasks
@@ -474,6 +476,6 @@ export const generateSmartDailyTasks = (
   const motivationalTasks = generateMotivationalTasks(profile, currentMood);
   tasks = tasks.concat(motivationalTasks);
 
-  // Cap total tasks
-  return tasks.slice(0, 12);
+  // Enforce child-facing daily task ceiling.
+  return tasks.slice(0, MAX_CHILD_DAILY_TASKS);
 };

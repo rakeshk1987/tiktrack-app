@@ -1,13 +1,18 @@
 ﻿import clsx from 'clsx';
 import { useChildLayout } from './ChildLayout';
+import RewardMarketplace from '../../components/RewardMarketplace';
+import { useRedemptions, useRewards } from '../../hooks/useRedemptions';
 
 export default function ChildProfile() {
   const { accentCaptionClass, isDark, latestProofs, mutedTextClass, panelClass, profile } = useChildLayout();
-  const childName = profile.name || 'Athmika';
+  const childName = profile.name || 'Explorer';
+  const parentId = profile.family_id || profile.parent_id || '';
+  const { rewards, loading: rewardsLoading } = useRewards(parentId);
+  const { redemptions, loading: redemptionsLoading, requestRedemption } = useRedemptions(profile.id, parentId);
 
   return (
-    <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_1fr]">
-      <div className={clsx('rounded-[2rem] border p-5 shadow-[0_20px_50px_rgba(0,0,0,0.18)]', panelClass)}>
+    <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_1fr]">
+      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h2 className="text-3xl font-display font-bold">Explorer profile</h2>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <div className={clsx('rounded-[1.3rem] border px-4 py-4', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
@@ -29,7 +34,7 @@ export default function ChildProfile() {
         </div>
       </div>
 
-      <div className={clsx('rounded-[2rem] border p-5 shadow-[0_20px_50px_rgba(0,0,0,0.18)]', panelClass)}>
+      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h3 className="text-2xl font-display font-bold">Proof gallery</h3>
         <div className="mt-4 space-y-3">
           {latestProofs.length === 0 ? (
@@ -51,6 +56,41 @@ export default function ChildProfile() {
               </div>
             ))
           )}
+        </div>
+      </div>
+
+      <div className="xl:col-span-2 space-y-5">
+        <RewardMarketplace
+          rewards={rewards}
+          childProfile={profile}
+          onRedeemReward={async (rewardId, reward) => {
+            await requestRedemption(rewardId, reward, profile.total_stars || 0);
+          }}
+          loading={rewardsLoading}
+        />
+        <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
+          <h3 className="text-2xl font-display font-bold">Reward requests</h3>
+          <div className="mt-4 space-y-3">
+            {redemptionsLoading ? (
+              <p className={mutedTextClass}>Loading reward requests...</p>
+            ) : redemptions.length === 0 ? (
+              <p className={mutedTextClass}>No reward requests yet.</p>
+            ) : (
+              redemptions.map((redemption) => (
+                <div key={redemption.id} className={clsx('rounded-[1.3rem] border px-4 py-4', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold">{redemption.reward_item.icon} {redemption.reward_item.name}</p>
+                      <p className={clsx('text-sm', mutedTextClass)}>{redemption.stars_spent} stars • {new Date(redemption.requested_at).toLocaleDateString()}</p>
+                    </div>
+                    <span className={clsx('rounded-full px-3 py-1 text-xs font-black uppercase', redemption.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : redemption.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700')}>
+                      {redemption.status}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComprehensiveDashboard } from '../utils/dashboardAnalytics';
+import type { ComprehensiveDashboard } from '../utils/dashboardAnalytics';
 
 interface AnalyticsDashboardProps {
   data: ComprehensiveDashboard;

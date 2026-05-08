@@ -1,58 +1,30 @@
-import { firebaseConfig } from '../config/firebase';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from 'firebase/auth';
+import { getSecondaryAuth } from './secondaryAuth';
 
-interface ChildAuthResponse {
-  localId: string;
-}
+export async function createOrReuseChildAccount(
+  email: string,
+  password: string
+): Promise<{ uid: string; wasExisting: boolean }> {
+  const secondaryAuth = getSecondaryAuth();
 
-interface FirebaseRestError {
-  error?: {
-    message?: string;
-  };
-}
-
-function getIdentityToolkitUrl(path: string) {
-  if (!firebaseConfig?.apiKey) {
-    throw new Error('Firebase API key is unavailable for child account creation.');
-  }
-
-  return `https://identitytoolkit.googleapis.com/v1/accounts:${path}?key=${firebaseConfig.apiKey}`;
-}
-
-async function postAuthRequest(path: string, email: string, password: string): Promise<ChildAuthResponse> {
-  const response = await fetch(getIdentityToolkitUrl(path), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      email,
-      password,
-      returnSecureToken: true
-    })
-  });
-
-  const payload = (await response.json()) as ChildAuthResponse & FirebaseRestError;
-  if (!response.ok || !payload.localId) {
-    const errorMessage = payload.error?.message || 'UNKNOWN_ERROR';
-    const error = new Error(errorMessage) as Error & { code?: string };
-    error.code = `auth/${errorMessage.toLowerCase().replace(/_/g, '-')}`;
-    throw error;
-  }
-
-  return payload;
-}
-
-export async function createOrReuseChildAccount(email: string, password: string): Promise<{ uid: string }> {
   try {
-    const created = await postAuthRequest('signUp', email, password);
-    return { uid: created.localId };
+    const created = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    return { uid: created.user.uid, wasExisting: false };
   } catch (error) {
-    const err = error as Error & { code?: string; message?: string };
-    if (err.code !== 'auth/email-exists') {
+    const err = error as Error & { code?: string };
+    if (err.code !== 'auth/email-already-in-use') {
       throw error;
     }
 
-    const existing = await postAuthRequest('signInWithPassword', email, password);
-    return { uid: existing.localId };
+    const existing = await signInWithEmailAndPassword(secondaryAuth, email, password);
+    return { uid: existing.user.uid, wasExisting: true };
+  } finally {
+    if (secondaryAuth.currentUser) {
+      await signOut(secondaryAuth);
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ChildProfile, DiaryEntry, Event, MoodLog, ProofLog, Task, TaskLog, InboxMessage } from '../types/schema';
 import { getExamPlannerStats, processDailyConsistency, applyTaskCompletionToProfile } from './useCoreLogic';
 import { optimizeImage } from '../utils/image';
@@ -7,7 +7,6 @@ import {
   collection,
   doc,
   getDoc,
-  increment,
   limit,
   onSnapshot,
   query,
@@ -20,40 +19,7 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
-
-const fallbackTaskList: { task: Task; log?: TaskLog }[] = [
-  {
-    task: {
-      id: 'auto_gen_1',
-      title: 'Auto-Task: Math Homework',
-      category: 'Academic',
-      difficulty_level: 5,
-      energy_level: 'high',
-      priority: 'high',
-      requires_proof: true,
-      star_value: 2
-    }
-  },
-  {
-    task: {
-      id: 'auto_gen_2',
-      title: 'Auto-Task: Read a Book for 20 mins',
-      category: 'Creative',
-      difficulty_level: 2,
-      energy_level: 'low',
-      priority: 'medium',
-      requires_proof: false,
-      star_value: 1
-    }
-  }
-];
-
-const fallbackDiaryEntry = (childId: string): DiaryEntry => ({
-  id: 'welcome-entry',
-  child_id: childId,
-  date: getTodayKey(),
-  content: 'Today I am ready for a new quest.'
-});
+const MAX_CHILD_VISIBLE_TASKS = 7;
 
 export function useChildProfile(childId: string) {
   const [profile, setProfile] = useState<ChildProfile | null>(null);
@@ -65,20 +31,6 @@ export function useChildProfile(childId: string) {
       setLoading(false);
       return;
     }
-
-    const fallbackProfile: ChildProfile = {
-      id: childId,
-      name: 'Explorer',
-      date_of_birth: '2016-01-01',
-      height_cm: 140,
-      weight_kg: 32,
-      streak_count: 0,
-      streak_shields: 0,
-      consistency_score: 0,
-      total_stars: 0,
-      is_sick_mode: false,
-      user_id: childId
-    };
 
     const unsubscribe = onSnapshot(
       doc(db, 'child_profile', childId),
@@ -103,13 +55,13 @@ export function useChildProfile(childId: string) {
             setProfile(data);
           }
         } else {
-          setProfile(fallbackProfile);
+          setProfile(null);
         }
         setLoading(false);
       },
       (error) => {
-        console.warn('useChildProfile fallback mode:', error);
-        setProfile(fallbackProfile);
+        console.warn('useChildProfile failed:', error);
+        setProfile(null);
         setLoading(false);
       }
     );
@@ -137,14 +89,14 @@ export function useTodaysTasks(childId: string) {
 
     const syncState = () => {
       if (taskDocs.length === 0 && taskLogs.length === 0) {
-        setTasks(fallbackTaskList);
+        setTasks([]);
         setLoading(false);
         return;
       }
 
       const logByTaskId = new Map(taskLogs.map((log) => [log.task_id, log]));
       let merged = taskDocs
-        .filter((task) => !task.child_id || task.child_id === childId)
+        .filter((task) => task.child_id === childId)
         .map((task) => ({ task, log: logByTaskId.get(task.id) }));
 
       if (merged.length > 0) {
@@ -180,22 +132,22 @@ export function useTodaysTasks(childId: string) {
           if ((a.log?.status === 'completed') === (b.log?.status === 'completed')) return 0;
           return a.log?.status === 'completed' ? 1 : -1;
         });
-        setTasks(merged);
+        setTasks(merged.slice(0, MAX_CHILD_VISIBLE_TASKS));
       } else {
-        setTasks(fallbackTaskList);
+        setTasks([]);
       }
       setLoading(false);
     };
 
     const unsubTasks = onSnapshot(
-      query(collection(db, 'tasks'), limit(12)),
+      query(collection(db, 'tasks'), where('child_id', '==', childId), limit(20)),
       (snapshot) => {
         taskDocs = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Task, 'id'>) }));
         syncState();
       },
       (error) => {
-        console.warn('useTodaysTasks task fallback mode:', error);
-        taskDocs = fallbackTaskList.map((entry) => entry.task);
+        console.warn('useTodaysTasks task query failed:', error);
+        taskDocs = [];
         syncState();
       }
     );
@@ -207,7 +159,7 @@ export function useTodaysTasks(childId: string) {
         syncState();
       },
       (error) => {
-        console.warn('useTodaysTasks log fallback mode:', error);
+        console.warn('useTodaysTasks log query failed:', error);
         taskLogs = [];
         syncState();
       }
@@ -321,11 +273,11 @@ export function useDiaryEntries(childId: string) {
         const mapped = snapshot.docs
           .map((d) => ({ id: d.id, ...(d.data() as Omit<DiaryEntry, 'id'>) }))
           .sort((a, b) => b.date.localeCompare(a.date));
-        setEntries(mapped.length > 0 ? mapped : [fallbackDiaryEntry(childId)]);
+        setEntries(mapped);
       },
       (error) => {
-        console.warn('useDiaryEntries fallback mode:', error);
-        setEntries([fallbackDiaryEntry(childId)]);
+        console.warn('useDiaryEntries failed:', error);
+        setEntries([]);
       }
     );
 
@@ -431,6 +383,15 @@ export function useQuestActions(childId: string) {
         date: today,
         status: 'completed'
       }, { merge: true });
+
+      try {
+        await updateDoc(doc(db, 'tasks', task.id), {
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        });
+      } catch (error) {
+        console.warn('Task status update skipped:', error);
+      }
 
       const profileRef = doc(db, 'child_profile', childId);
       const snap = await getDoc(profileRef);

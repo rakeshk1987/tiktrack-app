@@ -31,18 +31,28 @@ export interface ChildProfile {
   last_streak_eval: string; // ISO Date YYYY-MM-DD
   last_task_date?: string; // ISO Date YYYY-MM-DD
   user_id: string;
+  parent_id?: string;
+  family_id?: string;
 }
 
 export interface Task {
   id: string;
   title: string;
+  description?: string;
   category: string;
   child_id?: string;
+  parent_id?: string;
+  family_id?: string;
   priority: 'low' | 'medium' | 'high';
   energy_level: 'low' | 'medium' | 'high';
   difficulty_level: number;
   star_value: number;
+  points?: number;
   requires_proof: boolean;
+  due_date?: string | null;
+  status?: 'pending' | 'completed';
+  created_at?: string;
+  completed_at?: string;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'failed' | 'skipped';
@@ -122,6 +132,7 @@ export interface Challenge {
   status: 'active' | 'completed';
   winner?: 'parent' | 'child' | 'draw';
   created_at: string;
+  updated_at?: string;
   completed_at?: string;
 }
 

@@ -7,17 +7,15 @@ import {
 } from './taskScheduler';
 import { Reminder, RoutineConfiguration, ChildProfile, ExamResult, Event, MoodLog } from './types/schema';
 
-admin.initializeApp();
-
 // Firestore references
 const db = admin.firestore();
 const tasksRef = db.collection('tasks');
 const remindersRef = db.collection('reminders');
-const profilesRef = db.collection('profiles');
-const routinesRef = db.collection('routines');
+const profilesRef = db.collection('child_profile');
+const routinesRef = db.collection('routine_configurations');
 const examsRef = db.collection('exams');
 const eventsRef = db.collection('events');
-const moodsRef = db.collection('moods');
+const moodsRef = db.collection('mood_logs');
 
 /**
  * Background job: Generate daily tasks for all children at 6:00 AM
@@ -30,10 +28,8 @@ export const generateDailyTasksJob = functions
     console.log('🚀 Starting daily task generation job');
 
     try {
-      // Get all children with active routines
-      const childrenSnapshot = await profilesRef
-        .where('is_active', '==', true)
-        .get();
+      // Get all child profiles. Current client schema does not set is_active.
+      const childrenSnapshot = await profilesRef.get();
 
       const results = {
         totalChildren: childrenSnapshot.size,
@@ -64,7 +60,7 @@ export const generateDailyTasksJob = functions
           const [examsSnapshot, eventsSnapshot, moodSnapshot] = await Promise.all([
             examsRef.where('child_id', '==', childId).orderBy('exam_date', 'desc').limit(20).get(),
             eventsRef.where('child_id', '==', childId).where('date', '>=', new Date().toISOString().split('T')[0]).get(),
-            moodsRef.where('child_id', '==', childId).orderBy('timestamp', 'desc').limit(1).get(),
+            moodsRef.where('child_id', '==', childId).orderBy('date', 'desc').limit(1).get(),
           ]);
 
           const exams = examsSnapshot.docs.map(doc => doc.data() as ExamResult);
@@ -150,10 +146,11 @@ export const dispatchRemindersJob = functions
       const currentHour = now.getHours();
       const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
 
-      // Get all active reminders
-      const remindersSnapshot = await remindersRef
-        .where('is_active', '==', true)
-        .get();
+      // Primary filter for current schema (`is_enabled`), fallback to legacy (`is_active`).
+      let remindersSnapshot = await remindersRef.where('is_enabled', '==', true).get();
+      if (remindersSnapshot.empty) {
+        remindersSnapshot = await remindersRef.where('is_active', '==', true).get();
+      }
 
       const results = {
         totalReminders: remindersSnapshot.size,
@@ -263,15 +260,18 @@ export const generateExamPrepTasksJob = functions
         const exam = examDoc.data() as Event;
 
         try {
+          // Calculate days until exam and ignore anything outside the prep window.
+          const examDate = new Date(exam.date);
+          const daysUntil = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysUntil < 0 || daysUntil > 14) {
+            continue;
+          }
+
           // Get child profile
           const profileDoc = await profilesRef.doc(exam.child_id).get();
           if (!profileDoc.exists) continue;
 
           const profile = profileDoc.data() as ChildProfile;
-
-          // Calculate days until exam
-          const examDate = new Date(exam.date);
-          const daysUntil = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
           // Generate exam prep tasks
           const examTasks = generateExamPrepTasks(exam, daysUntil, profile);
@@ -321,19 +321,21 @@ export const cleanupExpiredDataJob = functions
   .pubsub
   .schedule('0 2 * * 0')  // 2:00 AM every Sunday
   .timeZone('Asia/Karachi')
-  .onRun(async (context) => {
+    .onRun(async (context) => {
     console.log('🧹 Starting cleanup job');
+
+    const results = {
+      expiredTasksDeleted: 0,
+      oldLogsDeleted: 0,
+      proofLogsDeleted: 0,
+      proofAssetsDeleted: 0,
+      errors: 0,
+    };
 
     try {
       const now = new Date();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(now.getDate() - 30);
-
-      const results = {
-        expiredTasksDeleted: 0,
-        oldLogsDeleted: 0,
-        errors: 0,
-      };
 
       // Delete expired tasks
       const expiredTasksQuery = await tasksRef
@@ -354,12 +356,39 @@ export const cleanupExpiredDataJob = functions
       await Promise.all(deleteLogPromises);
       results.oldLogsDeleted = oldLogsQuery.size;
 
+      // Delete proof logs and proof assets older than 60 days (best-effort per file).
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(now.getDate() - 60);
+      const oldProofLogsQuery = await db.collection('proof_logs')
+        .where('timestamp', '<', sixtyDaysAgo.toISOString())
+        .get();
+
+      const maybeStorageBucket = typeof admin.storage === 'function' ? admin.storage().bucket() : null;
+      for (const proofDoc of oldProofLogsQuery.docs) {
+        const proof = proofDoc.data() as { image_url?: string };
+        const storagePath = extractStoragePathFromProofUrl(proof.image_url);
+
+        if (maybeStorageBucket && storagePath) {
+          try {
+            await maybeStorageBucket.file(storagePath).delete();
+            results.proofAssetsDeleted++;
+          } catch (error) {
+            // Continue cleanup even if file is already missing or URL is stale.
+            console.warn(`⚠️ Failed to delete proof asset: ${storagePath}`, error);
+          }
+        }
+
+        await proofDoc.ref.delete();
+        results.proofLogsDeleted++;
+      }
+
       console.log('📊 Cleanup job completed:', results);
       return results;
 
     } catch (error) {
       console.error('💥 Cleanup job failed:', error);
-      throw error;
+      results.errors++;
+      return results;
     }
   });
 
@@ -367,6 +396,11 @@ export const cleanupExpiredDataJob = functions
  * Helper function to determine if a reminder should be dispatched
  */
 function shouldDispatchReminder(reminder: Reminder, currentHour: number, currentDay: number): boolean {
+  const scheduledHour =
+    reminder.scheduled_time ??
+    (reminder.schedule_time ? Number(reminder.schedule_time.split(':')[0]) : undefined);
+  const scheduledDay = reminder.scheduled_day ?? reminder.days_of_week?.[0];
+
   // Check frequency
   switch (reminder.frequency) {
     case 'once':
@@ -374,17 +408,42 @@ function shouldDispatchReminder(reminder: Reminder, currentHour: number, current
       return false; // Would need to check logs, simplified for now
 
     case 'daily':
-      return reminder.scheduled_time === currentHour;
+      return scheduledHour === currentHour;
 
     case 'weekly':
-      return reminder.scheduled_day === currentDay && reminder.scheduled_time === currentHour;
-
-    case 'exam_reminder':
-      // Exam reminders are handled separately
-      return false;
+      // Support both single-day legacy and multi-day current schema.
+      if (Array.isArray(reminder.days_of_week) && reminder.days_of_week.length > 0) {
+        return reminder.days_of_week.includes(currentDay) && scheduledHour === currentHour;
+      }
+      return scheduledDay === currentDay && scheduledHour === currentHour;
 
     default:
       return false;
+  }
+}
+
+function extractStoragePathFromProofUrl(imageUrl?: string): string | null {
+  if (!imageUrl) return null;
+
+  // Handle gs://bucket/path format.
+  if (imageUrl.startsWith('gs://')) {
+    const withoutScheme = imageUrl.slice('gs://'.length);
+    const slashIndex = withoutScheme.indexOf('/');
+    if (slashIndex === -1) return null;
+    return withoutScheme.slice(slashIndex + 1);
+  }
+
+  // Handle Firebase download URL format:
+  // https://firebasestorage.googleapis.com/.../o/<encodedPath>?...
+  try {
+    const parsed = new URL(imageUrl);
+    const marker = '/o/';
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex === -1) return null;
+    const encodedPath = parsed.pathname.slice(markerIndex + marker.length);
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return null;
   }
 }
 

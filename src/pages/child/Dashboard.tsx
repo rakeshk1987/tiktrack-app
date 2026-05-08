@@ -3,8 +3,10 @@ import clsx from 'clsx';
 import { moodOptions, useChildLayout } from './ChildLayout';
 import { RealTimeProvider } from '../../contexts/RealTimeContext';
 import RealTimeNotifications from '../../components/RealTimeNotifications';
+import RecommendationsPanel from '../../components/RecommendationsPanel';
+import { generateChildDashboardRecommendations } from '../../utils/childRecommendations';
 
-export default function ChildDashboard() {
+function ChildDashboard() {
   const {
     accentCaptionClass,
     childName,
@@ -23,10 +25,21 @@ export default function ChildDashboard() {
   } = useChildLayout();
 
   const activeTasks = tasks.filter((task) => task.log?.status !== 'completed');
+  const recommendations = generateChildDashboardRecommendations(
+    tasks.map((item) => item.task),
+    profile,
+    [],
+    null,
+    moodLog?.mood
+  );
 
   return (
     <>
-      <div className={clsx('mt-8 rounded-[2rem] border p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:p-6', panelClass)}>
+      <div className="mt-5">
+        <RecommendationsPanel recommendations={recommendations} />
+      </div>
+
+      <div className={clsx('mt-5 rounded-[1.75rem] border p-4 shadow-[0_20px_55px_rgba(0,0,0,0.20)] sm:p-5', panelClass)}>
         <h2 className="mb-4 flex items-center gap-2 text-2xl font-display font-bold">
           <Smile size={22} className="text-pink-300" />
           How are you feeling right now?
@@ -65,22 +78,22 @@ export default function ChildDashboard() {
             );
           })}
         </div>
-        <p className={clsx('mt-4 text-lg', mutedTextClass)}>
+        <p className={clsx('mt-4 text-base', mutedTextClass)}>
           {currentMood ? currentMood.message.replace('Thanks for sharing.', `Thanks for sharing, ${childName}.`) : `Pick a mood, ${childName}. Your dashboard will cheer you on.`}
         </p>
       </div>
 
-      <div className="mt-9">
+      <div className="mt-6">
         <div className="mb-4 flex items-center justify-between px-1">
-          <h2 className="text-3xl font-display font-bold">Today's Quests</h2>
+          <h2 className="text-2xl font-display font-bold">Today's Quests</h2>
           <span className={clsx('rounded-full border px-4 py-2 text-sm font-bold shadow-sm', isDark ? 'border-white/15 bg-white/7 text-white/84' : 'border-indigo-200/70 bg-white/75 text-slate-700')}>
             {remainingTasks} left
           </span>
         </div>
-        <div className="space-y-4">{(activeTasks.length > 0 ? activeTasks : tasks.slice(0, 2)).slice(0, 2).map((item) => renderQuestCard(item, true))}</div>
+        <div className="grid gap-4 xl:grid-cols-2">{(activeTasks.length > 0 ? activeTasks : tasks.slice(0, 2)).slice(0, 2).map((item) => renderQuestCard(item, true))}</div>
       </div>
 
-      <div className={clsx('mt-8 rounded-[2rem] border p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6', panelClass)}>
+      <div className={clsx('mt-6 rounded-[1.75rem] border p-4 shadow-[0_20px_55px_rgba(0,0,0,0.20)] sm:p-5', panelClass)}>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[linear-gradient(135deg,#ffd86b,#ff9c6a)] text-slate-900 shadow-lg animate-pulse">
@@ -125,7 +138,7 @@ export default function ChildDashboard() {
 // Wrapper component with real-time functionality
 function ChildDashboardWithRealTime() {
   return (
-    <RealTimeProvider>
+    <RealTimeProvider userId={useChildLayout().profile.id} userRole="child_user">
       <RealTimeNotifications />
       <ChildDashboard />
     </RealTimeProvider>
@@ -133,3 +146,4 @@ function ChildDashboardWithRealTime() {
 }
 
 export { ChildDashboardWithRealTime };
+export default ChildDashboardWithRealTime;

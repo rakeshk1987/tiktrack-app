@@ -108,6 +108,36 @@ service cloud.firestore {
       allow create, update, delete: if isParent();
     }
 
+    match /routine_configurations/{routineId} {
+      allow read: if signedIn() && (
+        isParent() ||
+        resource.data.child_id == request.auth.uid ||
+        resource.data.child_id == ''
+      );
+      allow create, update, delete: if isParent();
+    }
+
+    match /reminders/{reminderId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update, delete: if isParent();
+    }
+
+    match /reminder_logs/{logId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create, update, delete: if isParent();
+    }
+
+    match /reward_items/{rewardId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isParent();
+    }
+
+    match /redemptions/{redemptionId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isChild() && request.resource.data.child_id == request.auth.uid;
+      allow update, delete: if isParent();
+    }
+
     match /messages/{messageId} {
       allow read: if signedIn();
       allow create: if signedIn();

@@ -31,8 +31,8 @@ const isLocalRuntime =
 
 const requestedEnv = resolveFirebaseRuntimeEnv(import.meta.env.VITE_APP_ENV);
 export const activeFirebaseEnv: FirebaseRuntimeEnv = requestedEnv;
-// Bypass emulators temporarily so Docker test instance hits Production directly
-export const isUsingFirebaseEmulators = false;
+export const isUsingFirebaseEmulators =
+  isLocalRuntime && import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
 
 let firebaseConfig: FirebaseClientConfig | null = null;
 let firebaseInitError = '';

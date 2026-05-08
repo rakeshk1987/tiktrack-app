@@ -436,6 +436,7 @@ export const generateSmartDailyTasks = (
   currentMood?: string,
   weeklyCompletionRate: number = 50
 ): GeneratedTask[] => {
+  const MAX_CHILD_DAILY_TASKS = 7;
   let tasks: GeneratedTask[] = [];
 
   // Generate routine-based tasks
@@ -474,6 +475,6 @@ export const generateSmartDailyTasks = (
   const motivationalTasks = generateMotivationalTasks(profile, currentMood);
   tasks = tasks.concat(motivationalTasks);
 
-  // Cap total tasks
-  return tasks.slice(0, 12);
+  // Enforce child-facing daily task ceiling.
+  return tasks.slice(0, MAX_CHILD_DAILY_TASKS);
 };

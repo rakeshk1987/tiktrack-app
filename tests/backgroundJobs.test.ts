@@ -1,24 +1,77 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock Firebase Admin
-vi.mock('firebase-admin', () => ({
-  initializeApp: vi.fn(),
-  firestore: {
-    Timestamp: {
-      fromDate: vi.fn((date) => ({ toDate: () => date })),
-    },
-  },
-  messaging: vi.fn(() => ({
-    send: vi.fn(),
-  })),
+const { mockGetDocs, mockAddDoc, mockDeleteDoc, mockDeleteFile, mockSendMessage } = vi.hoisted(() => ({
+  mockGetDocs: vi.fn(),
+  mockAddDoc: vi.fn(),
+  mockDeleteDoc: vi.fn(),
+  mockDeleteFile: vi.fn(),
+  mockSendMessage: vi.fn(),
 }));
 
-// Mock Firestore
-const mockGetDocs = vi.fn();
-const mockAddDoc = vi.fn();
-const mockDeleteDoc = vi.fn();
+// Mock Firebase Admin
+vi.mock('firebase-admin', () => {
+  const createQuery = () => {
+    const query: any = {
+      where: vi.fn(() => query),
+      orderBy: vi.fn(() => query),
+      limit: vi.fn(() => query),
+      get: vi.fn(() => mockGetDocs()),
+    };
+    return query;
+  };
+
+  const createDb = () => ({
+    collection: vi.fn(() => ({
+      ...createQuery(),
+      doc: vi.fn(() => ({
+        get: vi.fn(() => mockGetDocs()),
+      })),
+      add: mockAddDoc,
+    })),
+  });
+
+  const firestore: any = vi.fn(createDb);
+  firestore.FieldValue = {
+    serverTimestamp: vi.fn(() => ({ __type: 'serverTimestamp' })),
+  };
+  firestore.Timestamp = {
+    fromDate: vi.fn((date) => ({ toDate: () => date })),
+  };
+
+  return {
+    initializeApp: vi.fn(),
+    firestore,
+    storage: vi.fn(() => ({
+      bucket: vi.fn(() => ({
+        file: vi.fn(() => ({
+          delete: mockDeleteFile,
+        })),
+      })),
+    })),
+    messaging: vi.fn(() => ({
+      send: mockSendMessage,
+    })),
+    default: {
+      initializeApp: vi.fn(),
+      firestore,
+      storage: vi.fn(() => ({
+        bucket: vi.fn(() => ({
+          file: vi.fn(() => ({
+            delete: mockDeleteFile,
+          })),
+        })),
+      })),
+      messaging: vi.fn(() => ({
+        send: mockSendMessage,
+      })),
+    },
+  };
+});
 
 vi.mock('firebase-admin/firestore', () => ({
+  Timestamp: {
+    fromDate: vi.fn((date) => ({ toDate: () => date })),
+  },
   getFirestore: vi.fn(() => ({
     collection: vi.fn(() => ({
       doc: vi.fn(() => ({
@@ -39,17 +92,55 @@ vi.mock('firebase-admin/firestore', () => ({
   })),
 }));
 
+vi.mock('firebase-functions', () => ({
+  pubsub: {
+    schedule: vi.fn(() => ({
+      timeZone: vi.fn(() => ({
+        onRun: vi.fn((handler) => ({ run: handler })),
+      })),
+    })),
+  },
+  https: {
+    onRequest: vi.fn((handler) => handler),
+  },
+}));
+
+/*
+vi.mock('firebase-admin', () => ({
+  initializeApp: vi.fn(),
+  firestore: {
+    Timestamp: {
+      fromDate: vi.fn((date) => ({ toDate: () => date })),
+    },
+  },
+  messaging: vi.fn(() => ({
+    send: vi.fn(),
+  })),
+}));
+*/
+
 import * as admin from 'firebase-admin';
 import {
   generateDailyTasksJob,
   dispatchRemindersJob,
   generateExamPrepTasksJob,
   cleanupExpiredDataJob,
-} from '../src/backgroundJobs';
+} from '../functions/src/backgroundJobs';
 
 describe('Background Jobs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetDocs.mockReset();
+    mockAddDoc.mockReset();
+    mockDeleteDoc.mockReset();
+    mockDeleteFile.mockReset();
+    mockSendMessage.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T08:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('generateDailyTasksJob', () => {
@@ -88,7 +179,8 @@ describe('Background Jobs', () => {
         .mockResolvedValueOnce({ empty: true, docs: [] }) // exams
         .mockResolvedValueOnce({ empty: true, docs: [] }) // events
         .mockResolvedValueOnce({ empty: true, docs: [] }) // mood
-        .mockResolvedValueOnce({ empty: true, docs: [] }); // task logs
+        .mockResolvedValueOnce({ size: 0, empty: true, docs: [] }) // task logs
+        .mockResolvedValue({ empty: true, docs: [] }); // duplicate checks
 
       mockAddDoc.mockResolvedValue({ id: 'task1' });
 
@@ -178,12 +270,7 @@ describe('Background Jobs', () => {
       (admin.messaging as any).mockReturnValue(mockMessaging);
 
       // Mock current time to be 8 AM
-      const originalDate = Date;
-      global.Date = vi.fn(() => ({
-        getHours: () => 8,
-        getDay: () => 1, // Monday
-        toISOString: () => '2026-01-15T08:00:00Z',
-      })) as any;
+      vi.setSystemTime(new Date('2026-01-12T02:30:00Z'));
 
       const result = await dispatchRemindersJob.run({});
 
@@ -201,8 +288,6 @@ describe('Background Jobs', () => {
           child_id: 'child1',
         },
       });
-
-      global.Date = originalDate;
     });
 
     it('should skip reminders not scheduled for current time', async () => {
@@ -220,19 +305,13 @@ describe('Background Jobs', () => {
       mockGetDocs.mockResolvedValueOnce({ size: 1, docs: mockReminders });
 
       // Mock current time to be 8 AM
-      const originalDate = Date;
-      global.Date = vi.fn(() => ({
-        getHours: () => 8, // Different from scheduled time
-        getDay: () => 1,
-      })) as any;
+      vi.setSystemTime(new Date('2026-01-12T02:30:00Z'));
 
       const result = await dispatchRemindersJob.run({});
 
       expect(result.totalReminders).toBe(1);
       expect(result.skipped).toBe(1);
       expect(result.dispatched).toBe(0);
-
-      global.Date = originalDate;
     });
 
     it('should handle missing FCM tokens', async () => {
@@ -259,18 +338,12 @@ describe('Background Jobs', () => {
         .mockResolvedValueOnce({ size: 1, docs: mockReminders })
         .mockResolvedValueOnce(mockProfile);
 
-      const originalDate = Date;
-      global.Date = vi.fn(() => ({
-        getHours: () => 8,
-        getDay: () => 1,
-      })) as any;
+      vi.setSystemTime(new Date('2026-01-12T02:30:00Z'));
 
       const result = await dispatchRemindersJob.run({});
 
       expect(result.totalReminders).toBe(1);
       expect(result.errors).toBe(1);
-
-      global.Date = originalDate;
     });
   });
 
@@ -299,7 +372,8 @@ describe('Background Jobs', () => {
 
       mockGetDocs
         .mockResolvedValueOnce({ size: 1, docs: mockExams }) // exams
-        .mockResolvedValueOnce(mockProfile); // profile
+        .mockResolvedValueOnce(mockProfile) // profile
+        .mockResolvedValue({ empty: true, docs: [] }); // duplicate checks
 
       mockAddDoc.mockResolvedValue({ id: 'task1' });
 
@@ -337,27 +411,42 @@ describe('Background Jobs', () => {
       const mockExpiredTasks = {
         size: 2,
         docs: [
-          { ref: { delete: mockDeleteDoc.mockResolvedValueOnce() } },
-          { ref: { delete: mockDeleteDoc.mockResolvedValueOnce() } },
+          { ref: { delete: mockDeleteDoc } },
+          { ref: { delete: mockDeleteDoc } },
         ],
       };
 
       const mockOldLogs = {
         size: 1,
         docs: [
-          { ref: { delete: mockDeleteDoc.mockResolvedValueOnce() } },
+          { ref: { delete: mockDeleteDoc } },
         ],
       };
 
+      const mockOldProofLogs = {
+        size: 1,
+        docs: [
+          {
+            data: () => ({
+              image_url: 'gs://tiktrack-f112b.appspot.com/proofs/child1/proof1.jpg',
+            }),
+            ref: { delete: mockDeleteDoc },
+          },
+        ],
+      };
+
+      mockDeleteDoc.mockResolvedValue(undefined);
       mockGetDocs
         .mockResolvedValueOnce(mockExpiredTasks) // expired tasks
-        .mockResolvedValueOnce(mockOldLogs); // old logs
+        .mockResolvedValueOnce(mockOldLogs) // old logs
+        .mockResolvedValueOnce(mockOldProofLogs); // old proof logs
 
       const result = await cleanupExpiredDataJob.run({});
 
       expect(result.expiredTasksDeleted).toBe(2);
       expect(result.oldLogsDeleted).toBe(1);
-      expect(mockDeleteDoc).toHaveBeenCalledTimes(3);
+      expect(result.proofLogsDeleted).toBe(1);
+      expect(mockDeleteDoc).toHaveBeenCalledTimes(4);
     });
 
     it('should handle cleanup errors gracefully', async () => {
