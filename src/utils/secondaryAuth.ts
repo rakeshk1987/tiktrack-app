@@ -5,6 +5,10 @@ import { firebaseConfig, isUsingFirebaseEmulators } from "../config/firebase";
 
 let secondaryAuthEmulatorConnected = false;
 let secondaryAuthInstance: Auth | null = null;
+const runtimeHostname =
+  typeof globalThis !== 'undefined' && 'location' in globalThis
+    ? globalThis.location.hostname
+    : '127.0.0.1';
 
 // This creates a secondary Firebase instance specifically for creating child accounts.
 // Without it, calling createUserWithEmailAndPassword on the primary `auth` instance
@@ -28,7 +32,7 @@ export function getSecondaryAuth() {
   const secondaryAuth = secondaryAuthInstance;
 
   if (isUsingFirebaseEmulators && !secondaryAuthEmulatorConnected) {
-    connectAuthEmulator(secondaryAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectAuthEmulator(secondaryAuth, `http://${runtimeHostname}:9099`, { disableWarnings: true });
     secondaryAuthEmulatorConnected = true;
   }
 

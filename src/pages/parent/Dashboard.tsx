@@ -424,7 +424,7 @@ function ParentDashboardContent() {
         return 'Password must be at least 6 characters.';
       case 'auth/network-request-failed':
         return isUsingFirebaseEmulators
-          ? 'Firebase emulators are not reachable. Start the app with npm run local, or run npm run emulators:data before npm run dev.'
+          ? 'Firebase emulators are still starting or temporarily unreachable. Wait a few seconds and retry. If it persists, restart with npm run local.'
           : 'Network error while contacting Firebase. Please try again.';
       case 'auth/operation-not-allowed':
       case 'auth/admin-restricted-operation':
@@ -582,18 +582,37 @@ function ParentDashboardContent() {
     try {
       await updateDoc(doc(db, 'proof_logs', proofId), { approval_status: status });
 
+      // Read proof record to identify child and task
+      const proofSnap = await getDoc(doc(db, 'proof_logs', proofId));
+      const proofData = proofSnap.exists() ? (proofSnap.data() as any) : null;
+      const childId = proofData?.child_id;
+      const taskId = proofData?.task_id;
+      const today = new Date().toISOString().slice(0, 10);
+      const logId = childId && taskId ? `${childId}_${taskId}_${today}` : '';
+
       if (status === 'approved') {
-        // Read proof record to identify child and task
-        const proofSnap = await getDoc(doc(db, 'proof_logs', proofId));
-        const proofData = proofSnap.exists() ? (proofSnap.data() as any) : null;
-        const childId = proofData?.child_id;
-        const taskId = proofData?.task_id;
+        // Mark task completion only at approval time for proof-based tasks.
+        if (childId && taskId) {
+          await setDoc(doc(db, 'task_logs', logId), {
+            id: logId,
+            child_id: childId,
+            task_id: taskId,
+            date: today,
+            status: 'completed'
+          }, { merge: true });
 
-        // Determine star value from cached tasks
-        const task = tasks.find((t: any) => t.id === taskId) as any;
-        const starValue = Number(task?.points ?? task?.star_value ?? 0);
+          try {
+            await updateDoc(doc(db, 'tasks', taskId), {
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            });
+          } catch (taskUpdateErr) {
+            console.warn('Task update after proof approval skipped:', taskUpdateErr);
+          }
 
-        if (childId) {
+          // Determine star value from cached tasks and apply exactly once at approval.
+          const task = tasks.find((t: any) => t.id === taskId) as any;
+          const starValue = Number(task?.points ?? task?.star_value ?? 0);
           try {
             const profileRef = doc(db, 'child_profile', childId);
             const profileSnap = await getDoc(profileRef);
@@ -602,20 +621,31 @@ function ParentDashboardContent() {
               existing || {},
               starValue,
               true,
-              new Date().toISOString().slice(0, 10)
+              today
             );
             await updateDoc(profileRef, {
               total_stars: updatedProfile.total_stars,
               streak_count: updatedProfile.streak_count,
-              consistency_score: updatedProfile.consistency_score
+              consistency_score: updatedProfile.consistency_score,
+              streak_shields: updatedProfile.streak_shields,
+              last_task_date: updatedProfile.last_task_date
             });
           } catch (innerErr) {
             console.error('Failed to update child profile after proof approval:', innerErr);
           }
         }
 
-        setSuccess('Proof approved and removed from the pending queue. Stars applied.');
+        setSuccess('Proof approved. Completion and stars are now reflected for the child.');
       } else {
+        if (childId && taskId) {
+          await setDoc(doc(db, 'task_logs', logId), {
+            id: logId,
+            child_id: childId,
+            task_id: taskId,
+            date: today,
+            status: 'failed'
+          }, { merge: true });
+        }
         setInfo('Proof rejected and removed from the pending queue.');
       }
     } catch (err) {
@@ -1055,7 +1085,7 @@ function ParentDashboardContent() {
     return () => unsub();
   }, [user, familyId]);
 
-  // Subscribe to approved proofs to compute completed tasks and recent stars
+  // Subscribe to completed task logs to compute completed tasks and stars
   useEffect(() => {
     if (!user) {
       setTasksCompletedCount(0);
@@ -1063,24 +1093,23 @@ function ParentDashboardContent() {
       return;
     }
 
-    const pq = query(collection(db, 'proof_logs'), where('approval_status', '==', 'approved'));
+    const logQuery = query(collection(db, 'task_logs'), where('status', '==', 'completed'));
     const unsub = onSnapshot(
-      pq,
+      logQuery,
       (snap) => {
-        const approved = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-        // keep only proofs for our children
-        const visibleApproved = approved.filter((p) => children.some((c) => c.id === p.child_id));
+        const completedLogs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const visibleCompleted = completedLogs.filter((entry) => children.some((c) => c.id === entry.child_id));
 
-        setTasksCompletedCount(visibleApproved.length);
+        setTasksCompletedCount(visibleCompleted.length);
 
         // map task id -> star/points from tasks list
         const taskMap = new Map<string, number>(tasks.map((t: any) => [t.id, Number(t.points ?? t.star_value ?? 0)]));
 
         const starsByChild: Record<string, number> = {};
-        visibleApproved.forEach((p) => {
-          const star = Number(taskMap.get(p.task_id) || 0);
-          if (!p.child_id) return;
-          starsByChild[p.child_id] = (starsByChild[p.child_id] || 0) + star;
+        visibleCompleted.forEach((entry) => {
+          const star = Number(taskMap.get(entry.task_id) || 0);
+          if (!entry.child_id) return;
+          starsByChild[entry.child_id] = (starsByChild[entry.child_id] || 0) + star;
         });
 
         const enriched = childProfiles.map((cp) => {
@@ -1107,21 +1136,21 @@ function ParentDashboardContent() {
           return d.toDateString();
         });
 
-        const approvedForTrend = selectedTrendChild ? visibleApproved.filter((p) => p.child_id === selectedTrendChild) : visibleApproved;
+        const completedForTrend = selectedTrendChild ? visibleCompleted.filter((entry) => entry.child_id === selectedTrendChild) : visibleCompleted;
 
-        approvedForTrend.forEach((p) => {
-          const ts = p.timestamp || p.created_at || p.time || p.date;
+        completedForTrend.forEach((entry) => {
+          const ts = entry.timestamp || entry.created_at || entry.time || entry.date;
           const pd = ts ? new Date(ts) : new Date();
           const key = pd.toDateString();
           const idx = dayKeys.indexOf(key);
-          const star = Number(taskMap.get(p.task_id) || 0);
+          const star = Number(taskMap.get(entry.task_id) || 0);
           if (idx >= 0) days[idx] += star;
         });
 
         setWeeklyStarsTrend(days);
 
       },
-      (err) => console.error('Failed to subscribe to approved proofs for analytics:', err)
+      (err) => console.error('Failed to subscribe to completed task logs for analytics:', err)
     );
 
     return () => unsub();
@@ -1249,7 +1278,7 @@ function ParentDashboardContent() {
           >
             <div className="flex lg:flex-col items-center justify-between gap-3 h-full">
               <div className="flex lg:flex-col items-center gap-3">
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Menu sections will be connected to routes next.')}>
+                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('dashboard')}>
                   <Menu size={20} />
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/25 grid place-items-center">
@@ -1258,13 +1287,13 @@ function ParentDashboardContent() {
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition relative" onClick={() => setActiveTab('communication')}>
                   <Mail size={18} />
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Quick call reminders will be added in reminders phase.')}>
+                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('communication')}>
                   <Phone size={18} />
                 </button>
               </div>
 
               <div className="flex lg:flex-col items-center gap-3">
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setInfo('Chat assistant will be added in automation phase.')}>
+                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('automation')}>
                   <MessageCircle size={18} />
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('settings')}>
@@ -1340,6 +1369,9 @@ function ParentDashboardContent() {
                     key={child.id}
                     childId={child.id}
                     childName={child.name || (child.email || '').replace('@tiktrack.family', '')}
+                    tasks={tasks.filter((task) => task.child_id === child.id)}
+                    challenges={activeChallenges.filter((challenge) => challenge.child_id === child.id)}
+                    streakCurrent={(childProfiles.find((profile) => profile.id === child.id) as ChildProfile | undefined)?.streak_count || 0}
                   />
                 ))}
 

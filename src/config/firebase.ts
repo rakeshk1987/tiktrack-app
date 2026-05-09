@@ -21,6 +21,7 @@ const runtimeHostname =
   typeof globalThis !== 'undefined' && 'location' in globalThis
     ? globalThis.location.hostname.toLowerCase()
     : '';
+const emulatorHost = runtimeHostname || '127.0.0.1';
 
 const isLocalRuntime =
   Boolean(import.meta.env.DEV) ||
@@ -31,8 +32,9 @@ const isLocalRuntime =
 
 const requestedEnv = resolveFirebaseRuntimeEnv(import.meta.env.VITE_APP_ENV);
 export const activeFirebaseEnv: FirebaseRuntimeEnv = requestedEnv;
+const emulatorPreference = (import.meta.env.VITE_USE_FIREBASE_EMULATORS ?? '').toLowerCase();
 export const isUsingFirebaseEmulators =
-  isLocalRuntime && import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+  isLocalRuntime && emulatorPreference !== 'false';
 
 let firebaseConfig: FirebaseClientConfig | null = null;
 let firebaseInitError = '';
@@ -59,9 +61,9 @@ const authInstance = app ? getAuth(app) : null;
 const storageInstance = app ? getStorage(app) : null;
 
 if (isUsingFirebaseEmulators && authInstance && dbInstance && storageInstance) {
-  connectAuthEmulator(authInstance, 'http://127.0.0.1:9099', { disableWarnings: true });
-  connectFirestoreEmulator(dbInstance, '127.0.0.1', 8080);
-  connectStorageEmulator(storageInstance, '127.0.0.1', 9199);
+  connectAuthEmulator(authInstance, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(dbInstance, emulatorHost, 8080);
+  connectStorageEmulator(storageInstance, emulatorHost, 9199);
 }
 
 // Messaging setup (will be fully implemented in a later phase, requiring notification permissions)

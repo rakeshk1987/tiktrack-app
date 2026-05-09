@@ -8,7 +8,6 @@ export default function ChildDiary() {
     diarySaving,
     entries,
     handleDiarySubmit,
-    isDark,
     mutedTextClass,
     panelClass,
     setDiaryDraft,
@@ -24,7 +23,7 @@ export default function ChildDiary() {
           value={diaryDraft}
           onChange={(event) => setDiaryDraft(event.target.value)}
           placeholder="Today I felt proud because..."
-          className={clsx('mt-4 h-40 w-full rounded-[1.4rem] border px-4 py-4 outline-none transition', isDark ? 'border-white/12 bg-white/6 text-white placeholder:text-white/35' : 'border-indigo-200 bg-white text-slate-900 placeholder:text-slate-400')}
+          className="mt-4 h-40 w-full rounded-[1.4rem] border border-white/12 bg-white/[0.05] px-4 py-4 text-white outline-none transition placeholder:text-white/45"
         />
         <div className="mt-4 flex items-center justify-between gap-3">
           <p className={clsx('text-sm', mutedTextClass)}>{diaryDraft.trim().length}/280 thoughts</p>
@@ -38,7 +37,7 @@ export default function ChildDiary() {
         <h3 className="text-2xl font-display font-bold">Recent notes</h3>
         <div className="mt-4 space-y-3">
           {entries.map((entry) => (
-            <div key={entry.id} className={clsx('rounded-[1.3rem] border px-4 py-4', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <div key={entry.id} className="rounded-[1.3rem] border border-white/10 bg-white/[0.04] px-4 py-4">
               <p className={clsx('text-xs font-bold uppercase tracking-[0.18em]', accentCaptionClass)}>{new Date(entry.date).toLocaleDateString()}</p>
               <p className={clsx('mt-2 text-sm leading-6', softTextClass)}>{entry.content}</p>
             </div>

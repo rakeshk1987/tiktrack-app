@@ -1,4 +1,6 @@
 import net from 'node:net';
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 
@@ -6,6 +8,9 @@ const ports = [9099, 8080, 9199];
 const isWindows = process.platform === 'win32';
 const npmCommand = isWindows ? 'npm.cmd' : 'npm';
 const npxCommand = isWindows ? 'npx.cmd' : 'npx';
+const localFirebaseCli = isWindows
+  ? path.join(process.cwd(), 'node_modules', '.bin', 'firebase.cmd')
+  : path.join(process.cwd(), 'node_modules', '.bin', 'firebase');
 
 function canConnect(port) {
   return new Promise((resolve) => {
@@ -27,7 +32,7 @@ async function areEmulatorsReady() {
   return results.every(Boolean);
 }
 
-async function waitForEmulators(timeoutMs = 45000) {
+async function waitForEmulators(timeoutMs = 180000) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -51,6 +56,7 @@ function spawnProcess(command, args, env = process.env) {
 let emulatorProcess = null;
 let devProcess = null;
 let shuttingDown = false;
+let emulatorsWereBootedByThisScript = false;
 
 function shutdown(exitCode = 0) {
   if (shuttingDown) {
@@ -67,17 +73,25 @@ function shutdown(exitCode = 0) {
 process.once('SIGINT', () => shutdown(130));
 process.once('SIGTERM', () => shutdown(143));
 
+let shouldStartVite = true;
+
 if (!(await areEmulatorsReady())) {
   console.log('Starting Firebase emulators...');
-  emulatorProcess = spawnProcess(npxCommand, [
-    'firebase-tools',
+  emulatorsWereBootedByThisScript = true;
+  const firebaseArgs = [
     'emulators:start',
     '--only',
     'auth,firestore,storage',
     '--import',
     '.firebase-data',
     '--export-on-exit'
-  ]);
+  ];
+
+  if (fs.existsSync(localFirebaseCli)) {
+    emulatorProcess = spawnProcess(localFirebaseCli, firebaseArgs);
+  } else {
+    emulatorProcess = spawnProcess(npxCommand, ['firebase-tools', ...firebaseArgs]);
+  }
 
   emulatorProcess.once('exit', (code) => {
     if (shuttingDown) {
@@ -95,14 +109,21 @@ if (!(await areEmulatorsReady())) {
 
   if (!(await waitForEmulators())) {
     console.error('Firebase emulators did not become reachable on 127.0.0.1 ports 9099, 8080, and 9199.');
+    shouldStartVite = false;
     shutdown(1);
   }
 }
 
-console.log('Starting Vite with Firebase emulator mode enabled...');
-devProcess = spawnProcess(npmCommand, ['run', 'dev'], {
-  ...process.env,
-  VITE_USE_FIREBASE_EMULATORS: 'true'
-});
+if (shouldStartVite) {
+  if (emulatorsWereBootedByThisScript) {
+    // Ports can open slightly before all emulator internals are fully ready.
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+  }
+  console.log('Starting Vite with Firebase emulator mode enabled...');
+  devProcess = spawnProcess(npmCommand, ['run', 'dev', '--', '--host', '0.0.0.0'], {
+    ...process.env,
+    VITE_USE_FIREBASE_EMULATORS: 'true'
+  });
 
-devProcess.once('exit', (code) => shutdown(code ?? 0));
+  devProcess.once('exit', (code) => shutdown(code ?? 0));
+}

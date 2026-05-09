@@ -9,8 +9,10 @@ import ParentDashboard from './pages/parent/Dashboard';
 const ChildHome = lazy(() => import('./pages/child/Dashboard'));
 const ChildLayout = lazy(() => import('./pages/child/ChildLayout'));
 const ChildQuests = lazy(() => import('./pages/child/Quests'));
+const ChildPlanner = lazy(() => import('./pages/child/Planner'));
 const ChildDiary = lazy(() => import('./pages/child/Diary'));
 const ChildProfile = lazy(() => import('./pages/child/Profile'));
+const ChildMockups = lazy(() => import('./pages/child/Mockups'));
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
 
@@ -79,8 +81,10 @@ function AppRoutes() {
         >
           <Route index element={<ChildHome />} />
           <Route path="quests" element={<ChildQuests />} />
+          <Route path="planner" element={<ChildPlanner />} />
           <Route path="diary" element={<ChildDiary />} />
           <Route path="profile" element={<ChildProfile />} />
+          <Route path="mockup" element={<ChildMockups />} />
         </Route>
         <Route
           path="/parent"

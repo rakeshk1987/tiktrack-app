@@ -15,6 +15,8 @@ export interface InboxMessage {
   content: string;
   timestamp: string; // ISO String
   is_read: boolean;
+  sender_role?: 'parent' | 'child';
+  sender_id?: string;
 }
 
 export interface ChildProfile {

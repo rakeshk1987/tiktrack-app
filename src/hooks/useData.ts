@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ChildProfile, DiaryEntry, Event, MoodLog, ProofLog, Task, TaskLog, InboxMessage } from '../types/schema';
+import type { ChildProfile, DiaryEntry, Event, MoodLog, ProofLog, Task, TaskLog, InboxMessage, Reminder } from '../types/schema';
 import { getExamPlannerStats, processDailyConsistency, applyTaskCompletionToProfile } from './useCoreLogic';
 import { optimizeImage } from '../utils/image';
 import {
@@ -369,6 +369,19 @@ export function useChildProofs(childId: string) {
 export function useQuestActions(childId: string) {
   const [saving, setSaving] = useState(false);
 
+  const markTaskPendingProof = useCallback(async (task: Task) => {
+    if (!childId) return;
+    const today = getTodayKey();
+    const logId = `${childId}_${task.id}_${today}`;
+    await setDoc(doc(db, 'task_logs', logId), {
+      id: logId,
+      child_id: childId,
+      task_id: task.id,
+      date: today,
+      status: 'pending'
+    }, { merge: true });
+  }, [childId]);
+
   const completeTask = useCallback(async (task: Task) => {
     if (!childId) return;
 
@@ -417,7 +430,7 @@ export function useQuestActions(childId: string) {
     }
   }, [childId]);
 
-  return { completeTask, saving };
+  return { completeTask, markTaskPendingProof, saving };
 }
 
 export function useMessages(userId: string, targetType: 'child' | 'parent') {
@@ -453,13 +466,21 @@ export function useMessages(userId: string, targetType: 'child' | 'parent') {
     return () => unsubscribe();
   }, [userId, targetType]);
 
-  const sendMessage = useCallback(async (childId: string, parentId: string, content: string) => {
+  const sendMessage = useCallback(async (
+    childId: string,
+    parentId: string,
+    content: string,
+    senderRole: 'parent' | 'child' = 'parent',
+    senderId?: string
+  ) => {
     await addDoc(collection(db, 'messages'), {
       child_id: childId,
       parent_id: parentId,
       content,
       timestamp: new Date().toISOString(),
-      is_read: false
+      is_read: false,
+      sender_role: senderRole,
+      sender_id: senderId || (senderRole === 'child' ? childId : parentId)
     });
   }, []);
 
@@ -468,4 +489,42 @@ export function useMessages(userId: string, targetType: 'child' | 'parent') {
   }, []);
 
   return { messages, loading, sendMessage, markAsRead };
+}
+
+export function useChildReminders(childId: string) {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!childId) {
+      setReminders([]);
+      setLoading(false);
+      return;
+    }
+
+    const q = query(collection(db, 'reminders'), where('child_id', '==', childId), limit(50));
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<Reminder, 'id'>) }))
+          .sort((a, b) => {
+            const aTime = a.schedule_time || '';
+            const bTime = b.schedule_time || '';
+            return aTime.localeCompare(bTime);
+          });
+        setReminders(mapped);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn('useChildReminders failed:', error);
+        setReminders([]);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [childId]);
+
+  return { reminders, loading };
 }

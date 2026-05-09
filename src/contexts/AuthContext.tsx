@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { User } from '../types/schema';
 import { auth, db } from '../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { inferRoleFromEmail, isOfflineLikeAuthError } from '../utils/auth';
 
 interface AuthContextType {
@@ -99,6 +99,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } else {
               // Safeguard fallback if document creation lagged.
               setUser(fallbackUser);
+              const isParent = fallbackUser.role === 'parent_admin';
+              await setDoc(doc(db, 'users', firebaseUser.uid), {
+                id: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                role: fallbackUser.role,
+                ...(isParent ? { linked_family_id: firebaseUser.uid } : {}),
+                updated_at: new Date().toISOString()
+              }, { merge: true });
             }
           }
         } catch (error) {

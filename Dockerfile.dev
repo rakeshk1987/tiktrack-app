@@ -1,16 +1,21 @@
-FROM node:18-alpine
+FROM node:18-bullseye
 
 WORKDIR /app
 
+# Firestore emulator requires Java
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first for layer caching
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --include=optional
 
 # Copy all local files into the image
 COPY . .
 
-# Expose the default Vite port
-EXPOSE 5173
+# Expose app and emulator ports
+EXPOSE 5173 4000 8080 9099 9199
 
-# Start Vite explicitly binding to 0.0.0.0
-CMD ["npm", "run", "dev", "--", "--host"]
+# Start Firebase emulators + Vite together
+CMD ["npm", "run", "local"]

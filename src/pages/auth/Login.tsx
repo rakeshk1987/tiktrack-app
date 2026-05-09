@@ -270,9 +270,9 @@ export default function Login() {
               </div>
 
               <div className="flex flex-col justify-end gap-4">
-                <div className="rounded-[1.75rem] bg-slate-950/92 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.28)]">
-                  <p className="text-sm font-bold uppercase tracking-[0.22em] text-white/55">TikTrack promise</p>
-                  <p className="mt-3 text-lg font-semibold leading-7">
+                <div className="rounded-[1.75rem] border border-slate-200/80 bg-white/92 p-5 text-slate-900 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+                  <p className="text-sm font-bold uppercase tracking-[0.22em] text-slate-500">TikTrack promise</p>
+                  <p className="mt-3 text-lg font-semibold leading-7 text-slate-800">
                     One place for secure parent control and joyful child routines.
                   </p>
                 </div>

@@ -72,6 +72,22 @@ npm run emulators:data
 npm run dev
 ```
 
+### Docker (Single Container: UI + Firebase Emulators)
+
+This repo supports running both the Vite UI and Firebase emulators in one Docker container.
+
+```bash
+docker compose up --build
+```
+
+Ports exposed:
+
+- `5173` Vite app
+- `4000` Emulator UI
+- `8080` Firestore emulator
+- `9099` Auth emulator
+- `9199` Storage emulator
+
 Run tests:
 
 ```bash

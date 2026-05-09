@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "emulators": "npx firebase-tools emulators:start --only auth,firestore,storage",
-    "emulators:data": "npx firebase-tools emulators:start --only auth,firestore,storage --import .firebase-data --export-on-exit",
+    "emulators": "npx firebase-tools emulators:start --only auth,firestore,storage --import .firebase-data --export-on-exit",
+    "emulators:clean": "npx firebase-tools emulators:start --only auth,firestore,storage",
+    "emulators:data": "npm run emulators",
     "local": "node scripts/start-local.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -40,6 +41,7 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
     "firebase-admin": "^11.11.1",
+    "firebase-tools": "^13.35.1",
     "firebase-functions": "^4.3.1",
     "globals": "^13.24.0",
     "jsdom": "^23.2.0",
@@ -52,5 +54,8 @@
     "vitest": "^1.2.0",
     "workbox-build": "^7.1.1",
     "workbox-window": "^7.1.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.60.3"
   }
 }

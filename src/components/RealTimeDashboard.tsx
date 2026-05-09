@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useRealTime, useRealTimeNotifications } from '../contexts/RealTimeContext';
+import type { Challenge, Task } from '../types/schema';
 
 interface RealTimeDashboardProps {
   childId: string;
   childName: string;
+  tasks: Task[];
+  challenges: Challenge[];
+  streakCurrent?: number;
 }
 
-const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childName }) => {
-  const {
-    liveTasks,
-    liveChallenges,
-  } = useRealTime();
-
-  const { notifyTaskCompleted, notifyChallengeUpdate } = useRealTimeNotifications();
-
+const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childName, tasks, challenges, streakCurrent = 0 }) => {
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [stats, setStats] = useState({
     tasksCompleted: 0,
@@ -27,7 +23,7 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
     const activities = [];
 
     // Add recent task completions
-    const completedTasks = liveTasks.filter(task =>
+    const completedTasks = tasks.filter(task =>
       task.status === 'completed' &&
       task.completed_at &&
       new Date(task.completed_at) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
@@ -44,7 +40,7 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
     });
 
     // Add recent challenge updates
-    const recentChallenges = liveChallenges.filter(challenge =>
+    const recentChallenges = challenges.filter(challenge =>
       challenge.updated_at &&
       new Date(challenge.updated_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
     );
@@ -62,21 +58,21 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
     // Sort by timestamp (most recent first)
     activities.sort((a, b) => b.timestamp - a.timestamp);
     setRecentActivity(activities.slice(0, 10));
-  }, [liveTasks, liveChallenges]);
+  }, [tasks, challenges]);
 
   // Calculate live stats
   useEffect(() => {
-    const completedTasks = liveTasks.filter(task => task.status === 'completed');
-    const activeChallenges = liveChallenges.filter(challenge => challenge.status === 'active');
+    const completedTasks = tasks.filter(task => task.status === 'completed');
+    const activeChallenges = challenges.filter(challenge => challenge.status === 'active');
     const totalStars = completedTasks.reduce((sum, task) => sum + task.star_value, 0);
 
     setStats({
       tasksCompleted: completedTasks.length,
       challengesActive: activeChallenges.length,
       starsEarned: totalStars,
-      streakCurrent: 5, // This would come from profile data
+      streakCurrent,
     });
-  }, [liveTasks, liveChallenges]);
+  }, [tasks, challenges, streakCurrent]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -200,12 +196,12 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
       {/* Active Tasks Preview */}
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          📋 Active Tasks ({liveTasks.filter(t => t.status === 'pending').length})
+          📋 Active Tasks ({tasks.filter(t => t.status === 'pending' || !t.status).length})
         </h3>
 
         <div className="space-y-2 max-h-48 overflow-y-auto">
-          {liveTasks
-            .filter(task => task.status === 'pending')
+          {tasks
+            .filter(task => task.status === 'pending' || !task.status)
             .slice(0, 5)
             .map((task) => (
               <div
@@ -226,19 +222,14 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => notifyTaskCompleted(task, childName)}
-                  className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition"
-                >
-                  Complete
-                </button>
+                <span className="px-3 py-1 bg-slate-200 text-slate-700 text-xs rounded dark:bg-slate-600 dark:text-slate-100">Live</span>
               </div>
             ))}
         </div>
 
-        {liveTasks.filter(t => t.status === 'pending').length > 5 && (
+        {tasks.filter(t => t.status === 'pending' || !t.status).length > 5 && (
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            +{liveTasks.filter(t => t.status === 'pending').length - 5} more tasks
+            +{tasks.filter(t => t.status === 'pending' || !t.status).length - 5} more tasks
           </p>
         )}
       </div>
@@ -246,11 +237,11 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
       {/* Active Challenges */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          🏆 Active Challenges ({liveChallenges.filter(c => c.status === 'active').length})
+          🏆 Active Challenges ({challenges.filter(c => c.status === 'active').length})
         </h3>
 
         <div className="space-y-2">
-          {liveChallenges
+          {challenges
             .filter(challenge => challenge.status === 'active')
             .slice(0, 3)
             .map((challenge) => (
@@ -262,12 +253,7 @@ const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ childId, childNam
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
                     {challenge.title}
                   </p>
-                  <button
-                    onClick={() => notifyChallengeUpdate(challenge, childName)}
-                    className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition"
-                  >
-                    Update
-                  </button>
+                  <span className="px-3 py-1 bg-slate-200 text-slate-700 text-xs rounded dark:bg-slate-600 dark:text-slate-100">Live</span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                   <span>Parent: {challenge.parent_score}</span>
