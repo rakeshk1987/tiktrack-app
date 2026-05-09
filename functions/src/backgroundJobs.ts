@@ -143,8 +143,7 @@ export const dispatchRemindersJob = functions
 
     try {
       const now = new Date();
-      const currentHour = now.getHours();
-      const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const { hour: currentHour, day: currentDay } = getKarachiHourAndDay(now);
 
       // Primary filter for current schema (`is_enabled`), fallback to legacy (`is_active`).
       let remindersSnapshot = await remindersRef.where('is_enabled', '==', true).get();
@@ -420,6 +419,31 @@ function shouldDispatchReminder(reminder: Reminder, currentHour: number, current
     default:
       return false;
   }
+}
+
+function getKarachiHourAndDay(date: Date): { hour: number; day: number } {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Karachi',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+  const weekdayShort = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun';
+  const dayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  const roundedHour = minute >= 30 ? (hour + 1) % 24 : hour;
+  return { hour: roundedHour, day: dayMap[weekdayShort] ?? 0 };
 }
 
 function extractStoragePathFromProofUrl(imageUrl?: string): string | null {
