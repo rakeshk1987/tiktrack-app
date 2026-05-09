@@ -30,6 +30,9 @@ const isLocalRuntime =
   runtimeHostname === '::1' ||
   runtimeHostname.endsWith('.local');
 
+const allowProdOnLocal =
+  String(import.meta.env.VITE_ALLOW_PROD_ON_LOCAL ?? '').toLowerCase() === 'true';
+
 const requestedEnv = resolveFirebaseRuntimeEnv(import.meta.env.VITE_APP_ENV);
 export const activeFirebaseEnv: FirebaseRuntimeEnv = requestedEnv;
 const emulatorPreference = (import.meta.env.VITE_USE_FIREBASE_EMULATORS ?? '').toLowerCase();
@@ -40,6 +43,12 @@ let firebaseConfig: FirebaseClientConfig | null = null;
 let firebaseInitError = '';
 
 try {
+  if (isLocalRuntime && !isUsingFirebaseEmulators && !allowProdOnLocal) {
+    throw new Error(
+      'Safety stop: localhost is attempting to use production Firebase. Run `npm run local` (recommended), set VITE_USE_FIREBASE_EMULATORS=true, or explicitly opt in with VITE_ALLOW_PROD_ON_LOCAL=true.'
+    );
+  }
+
   const configEnv: FirebaseRuntimeEnv = isUsingFirebaseEmulators ? 'prod' : activeFirebaseEnv;
   firebaseConfig = getFirebaseClientConfig(configEnv, import.meta.env);
 } catch (error) {
