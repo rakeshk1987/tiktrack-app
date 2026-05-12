@@ -21,6 +21,12 @@ interface ScheduledTask extends Task {
   is_generated: boolean;
 }
 
+function stripUndefinedFields<T extends Record<string, unknown>>(input: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined)
+  ) as Partial<T>;
+}
+
 export const useTaskScheduler = (
   childId: string,
   parentId: string,
@@ -100,12 +106,13 @@ export const useTaskScheduler = (
         const existing = await getDocs(q);
 
         if (existing.empty) {
-          const docRef = await addDoc(tasksRef, {
+          const taskPayload = stripUndefinedFields({
             ...generated,
             child_id: childId,
             parent_id: parentId,
             is_generated: true,
           });
+          const docRef = await addDoc(tasksRef, taskPayload);
 
           savedTasks.push({
             id: docRef.id,
@@ -140,12 +147,13 @@ export const useTaskScheduler = (
       const savedTasks: ScheduledTask[] = [];
 
       for (const generated of generatedTasks) {
-        const docRef = await addDoc(tasksRef, {
+        const taskPayload = stripUndefinedFields({
           ...generated,
           child_id: childId,
           parent_id: parentId,
           is_generated: true,
         });
+        const docRef = await addDoc(tasksRef, taskPayload);
 
         savedTasks.push({
           id: docRef.id,

@@ -484,6 +484,18 @@ function ParentDashboardContent() {
     };
 
     try {
+      // Backfill parent profile fields required by Firestore rules in older production accounts.
+      await withOperationTimeout(
+        setDoc(doc(db, 'users', user.id), {
+          id: user.id,
+          email: user.email,
+          role: 'parent_admin',
+          linked_family_id: familyId || user.id,
+          updated_at: new Date().toISOString()
+        }, { merge: true }),
+        'ensure-parent-profile'
+      );
+
       const cleanUser = cUser.trim().toLowerCase().split('@')[0];
       dummyEmail = `${cleanUser}@tiktrack.family`;
       const authResult = await withOperationTimeout(
