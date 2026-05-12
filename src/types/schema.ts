@@ -12,6 +12,7 @@ export interface InboxMessage {
   id: string;
   child_id: string;
   parent_id: string;
+  subject?: string;
   content: string;
   timestamp: string; // ISO String
   is_read: boolean;

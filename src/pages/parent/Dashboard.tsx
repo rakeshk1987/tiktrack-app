@@ -125,6 +125,7 @@ function ParentDashboardContent() {
   >('dashboard');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
+  const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
   const isInboxOpen = activeTab === 'communication';
   const isSettingsOpen = activeTab === 'settings';
@@ -154,7 +155,10 @@ function ParentDashboardContent() {
   ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
-  const { sendMessage } = useMessages(familyId, 'parent');
+  const { messages: inboxMessages, sendMessage } = useMessages(familyId, 'parent');
+  const selectedThread = inboxMessages
+    .filter((m) => !inboxChildId || m.child_id === inboxChildId)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
 
   useEffect(() => {
@@ -2124,15 +2128,16 @@ function ParentDashboardContent() {
 
       {isInboxOpen && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="rounded-3xl w-full max-w-md p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
+          <div className="rounded-3xl w-full max-w-3xl p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
             <button onClick={() => setIsInboxOpen(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
-            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Send Message</h2>
+            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Family Chat</h2>
 
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!inboxChildId || !inboxMessage.trim() || !user) return;
-              await sendMessage(inboxChildId, familyId, inboxMessage.trim());
+              await sendMessage(inboxChildId, familyId, inboxMessage.trim(), 'parent', familyId, inboxSubject);
               setInboxMessage('');
+              setInboxSubject('');
               setSuccess('Message sent successfully!');
               setTimeout(() => setSuccess(''), 3000);
             }} className="space-y-4">
@@ -2140,16 +2145,48 @@ function ParentDashboardContent() {
                 <option value="">Select Child...</option>
                 {children.map(c => <option key={c.id} value={c.id}>{c.name || c.email}</option>)}
               </select>
+              <input
+                value={inboxSubject}
+                onChange={(e) => setInboxSubject(e.target.value)}
+                placeholder="Subject (optional)"
+                className="w-full rounded-xl py-3 px-4 border focus:outline-none"
+                style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+              />
+              <div className="rounded-xl border p-3 h-64 overflow-y-auto" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                {inboxChildId && selectedThread.length === 0 ? (
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No messages yet with this child.</p>
+                ) : null}
+                {!inboxChildId ? (
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Select a child to view conversation.</p>
+                ) : null}
+                {selectedThread.map((msg) => {
+                  const isParentSender = (msg.sender_role || 'parent') === 'parent';
+                  return (
+                    <div key={msg.id} className={`mb-2 flex ${isParentSender ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 ${isParentSender ? 'bg-sky-500 text-white' : ''}`}
+                        style={isParentSender ? {} : { background: 'var(--surface)', color: 'var(--text-main)', border: '1px solid var(--border-main)' }}
+                      >
+                        {msg.subject ? <p className="text-[11px] font-bold uppercase tracking-wide opacity-80 mb-1">{msg.subject}</p> : null}
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className={`text-[10px] mt-1 ${isParentSender ? 'text-white/80' : ''}`} style={isParentSender ? {} : { color: 'var(--text-muted)' }}>
+                          {new Date(msg.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               <textarea
                 required
                 value={inboxMessage}
                 onChange={(e) => setInboxMessage(e.target.value)}
-                placeholder="Write an encouraging message..."
+                placeholder="Type a message..."
                 className="w-full rounded-xl py-3 px-4 border focus:outline-none min-h-[100px]"
                 style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
               />
               <button type="submit" className="w-full py-3 rounded-xl text-sm font-bold text-white bg-sky-500 hover:bg-sky-600 transition">
-                Send Message
+                Send
               </button>
             </form>
           </div>

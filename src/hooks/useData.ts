@@ -471,9 +471,10 @@ export function useMessages(userId: string, targetType: 'child' | 'parent') {
     parentId: string,
     content: string,
     senderRole: 'parent' | 'child' = 'parent',
-    senderId?: string
+    senderId?: string,
+    subject?: string
   ) => {
-    await addDoc(collection(db, 'messages'), {
+    const payload: Record<string, unknown> = {
       child_id: childId,
       parent_id: parentId,
       content,
@@ -481,7 +482,12 @@ export function useMessages(userId: string, targetType: 'child' | 'parent') {
       is_read: false,
       sender_role: senderRole,
       sender_id: senderId || (senderRole === 'child' ? childId : parentId)
-    });
+    };
+    if (subject?.trim()) {
+      payload.subject = subject.trim();
+    }
+
+    await addDoc(collection(db, 'messages'), payload);
   }, []);
 
   const markAsRead = useCallback(async (messageId: string) => {

@@ -90,6 +90,7 @@ export default function InboxPanel({ childId, parentId, isDark, onClose }: Props
                       {!msg.is_read ? <span className="h-2 w-2 rounded-full bg-rose-500" /> : null}
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm font-semibold">{msg.content}</p>
+                    {msg.subject ? <p className="mt-1 text-[10px] font-bold uppercase tracking-wide opacity-70">Subject: {msg.subject}</p> : null}
                     <p className="mt-2 text-[10px] font-bold uppercase tracking-wider opacity-50">
                       {new Date(msg.timestamp).toLocaleString()}
                     </p>
@@ -113,6 +114,11 @@ export default function InboxPanel({ childId, parentId, isDark, onClose }: Props
                   ) : null}
                 </div>
                 <div className={clsx('mt-3 flex-1 overflow-y-auto rounded-xl border p-4 text-sm leading-7 whitespace-pre-wrap', isDark ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-slate-50')}>
+                  {activeMessage.subject ? (
+                    <p className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] opacity-70">
+                      Subject: {activeMessage.subject}
+                    </p>
+                  ) : null}
                   {activeMessage.content}
                 </div>
                 <p className="mt-2 text-[10px] font-bold uppercase tracking-wider opacity-50">
