@@ -35,7 +35,8 @@ service cloud.firestore {
 
     match /child_profile/{childId} {
       allow read: if isSelf(childId) || isParentOf(childId) || isParent();
-      allow create, update: if isParentOf(childId) || isParent();
+      allow create: if isParentOf(childId) || isParent();
+      allow update: if isParentOf(childId) || isParent() || isSelf(childId);
       allow delete: if isParent();
     }
 
@@ -92,7 +93,23 @@ service cloud.firestore {
 
     match /growth_logs/{growthId} {
       allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
-      allow create, update, delete: if isParent();
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /special_dates/{specialDateId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+    }
+
+    match /money_pot_entries/{entryId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
 
     match /events/{eventId} {

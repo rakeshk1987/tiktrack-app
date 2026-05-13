@@ -5,13 +5,17 @@ import {
   Flame,
   Home,
   CalendarDays,
+  Gift,
   MessageSquare,
   Moon,
   Orbit,
+  PiggyBank,
+  Ruler,
   ScrollText,
   Shield,
   Sparkles,
   Star,
+  Cake,
   Sun,
   Upload,
   UserRound,
@@ -21,7 +25,8 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { signOut } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import { auth, db } from '../../config/firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import {
   useDiaryEntries,
   useChildMood,
@@ -38,7 +43,7 @@ import type { MoodLog, Task } from '../../types/schema';
 import InboxPanel from '../../components/child/InboxPanel';
 import { useChallenges } from '../../hooks/useChallenges';
 
-export type ChildTab = 'home' | 'quests' | 'planner' | 'diary' | 'profile';
+export type ChildTab = 'home' | 'quests' | 'planner' | 'diary' | 'special-dates' | 'growth' | 'rewards' | 'money-pot' | 'profile';
 
 export const moodOptions: Array<{
   icon: string;
@@ -165,6 +170,7 @@ export default function ChildLayout() {
   const [diaryDraft, setDiaryDraft] = useState('');
   const [pendingProofTask, setPendingProofTask] = useState<Task | null>(null);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
+  const [todaySpecialTheme, setTodaySpecialTheme] = useState<'birthday' | 'festival' | 'celebration' | 'custom' | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const examStats = getExamPlannerStats(events, tasks);
@@ -175,6 +181,14 @@ export default function ChildLayout() {
       ? 'planner'
     : path.endsWith('/diary')
       ? 'diary'
+      : path.endsWith('/special-dates')
+        ? 'special-dates'
+      : path.endsWith('/growth')
+        ? 'growth'
+      : path.endsWith('/rewards')
+        ? 'rewards'
+      : path.endsWith('/money-pot')
+        ? 'money-pot'
       : path.endsWith('/profile')
         ? 'profile'
         : 'home';
@@ -187,7 +201,7 @@ export default function ChildLayout() {
 
     try {
       const saved = localStorage.getItem(tabStorageKey);
-      if (saved && (['home', 'quests', 'planner', 'diary', 'profile'] as string[]).includes(saved)) {
+      if (saved && (['home', 'quests', 'planner', 'diary', 'special-dates', 'growth', 'rewards', 'money-pot', 'profile'] as string[]).includes(saved)) {
         void navigate(saved === 'home' ? '/child' : `/child/${saved}`);
       }
     } catch {}
@@ -222,6 +236,31 @@ export default function ChildLayout() {
     return () => clearInterval(handle);
   }, [childId, diaryDraft]);
 
+  useEffect(() => {
+    if (!childId || !profile) return;
+    const todayMd = new Date().toISOString().slice(5, 10);
+    const birthdayMd = (profile.date_of_birth || '').slice(5, 10);
+
+    const q = query(collection(db, 'special_dates'), where('child_id', '==', childId));
+    const unsub = onSnapshot(q, (snap) => {
+      const todaySpecial = snap.docs
+        .map((d) => d.data() as { date?: string; theme?: 'birthday' | 'festival' | 'celebration' | 'custom' })
+        .find((item) => (item.date || '').slice(5, 10) === todayMd);
+
+      if (birthdayMd === todayMd) {
+        setTodaySpecialTheme('birthday');
+      } else if (todaySpecial?.theme) {
+        setTodaySpecialTheme(todaySpecial.theme);
+      } else if (todaySpecial) {
+        setTodaySpecialTheme('custom');
+      } else {
+        setTodaySpecialTheme(null);
+      }
+    });
+
+    return () => unsub();
+  }, [childId, profile]);
+
   if (profileLoading || tasksLoading || eventsLoading) {
     return <LoadingScreen />;
   }
@@ -231,7 +270,7 @@ export default function ChildLayout() {
   }
 
   const isDark = theme === 'dark';
-  const childName = profile.name || 'Explorer';
+  const childName = profile.pet_name || profile.name || 'Explorer';
   
   const isMoodNegative = moodLog?.mood === 'sad' || moodLog?.mood === 'angry';
   const isMoodPositive = moodLog?.mood === 'happy' || moodLog?.mood === 'excited';
@@ -300,23 +339,95 @@ export default function ChildLayout() {
     : `Good evening, ${childName}!`;
   const missedTaskAlert = timeOfDay === 'evening' && remainingTasks > 0;
 
-  const shellClass = 'bg-[#090d1a] text-white';
-  const backdropBase = 'bg-[radial-gradient(circle_at_top,#1a2242_0%,#0d1328_48%,#080c18_100%)]';
-  const backdropGlow = 'bg-[radial-gradient(circle_at_18%_14%,rgba(59,130,246,0.12),transparent_26%),radial-gradient(circle_at_78%_20%,rgba(139,92,246,0.12),transparent_24%)]';
-  const heroClass = 'border-white/10 bg-[linear-gradient(160deg,rgba(21,28,52,0.96),rgba(20,25,46,0.95))] text-white';
-  const subPanelClass = 'border-white/10 bg-[#151b33]/88 text-white';
-  const buttonClass = 'border-white/15 bg-white/5 text-white hover:bg-white/10';
-  const navShellClass = 'border-white/10 bg-[linear-gradient(180deg,rgba(14,19,38,0.96),rgba(12,16,31,0.96))]';
-  const panelClass = 'border-white/10 bg-[linear-gradient(180deg,rgba(18,24,44,0.97),rgba(14,18,35,0.97))] text-white';
+  const themeSkins: Record<'birthday' | 'festival' | 'celebration' | 'custom' | 'default', {
+    shellClass: string;
+    backdropBase: string;
+    backdropGlow: string;
+    heroClass: string;
+    subPanelClass: string;
+    buttonClass: string;
+    navShellClass: string;
+    panelClass: string;
+    accentCaptionClass: string;
+  }> = {
+    default: {
+      shellClass: 'bg-[#090d1a] text-white',
+      backdropBase: 'bg-[radial-gradient(circle_at_top,#1a2242_0%,#0d1328_48%,#080c18_100%)]',
+      backdropGlow: 'bg-[radial-gradient(circle_at_18%_14%,rgba(59,130,246,0.12),transparent_26%),radial-gradient(circle_at_78%_20%,rgba(139,92,246,0.12),transparent_24%)]',
+      heroClass: 'border-white/10 bg-[linear-gradient(160deg,rgba(21,28,52,0.96),rgba(20,25,46,0.95))] text-white',
+      subPanelClass: 'border-white/10 bg-[#151b33]/88 text-white',
+      buttonClass: 'border-white/15 bg-white/5 text-white hover:bg-white/10',
+      navShellClass: 'border-white/10 bg-[linear-gradient(180deg,rgba(14,19,38,0.96),rgba(12,16,31,0.96))]',
+      panelClass: 'border-white/10 bg-[linear-gradient(180deg,rgba(18,24,44,0.97),rgba(14,18,35,0.97))] text-white',
+      accentCaptionClass: 'text-sky-300/90'
+    },
+    birthday: {
+      shellClass: 'bg-[#120917] text-white',
+      backdropBase: 'bg-[radial-gradient(circle_at_top,#4a1d5f_0%,#1f1030_46%,#10081d_100%)]',
+      backdropGlow: 'bg-[radial-gradient(circle_at_14%_16%,rgba(244,114,182,0.2),transparent_30%),radial-gradient(circle_at_84%_22%,rgba(251,191,36,0.18),transparent_30%)]',
+      heroClass: 'border-pink-300/20 bg-[linear-gradient(160deg,rgba(94,28,84,0.82),rgba(50,20,62,0.86))] text-white',
+      subPanelClass: 'border-pink-300/20 bg-[#341539]/85 text-white',
+      buttonClass: 'border-pink-300/25 bg-white/10 text-white hover:bg-white/16',
+      navShellClass: 'border-pink-300/20 bg-[linear-gradient(180deg,rgba(46,20,57,0.94),rgba(29,13,39,0.95))]',
+      panelClass: 'border-pink-300/20 bg-[linear-gradient(180deg,rgba(57,26,68,0.9),rgba(34,16,45,0.93))] text-white',
+      accentCaptionClass: 'text-amber-200'
+    },
+    festival: {
+      shellClass: 'bg-[#15120a] text-white',
+      backdropBase: 'bg-[radial-gradient(circle_at_top,#5b3a08_0%,#2a1906_52%,#120b05_100%)]',
+      backdropGlow: 'bg-[radial-gradient(circle_at_16%_18%,rgba(251,191,36,0.22),transparent_28%),radial-gradient(circle_at_82%_20%,rgba(249,115,22,0.18),transparent_28%)]',
+      heroClass: 'border-amber-300/25 bg-[linear-gradient(160deg,rgba(94,58,12,0.85),rgba(62,36,10,0.88))] text-white',
+      subPanelClass: 'border-amber-300/20 bg-[#3b270d]/86 text-white',
+      buttonClass: 'border-amber-300/25 bg-white/10 text-white hover:bg-white/16',
+      navShellClass: 'border-amber-300/20 bg-[linear-gradient(180deg,rgba(56,35,11,0.94),rgba(34,22,8,0.95))]',
+      panelClass: 'border-amber-300/20 bg-[linear-gradient(180deg,rgba(68,43,14,0.9),rgba(43,27,9,0.92))] text-white',
+      accentCaptionClass: 'text-amber-200'
+    },
+    celebration: {
+      shellClass: 'bg-[#07131a] text-white',
+      backdropBase: 'bg-[radial-gradient(circle_at_top,#0c3748_0%,#0a1e2b_50%,#07131a_100%)]',
+      backdropGlow: 'bg-[radial-gradient(circle_at_16%_14%,rgba(45,212,191,0.2),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(56,189,248,0.2),transparent_28%)]',
+      heroClass: 'border-cyan-300/20 bg-[linear-gradient(160deg,rgba(14,70,88,0.84),rgba(10,49,64,0.88))] text-white',
+      subPanelClass: 'border-cyan-300/20 bg-[#103748]/86 text-white',
+      buttonClass: 'border-cyan-300/25 bg-white/10 text-white hover:bg-white/16',
+      navShellClass: 'border-cyan-300/20 bg-[linear-gradient(180deg,rgba(9,53,69,0.94),rgba(7,37,50,0.95))]',
+      panelClass: 'border-cyan-300/20 bg-[linear-gradient(180deg,rgba(13,62,79,0.9),rgba(9,41,54,0.93))] text-white',
+      accentCaptionClass: 'text-cyan-200'
+    },
+    custom: {
+      shellClass: 'bg-[#100c1f] text-white',
+      backdropBase: 'bg-[radial-gradient(circle_at_top,#2e1b52_0%,#181031_50%,#100c1f_100%)]',
+      backdropGlow: 'bg-[radial-gradient(circle_at_16%_14%,rgba(99,102,241,0.2),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(168,85,247,0.18),transparent_28%)]',
+      heroClass: 'border-violet-300/20 bg-[linear-gradient(160deg,rgba(45,30,88,0.85),rgba(28,20,62,0.89))] text-white',
+      subPanelClass: 'border-violet-300/20 bg-[#241b46]/87 text-white',
+      buttonClass: 'border-violet-300/25 bg-white/10 text-white hover:bg-white/16',
+      navShellClass: 'border-violet-300/20 bg-[linear-gradient(180deg,rgba(33,24,67,0.95),rgba(22,17,45,0.95))]',
+      panelClass: 'border-violet-300/20 bg-[linear-gradient(180deg,rgba(38,28,80,0.9),rgba(26,19,54,0.93))] text-white',
+      accentCaptionClass: 'text-violet-200'
+    }
+  };
+  const activeSkin = themeSkins[todaySpecialTheme || 'default'];
+  const shellClass = activeSkin.shellClass;
+  const backdropBase = activeSkin.backdropBase;
+  const backdropGlow = activeSkin.backdropGlow;
+  const heroClass = activeSkin.heroClass;
+  const subPanelClass = activeSkin.subPanelClass;
+  const buttonClass = activeSkin.buttonClass;
+  const navShellClass = activeSkin.navShellClass;
+  const panelClass = activeSkin.panelClass;
   const softTextClass = 'text-white/88';
   const mutedTextClass = 'text-white/72';
   const lowContrastTextClass = 'text-white/55';
-  const accentCaptionClass = 'text-sky-300/90';
+  const accentCaptionClass = activeSkin.accentCaptionClass;
   const childTabs = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'quests', label: 'Quests', icon: MessageSquare },
     { id: 'planner', label: 'Planner', icon: CalendarDays },
     { id: 'diary', label: 'Diary', icon: ScrollText },
+    { id: 'special-dates', label: 'Dates', icon: Cake },
+    { id: 'growth', label: 'Growth', icon: Ruler },
+    { id: 'rewards', label: 'Rewards', icon: Gift },
+    { id: 'money-pot', label: 'Money Pot', icon: PiggyBank },
     { id: 'profile', label: 'Profile', icon: Orbit }
   ] as const;
 
@@ -684,18 +795,18 @@ export default function ChildLayout() {
         <Outlet context={contextValue} />
 
         <div className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-lg md:hidden">
-          <div className={clsx('grid grid-cols-6 rounded-[1.6rem] border px-2 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl', navShellClass)}>
+          <div className={clsx('flex gap-1 overflow-x-auto rounded-[1.6rem] border px-2 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl', navShellClass)}>
             {childTabs.map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', active ? (isDark ? 'bg-white/10 text-cyan-300' : 'bg-white text-cyan-600') : lowContrastTextClass)}>
+                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('min-w-[72px] shrink-0 flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', active ? (isDark ? 'bg-white/10 text-cyan-300' : 'bg-white text-cyan-600') : lowContrastTextClass)}>
                   <Icon size={20} />
                   <span className="text-[11px] font-black">{tab.label}</span>
                 </button>
               );
             })}
-            <button onClick={() => setIsInboxOpen(true)} className={clsx('relative flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', lowContrastTextClass)}>
+            <button onClick={() => setIsInboxOpen(true)} className={clsx('relative min-w-[72px] shrink-0 flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', lowContrastTextClass)}>
               {messages.filter(m => !m.is_read).length > 0 && (
                 <span className="absolute right-3 top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
               )}

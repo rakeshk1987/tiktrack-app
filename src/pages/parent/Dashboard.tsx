@@ -384,6 +384,31 @@ function ParentDashboardContent() {
     }
   };
 
+  const handleParentResetChildPassword = async (child: ChildAccount) => {
+    try {
+      await updateDoc(doc(db, 'users', child.id), {
+        password_reset_requested_by_parent_at: new Date().toISOString(),
+        password_reset_status: 'requested'
+      });
+
+      await addDoc(collection(db, 'messages'), {
+        child_id: child.id,
+        parent_id: familyId,
+        subject: 'Password reset',
+        content: 'Your parent initiated a password reset request. Please use the Profile page to update your password after re-login.',
+        sender_role: 'parent',
+        sender_id: familyId,
+        is_read: false,
+        timestamp: new Date().toISOString()
+      });
+
+      setSuccess(`Password reset request sent for ${child.name || child.email || 'child'}.`);
+    } catch (err) {
+      console.error('Failed to create child password reset request:', err);
+      setError('Could not trigger password reset request.');
+    }
+  };
+
   useEffect(() => {
     if (!user) {
       setExams([]);
@@ -2332,7 +2357,16 @@ function ParentDashboardContent() {
                                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
                                     {meta ? <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★</p> : null}
                                   </div>
-                                  <Circle size={14} className="text-emerald-500 fill-current" />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleParentResetChildPassword(child)}
+                                      className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white"
+                                    >
+                                      Reset Password
+                                    </button>
+                                    <Circle size={14} className="text-emerald-500 fill-current" />
+                                  </div>
                                 </div>
                               );
                             })}

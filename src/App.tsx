@@ -12,6 +12,10 @@ const ChildQuests = lazy(() => import('./pages/child/Quests'));
 const ChildPlanner = lazy(() => import('./pages/child/Planner'));
 const ChildDiary = lazy(() => import('./pages/child/Diary'));
 const ChildProfile = lazy(() => import('./pages/child/Profile'));
+const ChildSpecialDates = lazy(() => import('./pages/child/SpecialDates'));
+const ChildGrowth = lazy(() => import('./pages/child/Growth'));
+const ChildRewards = lazy(() => import('./pages/child/Rewards'));
+const ChildMoneyPot = lazy(() => import('./pages/child/MoneyPot'));
 const ChildMockups = lazy(() => import('./pages/child/Mockups'));
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
@@ -84,6 +88,10 @@ function AppRoutes() {
           <Route path="planner" element={<ChildPlanner />} />
           <Route path="diary" element={<ChildDiary />} />
           <Route path="profile" element={<ChildProfile />} />
+          <Route path="special-dates" element={<ChildSpecialDates />} />
+          <Route path="growth" element={<ChildGrowth />} />
+          <Route path="rewards" element={<ChildRewards />} />
+          <Route path="money-pot" element={<ChildMoneyPot />} />
           <Route path="mockup" element={<ChildMockups />} />
         </Route>
         <Route

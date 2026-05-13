@@ -23,6 +23,7 @@ export interface InboxMessage {
 export interface ChildProfile {
   id: string;
   name: string;
+  pet_name?: string;
   date_of_birth: string; // ISO String
   height_cm: number;
   weight_kg: number;
@@ -36,6 +37,9 @@ export interface ChildProfile {
   user_id: string;
   parent_id?: string;
   family_id?: string;
+  money_weekly_goal?: number;
+  money_wish_title?: string;
+  money_wish_target?: number;
 }
 
 export interface Task {
@@ -229,5 +233,26 @@ export interface Achievement {
   description?: string;
   date: string; // YYYY-MM-DD
   category?: 'academic' | 'habit' | 'sports' | 'creative' | 'other';
+  created_at?: string;
+}
+
+export interface SpecialDate {
+  id: string;
+  child_id: string;
+  parent_id?: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  theme?: 'birthday' | 'celebration' | 'festival' | 'custom';
+  created_at?: string;
+}
+
+export interface MoneyPotEntry {
+  id: string;
+  child_id: string;
+  parent_id?: string;
+  date: string; // YYYY-MM-DD
+  amount: number; // positive for received, negative for spent
+  type: 'receive' | 'spend';
+  note?: string;
   created_at?: string;
 }
