@@ -563,6 +563,7 @@ export default function ChildLayout() {
           </div>
         </div>
 
+        {activeTab === 'home' && (
         <div className={clsx('rounded-[1.75rem] border p-4 shadow-[0_22px_70px_rgba(6,8,30,0.32)] backdrop-blur-xl sm:p-5 lg:p-6', heroClass)}>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
@@ -676,6 +677,7 @@ export default function ChildLayout() {
             </div>
           </div>
         </div>
+        )}
 
         {notice && <div className={clsx('mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-[0_10px_25px_rgba(14,165,233,0.12)]', isDark ? 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-700')}>{notice}</div>}
 
