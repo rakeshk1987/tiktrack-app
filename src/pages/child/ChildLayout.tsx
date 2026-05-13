@@ -78,6 +78,7 @@ export interface ChildLayoutContextValue {
   currentMood: (typeof moodOptions)[number] | null;
   entries: ReturnType<typeof useDiaryEntries>['entries'];
   handleDiarySubmit: () => Promise<void>;
+  handleDiarySubmitForDate: (dateKey: string, content: string) => Promise<void>;
   handleMoodSelect: (value: MoodLog['mood']) => Promise<void>;
   handleQuestComplete: (task: Task) => Promise<void>;
   isDark: boolean;
@@ -370,6 +371,16 @@ export default function ChildLayout() {
     }
   };
 
+  const handleDiarySubmitForDate = async (dateKey: string, content: string) => {
+    try {
+      await addEntry(content, dateKey);
+      setNotice(`Diary saved for ${new Date(dateKey).toLocaleDateString()}.`);
+    } catch (error) {
+      console.error('Diary save failed:', error);
+      setNotice('Diary note could not be saved right now.');
+    }
+  };
+
   const handleQuestComplete = async (task: Task) => {
     try {
       await completeTask(task);
@@ -476,6 +487,7 @@ export default function ChildLayout() {
     diarySaving,
     entries,
     handleDiarySubmit,
+    handleDiarySubmitForDate,
     handleMoodSelect,
     handleQuestComplete,
     isDark,

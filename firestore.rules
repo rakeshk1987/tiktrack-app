@@ -41,7 +41,14 @@ service cloud.firestore {
 
     match /tasks/{taskId} {
       allow read: if signedIn();
-      allow create, update, delete: if isParent();
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (
+        isChild() &&
+        resource.data.child_id == request.auth.uid &&
+        resource.data.approval_status != 'approved' &&
+        request.resource.data.approval_status == resource.data.approval_status
+      );
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
 
     match /task_logs/{logId} {
@@ -90,7 +97,26 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow read: if signedIn();
-      allow create, update, delete: if isParent();
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (
+        isChild() &&
+        resource.data.child_id == request.auth.uid &&
+        resource.data.approval_status != 'approved' &&
+        request.resource.data.approval_status == resource.data.approval_status
+      );
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+    }
+
+    match /achievements/{achievementId} {
+      allow read: if isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isChild() && request.resource.data.child_id == request.auth.uid;
+      allow update: if isParent() || (
+        isChild() &&
+        resource.data.child_id == request.auth.uid &&
+        resource.data.approval_status != 'approved' &&
+        request.resource.data.approval_status == resource.data.approval_status
+      );
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
 
     match /challenges/{challengeId} {

@@ -296,19 +296,22 @@ export function useDiaryEntries(childId: string) {
     return () => unsubscribe();
   }, [childId]);
 
-  const addEntry = useCallback(async (content: string) => {
+  const addEntry = useCallback(async (content: string, dateKey?: string) => {
     if (!childId) return;
     const trimmed = content.trim();
     if (!trimmed) return;
+    const targetDate = dateKey || getTodayKey();
+    const entryId = `${childId}_${targetDate}`;
 
     setSaving(true);
     try {
-      await addDoc(collection(db, 'diary_entries'), {
+      await setDoc(doc(db, 'diary_entries', entryId), {
+        id: entryId,
         child_id: childId,
-        date: new Date().toISOString(),
+        date: targetDate,
         content: trimmed,
-        created_at: serverTimestamp()
-      });
+        updated_at: serverTimestamp()
+      }, { merge: true });
     } finally {
       setSaving(false);
     }
@@ -396,6 +399,9 @@ export function useQuestActions(childId: string) {
 
   const completeTask = useCallback(async (task: Task) => {
     if (!childId) return;
+    if ((task as any).created_by === 'child' && (task as any).approval_status !== 'approved') {
+      throw new Error('This self-created task needs parent approval before completion rewards can be counted.');
+    }
 
     const today = getTodayKey();
     const logId = `${childId}_${task.id}_${today}`;

@@ -220,3 +220,14 @@ export interface Redemption {
   completed_at?: string;
   notes?: string;
 }
+
+export interface Achievement {
+  id: string;
+  child_id: string;
+  parent_id?: string;
+  title: string;
+  description?: string;
+  date: string; // YYYY-MM-DD
+  category?: 'academic' | 'habit' | 'sports' | 'creative' | 'other';
+  created_at?: string;
+}

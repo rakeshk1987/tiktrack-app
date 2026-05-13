@@ -60,6 +60,17 @@ interface PendingProof {
   timestamp?: string;
 }
 
+interface ChildSubmission {
+  id: string;
+  child_id?: string;
+  title?: string;
+  type?: string;
+  date?: string;
+  description?: string;
+  approval_status?: 'pending' | 'approved' | 'rejected';
+  created_at?: string;
+}
+
 function ParentDashboardContent() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -83,6 +94,9 @@ function ParentDashboardContent() {
   const [children, setChildren] = useState<ChildAccount[]>([]);
   const [childrenLoading, setChildrenLoading] = useState(true);
   const [pendingProofs, setPendingProofs] = useState<PendingProof[]>([]);
+  const [pendingChildTasks, setPendingChildTasks] = useState<ChildSubmission[]>([]);
+  const [pendingChildEvents, setPendingChildEvents] = useState<ChildSubmission[]>([]);
+  const [pendingAchievements, setPendingAchievements] = useState<ChildSubmission[]>([]);
   const [tasks, setTasks] = useState<Array<any>>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tTitle, setTTitle] = useState('');
@@ -404,6 +418,57 @@ function ParentDashboardContent() {
         console.error('Failed to fetch pending proofs:', err);
       }
     );
+
+    return () => unsubscribe();
+  }, [user, familyId]);
+
+  useEffect(() => {
+    if (!user) {
+      setPendingChildTasks([]);
+      return;
+    }
+
+    const tasksQuery = query(collection(db, 'tasks'), where('parent_id', '==', familyId), limit(100));
+    const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+      const mapped = snapshot.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((item) => item.created_by === 'child' && item.approval_status === 'pending');
+      setPendingChildTasks(mapped);
+    });
+
+    return () => unsubscribe();
+  }, [user, familyId]);
+
+  useEffect(() => {
+    if (!user) {
+      setPendingChildEvents([]);
+      return;
+    }
+
+    const eventsQuery = query(collection(db, 'events'), where('parent_id', '==', familyId), limit(100));
+    const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
+      const mapped = snapshot.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((item) => item.created_by === 'child' && item.approval_status === 'pending');
+      setPendingChildEvents(mapped);
+    });
+
+    return () => unsubscribe();
+  }, [user, familyId]);
+
+  useEffect(() => {
+    if (!user) {
+      setPendingAchievements([]);
+      return;
+    }
+
+    const achievementsQuery = query(collection(db, 'achievements'), where('parent_id', '==', familyId), limit(100));
+    const unsubscribe = onSnapshot(achievementsQuery, (snapshot) => {
+      const mapped = snapshot.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((item) => item.approval_status === 'pending');
+      setPendingAchievements(mapped);
+    });
 
     return () => unsubscribe();
   }, [user, familyId]);
@@ -1246,6 +1311,24 @@ function ParentDashboardContent() {
     setSuccess('Routine updated.');
   };
 
+  const handleChildSubmissionDecision = async (
+    collectionName: 'tasks' | 'events' | 'achievements',
+    submissionId: string,
+    status: 'approved' | 'rejected'
+  ) => {
+    try {
+      await updateDoc(doc(db, collectionName, submissionId), {
+        approval_status: status,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id || familyId
+      });
+      setSuccess(`Submission ${status}.`);
+    } catch (err) {
+      console.error('Failed to update child submission:', err);
+      setError('Could not update child submission.');
+    }
+  };
+
   const createReminderForSelectedChild = async (reminder: Omit<Reminder, 'id' | 'created_at' | 'updated_at' | 'next_send_at'>) => {
     await createReminder({
       ...reminder,
@@ -1781,6 +1864,61 @@ function ParentDashboardContent() {
                       No proof submissions yet. Add a child account first, then submitted task proofs will show up here.
                     </div>
                   )}
+
+                  <div className="mt-5 rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-base font-bold" style={{ color: 'var(--text-main)' }}>Child Submission Approvals</h3>
+                      <span className="px-2 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">
+                        {pendingChildTasks.length + pendingChildEvents.length + pendingAchievements.length} pending
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {pendingChildTasks.map((item) => (
+                        <div key={`task-${item.id}`} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                          <div>
+                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Task: {item.title}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === item.child_id)?.name || 'Child'} • {item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleChildSubmissionDecision('tasks', item.id, 'approved')}>Approve</button>
+                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleChildSubmissionDecision('tasks', item.id, 'rejected')}>Reject</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {pendingChildEvents.map((item) => (
+                        <div key={`event-${item.id}`} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                          <div>
+                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Timetable: {item.title}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{item.type || 'event'} • {children.find((child) => child.id === item.child_id)?.name || 'Child'} • {item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleChildSubmissionDecision('events', item.id, 'approved')}>Approve</button>
+                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleChildSubmissionDecision('events', item.id, 'rejected')}>Reject</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {pendingAchievements.map((item) => (
+                        <div key={`achievement-${item.id}`} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                          <div>
+                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Achievement: {item.title}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === item.child_id)?.name || 'Child'} • {item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</p>
+                            {item.description ? <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{item.description}</p> : null}
+                          </div>
+                          <div className="flex gap-2">
+                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleChildSubmissionDecision('achievements', item.id, 'approved')}>Approve</button>
+                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleChildSubmissionDecision('achievements', item.id, 'rejected')}>Reject</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {pendingChildTasks.length === 0 && pendingChildEvents.length === 0 && pendingAchievements.length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No child-created submissions waiting for review.</p>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
 
