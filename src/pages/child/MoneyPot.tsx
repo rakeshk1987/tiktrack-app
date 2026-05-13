@@ -176,159 +176,167 @@ export default function ChildMoneyPot() {
 
   return (
     <div className="mt-6 space-y-5">
-      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h2 className="text-3xl font-display font-bold">Money Pot</h2>
-        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Track money received and spent by date to build saving habits.</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Total Balance</p>
-            <p className={clsx('mt-1 text-xl font-black', balance >= 0 ? 'text-emerald-300' : 'text-rose-300')}>Rs {balance.toFixed(0)}</p>
+      <div className="grid gap-5 xl:grid-cols-[1.45fr_0.95fr]">
+        <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-3xl font-display font-bold">Money Pot</h2>
+              <p className={clsx('mt-1 text-sm', mutedTextClass)}>Tap a date and log savings or spending.</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-right">
+              <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', mutedTextClass)}>Live Balance</p>
+              <p className={clsx('text-2xl font-black', balance >= 0 ? 'text-emerald-300' : 'text-rose-300')}>Rs {balance.toFixed(0)}</p>
+            </div>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>This Month Received</p>
-            <p className="mt-1 text-xl font-black text-emerald-300">Rs {monthlyReceived.toFixed(0)}</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>This Month Spent</p>
-            <p className="mt-1 text-xl font-black text-rose-300">Rs {monthlySpent.toFixed(0)}</p>
+
+          <div className={clsx('rounded-[1.35rem] border p-4', panelClass)}>
+            <div className="mb-3 flex items-center justify-between">
+              <button
+                onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-sm font-bold"
+              >
+                <ChevronLeft size={16} />
+                Prev
+              </button>
+              <p className="text-2xl font-display font-bold">{monthCursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
+              <button
+                onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-sm font-bold"
+              >
+                Next
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold uppercase tracking-wide text-white/60">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span key={day}>{day}</span>)}
+            </div>
+
+            <div className="mt-2 grid grid-cols-7 gap-2">
+              {currentMonthCells.map((cell) => {
+                const key = toDateKey(cell);
+                const inMonth = cell.getMonth() === monthCursor.getMonth();
+                const isToday = key === toDateKey(new Date());
+                const dayEntries = entryMapByDate.get(key) || [];
+                const dayNet = dayEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSelectedDateKey(key);
+                      setPopupOpen(true);
+                    }}
+                    className={clsx(
+                      'relative min-h-[88px] rounded-2xl border p-2 text-left transition hover:border-cyan-300/60 hover:bg-cyan-500/10',
+                      isToday ? 'border-cyan-300/65 bg-cyan-500/10' : 'border-white/10 bg-white/[0.03]',
+                      !inMonth && 'opacity-45'
+                    )}
+                  >
+                    <span className="text-sm font-bold">{cell.getDate()}</span>
+                    {dayEntries.length > 0 ? (
+                      <span className={clsx('absolute bottom-2 right-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold', dayNet >= 0 ? 'bg-emerald-400/25 text-emerald-200' : 'bg-rose-400/25 text-rose-200')}>
+                        {dayNet >= 0 ? '+' : '-'}{Math.abs(dayNet)}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className={clsx('mt-4 text-xs', mutedTextClass)}>
+              Green or red number on a date shows that day’s net money movement.
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h3 className="text-2xl font-display font-bold">Savings Goals</h3>
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Weekly Goal Meter</p>
+        <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+          <div className={clsx('rounded-[1.4rem] border p-4', panelClass)}>
+            <p className={clsx('text-xs font-bold uppercase tracking-[0.14em]', mutedTextClass)}>This Month</p>
+            <div className="mt-3 grid gap-3">
+              <div className="rounded-xl border border-emerald-300/20 bg-emerald-500/8 px-3 py-2">
+                <p className={clsx('text-[11px] font-bold uppercase', mutedTextClass)}>Received</p>
+                <p className="text-xl font-black text-emerald-300">Rs {monthlyReceived.toFixed(0)}</p>
+              </div>
+              <div className="rounded-xl border border-rose-300/20 bg-rose-500/8 px-3 py-2">
+                <p className={clsx('text-[11px] font-bold uppercase', mutedTextClass)}>Spent</p>
+                <p className="text-xl font-black text-rose-300">Rs {monthlySpent.toFixed(0)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={clsx('rounded-[1.4rem] border p-4', panelClass)}>
+            <p className={clsx('text-xs font-bold uppercase tracking-[0.14em]', mutedTextClass)}>Weekly Goal Meter</p>
             <div className="mt-2 flex items-center justify-between text-sm">
-              <span>Saved this week: Rs {weeklySaved.toFixed(0)}</span>
+              <span>Saved: Rs {weeklySaved.toFixed(0)}</span>
               <span>Goal: Rs {weeklyGoalNumber || 0}</span>
             </div>
             <div className="mt-2 h-3 rounded-full bg-white/10 p-0.5">
               <div className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#10b981)]" style={{ width: `${weeklyGoalProgress}%` }} />
             </div>
             <div className="mt-2 text-xs font-bold text-emerald-300">{weeklyGoalProgress}% complete</div>
-            {weeklyGoalNumber > 0 ? (
-              <p className={clsx('mt-2 text-xs font-semibold', weeklyGoalRemaining === 0 ? 'text-emerald-300' : 'text-cyan-200')}>
-                {weeklyGoalRemaining === 0
-                  ? 'Weekly goal completed. Amazing saving discipline!'
-                  : `You are Rs ${weeklyGoalRemaining.toFixed(0)} away from this week’s goal.`}
-              </p>
-            ) : (
-              <p className={clsx('mt-2 text-xs font-semibold', mutedTextClass)}>Set a weekly goal to unlock progress nudges.</p>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>No-Spend Streak</p>
-            <p className="mt-2 text-2xl font-black text-amber-300">{noSpendStreak} day{noSpendStreak === 1 ? '' : 's'}</p>
-            <p className={clsx('mt-1 text-xs', mutedTextClass)}>Counts consecutive days with no spending entries.</p>
-            <p className={clsx('mt-2 text-xs font-semibold', todaySpent ? 'text-rose-200' : 'text-emerald-200')}>
-              {todaySpent
-                ? 'No-spend streak broken today. Try a save-only day tomorrow.'
-                : 'Streak alive today. Keep it going!'}
+            <p className={clsx('mt-2 text-xs font-semibold', weeklyGoalNumber > 0 && weeklyGoalRemaining === 0 ? 'text-emerald-300' : 'text-cyan-200')}>
+              {weeklyGoalNumber > 0
+                ? (weeklyGoalRemaining === 0 ? 'Goal completed. Superb discipline!' : `Rs ${weeklyGoalRemaining.toFixed(0)} left to hit goal.`)
+                : 'Set a weekly goal to unlock progress nudges.'}
             </p>
           </div>
-        </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-[170px_1fr_170px_auto]">
-          <input
-            type="number"
-            value={weeklyGoal}
-            onChange={(event) => setWeeklyGoal(event.target.value ? Number(event.target.value) : '')}
-            placeholder="Weekly goal (Rs)"
-            className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-white"
-          />
-          <input
-            value={wishTitle}
-            onChange={(event) => setWishTitle(event.target.value)}
-            placeholder="Wish item (e.g., new book)"
-            className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-white"
-          />
-          <input
-            type="number"
-            value={wishTarget}
-            onChange={(event) => setWishTarget(event.target.value ? Number(event.target.value) : '')}
-            placeholder="Wish target (Rs)"
-            className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-white"
-          />
-          <button onClick={() => void saveSettings()} disabled={savingSettings} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
-            {savingSettings ? 'Saving...' : 'Save Goals'}
-          </button>
-        </div>
-
-        {wishTargetNumber > 0 ? (
-          <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Wish Target</p>
-            <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="font-bold">{wishTitle || 'My Wish'}</span>
-              <span>Rs {Math.max(0, balance).toFixed(0)} / Rs {wishTargetNumber.toFixed(0)}</span>
-            </div>
-            <div className="mt-2 h-3 rounded-full bg-white/10 p-0.5">
-              <div className="h-full rounded-full bg-[linear-gradient(90deg,#8b5cf6,#ec4899)]" style={{ width: `${wishProgress}%` }} />
-            </div>
-            <div className="mt-2 text-xs font-bold text-violet-200">{wishProgress}% reached</div>
+          <div className={clsx('rounded-[1.4rem] border p-4', panelClass)}>
+            <p className={clsx('text-xs font-bold uppercase tracking-[0.14em]', mutedTextClass)}>No-Spend Streak</p>
+            <p className="mt-1 text-3xl font-black text-amber-300">{noSpendStreak} days</p>
+            <p className={clsx('mt-1 text-xs', mutedTextClass)}>Consecutive days with no spending.</p>
+            <p className={clsx('mt-2 text-xs font-semibold', todaySpent ? 'text-rose-200' : 'text-emerald-200')}>
+              {todaySpent ? 'Spent today. Make tomorrow a save-only day.' : 'Streak alive today. Keep it going!'}
+            </p>
           </div>
-        ) : null}
+
+          <div className={clsx('rounded-[1.4rem] border p-4', panelClass)}>
+            <p className={clsx('text-xs font-bold uppercase tracking-[0.14em]', mutedTextClass)}>Wish Target</p>
+            <div className="mt-3 grid gap-2">
+              <input
+                type="number"
+                value={weeklyGoal}
+                onChange={(event) => setWeeklyGoal(event.target.value ? Number(event.target.value) : '')}
+                placeholder="Weekly goal (Rs)"
+                className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-white"
+              />
+              <input
+                value={wishTitle}
+                onChange={(event) => setWishTitle(event.target.value)}
+                placeholder="Wish item (e.g., new book)"
+                className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-white"
+              />
+              <input
+                type="number"
+                value={wishTarget}
+                onChange={(event) => setWishTarget(event.target.value ? Number(event.target.value) : '')}
+                placeholder="Wish target (Rs)"
+                className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-white"
+              />
+              <button onClick={() => void saveSettings()} disabled={savingSettings} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
+                {savingSettings ? 'Saving...' : 'Save Goals'}
+              </button>
+            </div>
+            {wishTargetNumber > 0 ? (
+              <div className="mt-3 rounded-xl border border-violet-300/20 bg-violet-500/8 p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-bold">{wishTitle || 'My Wish'}</span>
+                  <span>Rs {Math.max(0, balance).toFixed(0)} / Rs {wishTargetNumber.toFixed(0)}</span>
+                </div>
+                <div className="mt-2 h-3 rounded-full bg-white/10 p-0.5">
+                  <div className="h-full rounded-full bg-[linear-gradient(90deg,#8b5cf6,#ec4899)]" style={{ width: `${wishProgress}%` }} />
+                </div>
+                <p className="mt-2 text-xs font-bold text-violet-200">{wishProgress}% reached</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <div className="mb-3 flex items-center justify-between">
-          <button
-            onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-sm font-bold"
-          >
-            <ChevronLeft size={16} />
-            Prev
-          </button>
-          <p className="text-lg font-black">{monthCursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
-          <button
-            onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-sm font-bold"
-          >
-            Next
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold uppercase tracking-wide text-white/60">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span key={day}>{day}</span>)}
-        </div>
-
-        <div className="mt-2 grid grid-cols-7 gap-2">
-          {currentMonthCells.map((cell) => {
-            const key = toDateKey(cell);
-            const inMonth = cell.getMonth() === monthCursor.getMonth();
-            const isToday = key === toDateKey(new Date());
-            const dayEntries = entryMapByDate.get(key) || [];
-            const dayNet = dayEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
-            return (
-              <button
-                key={key}
-                onClick={() => {
-                  setSelectedDateKey(key);
-                  setPopupOpen(true);
-                }}
-                className={clsx(
-                  'relative min-h-[88px] rounded-2xl border p-2 text-left transition hover:border-cyan-300/60 hover:bg-cyan-500/10',
-                  isToday ? 'border-cyan-300/65 bg-cyan-500/10' : 'border-white/10 bg-white/[0.03]',
-                  !inMonth && 'opacity-45'
-                )}
-              >
-                <span className="text-sm font-bold">{cell.getDate()}</span>
-                {dayEntries.length > 0 ? (
-                  <span className={clsx('absolute bottom-2 right-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold', dayNet >= 0 ? 'bg-emerald-400/25 text-emerald-200' : 'bg-rose-400/25 text-rose-200')}>
-                    {dayNet >= 0 ? '+' : '-'}{Math.abs(dayNet)}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className={clsx('mt-4 text-xs', mutedTextClass)}>
-          Click a date to add money in or money out.
-        </div>
+        <p className={clsx('text-sm font-semibold', mutedTextClass)}>
+          Quick tip: tap a day after receiving pocket money, then add a note like `gift`, `snack`, or `saving`.
+        </p>
       </div>
 
       {popupOpen && (

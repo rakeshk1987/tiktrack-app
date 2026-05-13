@@ -40,6 +40,7 @@ import { getExamPlannerStats } from '../../hooks/useCoreLogic';
 import type { MoodLog, Task } from '../../types/schema';
 import InboxPanel from '../../components/child/InboxPanel';
 import { useChallenges } from '../../hooks/useChallenges';
+import { useRewards } from '../../hooks/useRedemptions';
 
 export type ChildTab = 'home' | 'quests' | 'planner' | 'diary' | 'rewards' | 'money-pot' | 'profile';
 
@@ -163,12 +164,15 @@ export default function ChildLayout() {
   const { messages, sendMessage } = useMessages(childId, 'child');
   const parentId = profile?.family_id || profile?.parent_id || '';
   const { activeChallenges, incrementScore: incrementChallengeScore } = useChallenges(parentId);
+  const { rewards } = useRewards(parentId);
 
   const [notice, setNotice] = useState('');
   const [diaryDraft, setDiaryDraft] = useState('');
   const [pendingProofTask, setPendingProofTask] = useState<Task | null>(null);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [todaySpecialTheme, setTodaySpecialTheme] = useState<'birthday' | 'festival' | 'celebration' | 'custom' | null>(null);
+  const [rewardsAlert, setRewardsAlert] = useState(false);
+  const [moneyPotAlert, setMoneyPotAlert] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const examStats = getExamPlannerStats(events, tasks);
@@ -254,6 +258,81 @@ export default function ChildLayout() {
 
     return () => unsub();
   }, [childId, profile]);
+
+  useEffect(() => {
+    if (!childId || !profile) return;
+
+    const seenRewardsKey = `tiktrack_child_${childId}_rewards_seen_count`;
+    const seenStarsKey = `tiktrack_child_${childId}_rewards_seen_stars`;
+    const currentRewardsCount = rewards.length;
+    const currentStars = Number(profile.total_stars || 0);
+
+    const storedRewards = localStorage.getItem(seenRewardsKey);
+    const storedStars = localStorage.getItem(seenStarsKey);
+
+    if (storedRewards == null || storedStars == null) {
+      localStorage.setItem(seenRewardsKey, String(currentRewardsCount));
+      localStorage.setItem(seenStarsKey, String(currentStars));
+      setRewardsAlert(false);
+      return;
+    }
+
+    const seenRewardsCount = Number(storedRewards || 0);
+    const seenStars = Number(storedStars || 0);
+
+    const hasNewReward = currentRewardsCount > seenRewardsCount;
+    const hasNewStars = currentStars > seenStars;
+    setRewardsAlert(hasNewReward || hasNewStars);
+
+    if (activeTab === 'rewards') {
+      localStorage.setItem(seenRewardsKey, String(currentRewardsCount));
+      localStorage.setItem(seenStarsKey, String(currentStars));
+      setRewardsAlert(false);
+    }
+  }, [activeTab, childId, profile, rewards]);
+
+  useEffect(() => {
+    if (!childId || !profile) return;
+    const weeklyGoal = Number(profile.money_weekly_goal || 0);
+    if (weeklyGoal <= 0) {
+      setMoneyPotAlert(false);
+      return;
+    }
+
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    const weekKey = `${weekStart.toISOString().slice(0, 10)}_${weekEnd.toISOString().slice(0, 10)}`;
+    const seenKey = `tiktrack_child_${childId}_money_pot_goal_seen_${weekKey}`;
+
+    const q = query(collection(db, 'money_pot_entries'), where('child_id', '==', childId));
+    const unsub = onSnapshot(q, (snap) => {
+      const weeklySaved = snap.docs
+        .map((d) => d.data() as { date?: string; amount?: number })
+        .filter((entry) => {
+          const date = new Date(`${entry.date || ''}T00:00:00`);
+          return !Number.isNaN(date.getTime()) && date >= weekStart && date <= weekEnd;
+        })
+        .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+
+      const goalReached = weeklySaved >= weeklyGoal;
+      const seen = localStorage.getItem(seenKey) === '1';
+
+      if (activeTab === 'money-pot') {
+        if (goalReached) localStorage.setItem(seenKey, '1');
+        setMoneyPotAlert(false);
+        return;
+      }
+
+      setMoneyPotAlert(goalReached && !seen);
+    });
+
+    return () => unsub();
+  }, [activeTab, childId, profile]);
 
   if (profileLoading || tasksLoading || eventsLoading) {
     return <LoadingScreen />;
@@ -650,7 +729,13 @@ export default function ChildLayout() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('flex min-w-[92px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition', active ? 'bg-white/12 text-sky-200 shadow-sm' : lowContrastTextClass)}>
+                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('relative flex min-w-[92px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition', active ? 'bg-white/12 text-sky-200 shadow-sm' : lowContrastTextClass)}>
+                  {tab.id === 'rewards' && rewardsAlert ? (
+                    <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
+                  ) : null}
+                  {tab.id === 'money-pot' && moneyPotAlert ? (
+                    <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-slate-900" />
+                  ) : null}
                   <Icon size={17} />
                   <span>{tab.label}</span>
                 </button>
@@ -792,7 +877,13 @@ export default function ChildLayout() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('min-w-[72px] shrink-0 flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', active ? (isDark ? 'bg-white/10 text-cyan-300' : 'bg-white text-cyan-600') : lowContrastTextClass)}>
+                <button key={tab.id} onClick={() => goToTab(tab.id)} className={clsx('relative min-w-[72px] shrink-0 flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5', active ? (isDark ? 'bg-white/10 text-cyan-300' : 'bg-white text-cyan-600') : lowContrastTextClass)}>
+                  {tab.id === 'rewards' && rewardsAlert ? (
+                    <span className="absolute right-2 top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
+                  ) : null}
+                  {tab.id === 'money-pot' && moneyPotAlert ? (
+                    <span className="absolute right-2 top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-slate-900" />
+                  ) : null}
                   <Icon size={20} />
                   <span className="text-[11px] font-black">{tab.label}</span>
                 </button>
