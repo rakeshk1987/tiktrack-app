@@ -104,6 +104,7 @@ function ParentDashboardContent() {
   const [tPoints, setTPoints] = useState<number | ''>('');
   const [tDue, setTDue] = useState('');
   const [tChild, setTChild] = useState('');
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [exams, setExams] = useState<Array<any>>([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [eChild, setEChild] = useState('');
@@ -256,14 +257,17 @@ function ParentDashboardContent() {
     setTasksLoading(true);
     const tasksQuery = query(
       collection(db, 'tasks'),
-      where('parent_id', '==', familyId),
-      orderBy('created_at', 'desc')
+      orderBy('created_at', 'desc'),
+      limit(300)
     );
 
+    const childIdSet = new Set(children.map((child) => child.id));
     const unsub = onSnapshot(
       tasksQuery,
       (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((task) => task.child_id && childIdSet.has(task.child_id));
         setTasks(mapped);
         setTasksLoading(false);
       },
@@ -274,7 +278,111 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user, familyId]);
+  }, [user, children]);
+
+  useEffect(() => {
+    if (!user || children.length === 0 || tChild || editTaskId) return;
+    const defaultChildId = automationChildId || children[0]?.id || '';
+    if (defaultChildId) {
+      setTChild(defaultChildId);
+    }
+  }, [user, children, tChild, editTaskId, automationChildId]);
+
+  const clearTaskForm = () => {
+    setTChild('');
+    setTTitle('');
+    setTDesc('');
+    setTPoints('');
+    setTDue('');
+    setEditTaskId(null);
+  };
+
+  const startEditTask = (task: any) => {
+    setEditTaskId(task.id);
+    setTChild(task.child_id || '');
+    setTTitle(task.title || '');
+    setTDesc(task.description || '');
+    setTPoints(task.points ?? task.star_value ?? '');
+    setTDue(task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelTaskEdit = () => {
+    clearTaskForm();
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || taskLoading) return;
+    setError('');
+    setSuccess('');
+    setInfo('');
+    setTaskLoading(true);
+
+    try {
+      const selectedChild = children.find((child) => child.id === tChild);
+      if (!selectedChild) {
+        setError('Select a child before creating the task.');
+        return;
+      }
+
+      const starValue = Number(tPoints) || 1;
+      const taskPayload = {
+        title: tTitle,
+        description: tDesc,
+        points: starValue,
+        star_value: starValue,
+        category: 'General',
+        priority: 'medium',
+        energy_level: 'medium',
+        difficulty_level: 1,
+        requires_proof: false,
+        status: 'pending',
+        child_id: tChild,
+        child_name: selectedChild.name || selectedChild.email || '',
+        due_date: tDue ? new Date(tDue).toISOString() : null,
+        parent_id: familyId,
+        family_id: familyId
+      };
+
+      if (editTaskId) {
+        await withOperationTimeout(
+          updateDoc(doc(db, 'tasks', editTaskId), {
+            ...taskPayload,
+            updated_at: new Date().toISOString()
+          }),
+          'update-task'
+        );
+        setSuccess('Task updated.');
+      } else {
+        await withOperationTimeout(
+          addDoc(collection(db, 'tasks'), {
+            ...taskPayload,
+            created_at: new Date().toISOString()
+          }),
+          'create-task'
+        );
+        setSuccess('Task created and assigned to the child.');
+      }
+
+      clearTaskForm();
+    } catch (err) {
+      console.error('Failed to create task:', err);
+      setError(String((err as Error)?.message || '').includes('timeout') ? 'Task save is taking too long. Please try again.' : 'Could not create task.');
+    } finally {
+      setTaskLoading(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteDoc(doc(db, 'tasks', taskId));
+      setSuccess('Task deleted.');
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      setError('Could not delete task.');
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -727,69 +835,6 @@ function ParentDashboardContent() {
     } catch (err) {
       console.error('Failed to update proof status:', err);
       setError('Could not update proof approval. Please try again.');
-    }
-  };
-
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || taskLoading) return;
-    setError('');
-    setSuccess('');
-    setInfo('');
-    setTaskLoading(true);
-
-    try {
-      const selectedChild = children.find((child) => child.id === tChild);
-      if (!selectedChild) {
-        setError('Select a child before creating the task.');
-        return;
-      }
-
-      const starValue = Number(tPoints) || 1;
-
-      await withOperationTimeout(
-        addDoc(collection(db, 'tasks'), {
-          title: tTitle,
-          description: tDesc,
-          points: starValue,
-          star_value: starValue,
-          category: 'General',
-          priority: 'medium',
-          energy_level: 'medium',
-          difficulty_level: 1,
-          requires_proof: false,
-          status: 'pending',
-          child_id: tChild,
-          child_name: selectedChild.name || selectedChild.email || '',
-          due_date: tDue ? new Date(tDue).toISOString() : null,
-          parent_id: familyId,
-          family_id: familyId,
-          created_at: new Date().toISOString()
-        }),
-        'create-task'
-      );
-
-      setTTitle('');
-      setTDesc('');
-      setTPoints('');
-      setTDue('');
-      setTChild('');
-      setSuccess('Task created and assigned to the child.');
-    } catch (err) {
-      console.error('Failed to create task:', err);
-      setError(String((err as Error)?.message || '').includes('timeout') ? 'Task save is taking too long. Please try again.' : 'Could not create task.');
-    } finally {
-      setTaskLoading(false);
-    }
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    try {
-      await deleteDoc(doc(db, 'tasks', taskId));
-      setSuccess('Task deleted.');
-    } catch (err) {
-      console.error('Failed to delete task:', err);
-      setError('Could not delete task.');
     }
   };
 
@@ -1361,6 +1406,8 @@ function ParentDashboardContent() {
     setSuccess('Default reward marketplace added.');
   };
 
+  const automatedTasks = tasks.filter((task) => task.is_generated === true);
+  const manualTasks = tasks.filter((task) => task.is_generated !== true);
 
   return (
     <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -1727,9 +1774,14 @@ function ParentDashboardContent() {
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Manage Tasks</h2>
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
-                      {tasks.length}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
+                        {tasks.length}
+                      </span>
+                      <span className="px-2 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                        Auto: {automatedTasks.length}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -1743,31 +1795,68 @@ function ParentDashboardContent() {
                       <input value={tDue} onChange={(e) => setTDue(e.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tDesc} onChange={(e) => setTDesc(e.target.value)} placeholder="Short description" className="col-span-1 sm:col-span-3 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <div className="col-span-1 sm:col-span-3 flex gap-2">
-                        <button disabled={taskLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{taskLoading ? 'Saving...' : '+ Create Task'}</button>
-                        <button type="button" onClick={() => { setTChild(''); setTTitle(''); setTDesc(''); setTPoints(''); setTDue(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                        <button disabled={taskLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{taskLoading ? 'Saving...' : (editTaskId ? 'Save Changes' : '+ Create Task')}</button>
+                        <button type="button" onClick={editTaskId ? cancelTaskEdit : clearTaskForm} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>{editTaskId ? 'Cancel Edit' : 'Clear'}</button>
                       </div>
                     </form>
 
-                    <div>
+                    <div className="space-y-4">
                       {tasksLoading ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading tasks...</p>
                       ) : tasks.length === 0 ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No tasks yet. Create one above.</p>
                       ) : (
-                        <div className="space-y-2">
-                          {tasks.map((t) => (
-                            <div key={t.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                              <div>
-                                <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{t.title}</p>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.description}</p>
-                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{getChildName(t.child_id)} • {t.points ?? t.star_value} pts • {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'no due date'}</p>
+                        <>
+                          <div>
+                            <h3 className="mb-2 text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                              Automated Tasks
+                            </h3>
+                            {automatedTasks.length === 0 ? (
+                              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No automated tasks yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {automatedTasks.map((t) => (
+                                  <div key={t.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                    <div>
+                                      <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{t.title}</p>
+                                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.description}</p>
+                                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{getChildName(t.child_id)} • {t.points ?? t.star_value} pts • {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'no due date'}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => startEditTask(t)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                      <button onClick={() => handleDeleteTask(t.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <div className="flex gap-2">
-                                <button onClick={() => handleDeleteTask(t.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                            )}
+                          </div>
+
+                          <div>
+                            <h3 className="mb-2 text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                              Manual Tasks
+                            </h3>
+                            {manualTasks.length === 0 ? (
+                              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No manual tasks yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {manualTasks.map((t) => (
+                                  <div key={t.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                    <div>
+                                      <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{t.title}</p>
+                                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.description}</p>
+                                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{getChildName(t.child_id)} • {t.points ?? t.star_value} pts • {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'no due date'}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => startEditTask(t)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                      <button onClick={() => handleDeleteTask(t.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1813,6 +1902,7 @@ function ParentDashboardContent() {
                     upcomingExams={upcomingExamEvents}
                     onGenerateTodaysTasks={generateTodaysTasks}
                     onGenerateExamTasks={generateExamTasks}
+                    onOpenTasks={() => setActiveTab('tasks')}
                     loading={schedulerLoading}
                   />
                   <div className="flex flex-wrap gap-2">

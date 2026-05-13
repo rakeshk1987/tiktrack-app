@@ -6,6 +6,7 @@ interface TaskSchedulerUIProps {
   upcomingExams: Event[];
   onGenerateTodaysTasks: () => Promise<void>;
   onGenerateExamTasks?: (exam: Event, daysUntil: number) => Promise<void>;
+  onOpenTasks?: () => void;
   loading?: boolean;
 }
 
@@ -14,6 +15,7 @@ const TaskSchedulerUI: React.FC<TaskSchedulerUIProps> = ({
   upcomingExams,
   onGenerateTodaysTasks,
   onGenerateExamTasks,
+  onOpenTasks,
   loading = false,
 }) => {
   const [autoGenerate, setAutoGenerate] = useState(true);
@@ -230,12 +232,28 @@ const TaskSchedulerUI: React.FC<TaskSchedulerUIProps> = ({
 
       {/* Status Indicator */}
       <div className="mt-6 p-4 bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-lg">
-        <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">
-          📊 Generation Status
-        </p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+            📊 Generation Status
+          </p>
+          {onOpenTasks && (
+            <button
+              type="button"
+              onClick={onOpenTasks}
+              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700"
+            >
+              Open Tasks
+            </button>
+          )}
+        </div>
         <div className="space-y-1 text-xs text-blue-800 dark:text-blue-300">
           <p>
             {routine ? '✅ Routine configured' : '⚠️ Routine not configured'}
+          </p>
+          <p>
+            {routine
+              ? `✅ Active routine: ${routine.current_mode === 'academic' ? 'School Days Routine' : 'Vacation Routine'}`
+              : '⚠️ Active routine unknown'}
           </p>
           <p>
             {autoGenerate ? '✅ Auto-generation enabled' : '❌ Auto-generation disabled'}
