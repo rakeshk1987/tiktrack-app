@@ -64,6 +64,12 @@ export default function ChildSpecialDates() {
   }, [profile.date_of_birth, specialDates]);
   const activeTheme = (todayEvents[0]?.theme || 'custom') as keyof typeof THEME_META;
   const themeMeta = THEME_META[activeTheme] || THEME_META.custom;
+  const defaultBirthdayEntry = useMemo(() => ({
+    id: 'birthday-default-list',
+    title: 'Birthday',
+    date: (profile.date_of_birth || todayKey()).slice(0, 10),
+    theme: 'birthday' as const
+  }), [profile.date_of_birth]);
 
   const saveSpecialDate = async () => {
     if (!title.trim()) return;
@@ -132,6 +138,10 @@ export default function ChildSpecialDates() {
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h3 className="text-2xl font-display font-bold">Upcoming Special Dates</h3>
         <div className="mt-4 space-y-2">
+          <div className="rounded-xl border border-pink-300/30 bg-pink-500/10 px-4 py-3">
+            <p className="font-bold">{defaultBirthdayEntry.title} (Default)</p>
+            <p className={clsx('text-xs', mutedTextClass)}>{new Date(`${defaultBirthdayEntry.date}T00:00:00`).toLocaleDateString()} • birthday</p>
+          </div>
           {specialDates.length === 0 ? <p className={mutedTextClass}>No custom special dates yet.</p> : null}
           {specialDates.map((item) => (
             <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">

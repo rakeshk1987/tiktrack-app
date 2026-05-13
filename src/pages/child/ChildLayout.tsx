@@ -10,12 +10,10 @@ import {
   Moon,
   Orbit,
   PiggyBank,
-  Ruler,
   ScrollText,
   Shield,
   Sparkles,
   Star,
-  Cake,
   Sun,
   Upload,
   UserRound,
@@ -43,7 +41,7 @@ import type { MoodLog, Task } from '../../types/schema';
 import InboxPanel from '../../components/child/InboxPanel';
 import { useChallenges } from '../../hooks/useChallenges';
 
-export type ChildTab = 'home' | 'quests' | 'planner' | 'diary' | 'special-dates' | 'growth' | 'rewards' | 'money-pot' | 'profile';
+export type ChildTab = 'home' | 'quests' | 'planner' | 'diary' | 'rewards' | 'money-pot' | 'profile';
 
 export const moodOptions: Array<{
   icon: string;
@@ -181,10 +179,6 @@ export default function ChildLayout() {
       ? 'planner'
     : path.endsWith('/diary')
       ? 'diary'
-      : path.endsWith('/special-dates')
-        ? 'special-dates'
-      : path.endsWith('/growth')
-        ? 'growth'
       : path.endsWith('/rewards')
         ? 'rewards'
       : path.endsWith('/money-pot')
@@ -201,7 +195,7 @@ export default function ChildLayout() {
 
     try {
       const saved = localStorage.getItem(tabStorageKey);
-      if (saved && (['home', 'quests', 'planner', 'diary', 'special-dates', 'growth', 'rewards', 'money-pot', 'profile'] as string[]).includes(saved)) {
+      if (saved && (['home', 'quests', 'planner', 'diary', 'rewards', 'money-pot', 'profile'] as string[]).includes(saved)) {
         void navigate(saved === 'home' ? '/child' : `/child/${saved}`);
       }
     } catch {}
@@ -424,8 +418,6 @@ export default function ChildLayout() {
     { id: 'quests', label: 'Quests', icon: MessageSquare },
     { id: 'planner', label: 'Planner', icon: CalendarDays },
     { id: 'diary', label: 'Diary', icon: ScrollText },
-    { id: 'special-dates', label: 'Dates', icon: Cake },
-    { id: 'growth', label: 'Growth', icon: Ruler },
     { id: 'rewards', label: 'Rewards', icon: Gift },
     { id: 'money-pot', label: 'Money Pot', icon: PiggyBank },
     { id: 'profile', label: 'Profile', icon: Orbit }

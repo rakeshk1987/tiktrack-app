@@ -4,9 +4,12 @@ import { updatePassword } from 'firebase/auth';
 import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase';
 import { useChildLayout } from './ChildLayout';
+import ChildSpecialDates from './SpecialDates';
+import ChildGrowth from './Growth';
 
 export default function ChildProfile() {
   const { accentCaptionClass, isDark, mutedTextClass, panelClass, profile } = useChildLayout();
+  const [profileTab, setProfileTab] = useState<'settings' | 'special-dates' | 'growth'>('settings');
   const [petName, setPetName] = useState(profile.pet_name || '');
   const [newPassword, setNewPassword] = useState('');
   const [savingPetName, setSavingPetName] = useState(false);
@@ -73,9 +76,71 @@ export default function ChildProfile() {
 
   return (
     <div className="mt-6 space-y-5">
+      <div className={clsx('rounded-[1.75rem] border p-4 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setProfileTab('settings')}
+            className={clsx('rounded-xl px-4 py-2 text-sm font-bold', profileTab === 'settings' ? 'bg-cyan-500 text-white' : 'border border-white/20')}
+          >
+            Profile Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => setProfileTab('special-dates')}
+            className={clsx('rounded-xl px-4 py-2 text-sm font-bold', profileTab === 'special-dates' ? 'bg-fuchsia-500 text-white' : 'border border-white/20')}
+          >
+            Special Dates
+          </button>
+          <button
+            type="button"
+            onClick={() => setProfileTab('growth')}
+            className={clsx('rounded-xl px-4 py-2 text-sm font-bold', profileTab === 'growth' ? 'bg-emerald-500 text-white' : 'border border-white/20')}
+          >
+            Growth
+          </button>
+        </div>
+      </div>
+
+      {profileTab === 'settings' && (
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h2 className="text-3xl font-display font-bold">Profile Settings</h2>
-        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Manage your pet name and security.</p>
+        <p className={clsx('mt-1 text-sm', mutedTextClass)}>View all profile details and manage your pet name/security.</p>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Real Name</p>
+            <p className="mt-1 text-base font-bold">{profile.name || 'Not set'}</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Pet Name</p>
+            <p className="mt-1 text-base font-bold">{profile.pet_name || 'Not set'}</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Birthday</p>
+            <p className="mt-1 text-base font-bold">{profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString() : 'Not set'}</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Height / Weight</p>
+            <p className="mt-1 text-base font-bold">{Number(profile.height_cm || 0)} cm • {Number(profile.weight_kg || 0)} kg</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Total Stars</p>
+            <p className="mt-1 text-base font-bold">{Number(profile.total_stars || 0)}</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Streak</p>
+            <p className="mt-1 text-base font-bold">{Number(profile.streak_count || 0)} days</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Shields</p>
+            <p className="mt-1 text-base font-bold">{Number(profile.streak_shields || 0)}</p>
+          </div>
+          <div className={clsx('rounded-[1.1rem] border px-4 py-3', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
+            <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', accentCaptionClass)}>Consistency</p>
+            <p className="mt-1 text-base font-bold">{Number(profile.consistency_score || 0)}%</p>
+          </div>
+        </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
           <div className={clsx('rounded-[1.3rem] border px-4 py-4', isDark ? 'border-white/10 bg-white/6' : 'border-indigo-200/70 bg-white/80')}>
@@ -125,6 +190,10 @@ export default function ChildProfile() {
           </div>
         </div>
       </div>
+      )}
+
+      {profileTab === 'special-dates' && <ChildSpecialDates />}
+      {profileTab === 'growth' && <ChildGrowth />}
 
       {message ? (
         <div className={clsx('rounded-xl border px-4 py-3 text-sm font-semibold', isDark ? 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-700')}>
@@ -134,4 +203,3 @@ export default function ChildProfile() {
     </div>
   );
 }
-
