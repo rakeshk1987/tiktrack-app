@@ -106,11 +106,14 @@ export const useTaskScheduler = (
         const existing = await getDocs(q);
 
         if (existing.empty) {
+          const nowIso = new Date().toISOString();
           const taskPayload = stripUndefinedFields({
             ...generated,
             child_id: childId,
             parent_id: parentId,
             is_generated: true,
+            status: 'pending',
+            created_at: nowIso,
           });
           const docRef = await addDoc(tasksRef, taskPayload);
 
@@ -120,6 +123,8 @@ export const useTaskScheduler = (
             parent_id: parentId,
             ...generated,
             is_generated: true,
+            status: 'pending',
+            created_at: nowIso,
           } as ScheduledTask);
         }
       }
@@ -147,11 +152,14 @@ export const useTaskScheduler = (
       const savedTasks: ScheduledTask[] = [];
 
       for (const generated of generatedTasks) {
+        const nowIso = new Date().toISOString();
         const taskPayload = stripUndefinedFields({
           ...generated,
           child_id: childId,
           parent_id: parentId,
           is_generated: true,
+          status: 'pending',
+          created_at: nowIso,
         });
         const docRef = await addDoc(tasksRef, taskPayload);
 
@@ -161,6 +169,8 @@ export const useTaskScheduler = (
           parent_id: parentId,
           ...generated,
           is_generated: true,
+          status: 'pending',
+          created_at: nowIso,
         } as ScheduledTask);
       }
 

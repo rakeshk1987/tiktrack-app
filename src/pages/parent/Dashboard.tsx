@@ -127,10 +127,7 @@ function ParentDashboardContent() {
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
-  const isInboxOpen = activeTab === 'communication';
-  const isSettingsOpen = activeTab === 'settings';
-  const setIsInboxOpen = (open: boolean) => setActiveTab(open ? 'communication' : 'dashboard');
-  const setIsSettingsOpen = (open: boolean) => setActiveTab(open ? 'settings' : 'dashboard');
+  const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'coparenting'>('create_child');
 
   const [chTitle, setChTitle] = useState('');
   const [chChild, setChChild] = useState('');
@@ -141,13 +138,11 @@ function ParentDashboardContent() {
 
   const parentTabs = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'family', label: 'Family' },
     { id: 'tasks', label: 'Tasks' },
     { id: 'automation', label: 'Automation' },
     { id: 'proofs', label: 'Proofs' },
     { id: 'events', label: 'Events' },
     { id: 'growth', label: 'Growth' },
-    { id: 'rewards', label: 'Rewards' },
     { id: 'exams', label: 'Exams' },
     { id: 'challenges', label: 'Challenges' },
     { id: 'communication', label: 'Communication' },
@@ -1792,8 +1787,8 @@ function ParentDashboardContent() {
               <section className={clsx(
                 'space-y-4',
                 activeTab === 'dashboard' && 'xl:col-span-5 2xl:col-span-4',
-                ['family', 'exams', 'challenges'].includes(activeTab) && 'xl:col-span-12',
-                !['dashboard', 'family', 'exams', 'challenges'].includes(activeTab) && 'hidden'
+                ['family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'xl:col-span-12',
+                !['dashboard', 'family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'hidden'
               )}>
                 {(activeTab === 'dashboard' || activeTab === 'family') && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
@@ -1996,6 +1991,194 @@ function ParentDashboardContent() {
                   </div>
                 )}
 
+                {activeTab === 'communication' && (
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Family Chat</h2>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!inboxChildId || !inboxMessage.trim() || !user) return;
+                      await sendMessage(inboxChildId, familyId, inboxMessage.trim(), 'parent', familyId, inboxSubject);
+                      setInboxMessage('');
+                      setInboxSubject('');
+                      setSuccess('Message sent successfully!');
+                      setTimeout(() => setSuccess(''), 3000);
+                    }} className="space-y-4">
+                      <select required value={inboxChildId} onChange={(e) => setInboxChildId(e.target.value)} className="w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">Select Child...</option>
+                        {children.map(c => <option key={c.id} value={c.id}>{c.name || c.email}</option>)}
+                      </select>
+                      <input
+                        value={inboxSubject}
+                        onChange={(e) => setInboxSubject(e.target.value)}
+                        placeholder="Subject (optional)"
+                        className="w-full rounded-xl py-3 px-4 border focus:outline-none"
+                        style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                      />
+                      <div className="rounded-xl border p-3 h-64 overflow-y-auto" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                        {inboxChildId && selectedThread.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No messages yet with this child.</p>
+                        ) : null}
+                        {!inboxChildId ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Select a child to view conversation.</p>
+                        ) : null}
+                        {selectedThread.map((msg) => {
+                          const isParentSender = (msg.sender_role || 'parent') === 'parent';
+                          return (
+                            <div key={msg.id} className={`mb-2 flex ${isParentSender ? 'justify-end' : 'justify-start'}`}>
+                              <div
+                                className={`max-w-[80%] rounded-2xl px-3 py-2 ${isParentSender ? 'bg-sky-500 text-white' : ''}`}
+                                style={isParentSender ? {} : { background: 'var(--surface)', color: 'var(--text-main)', border: '1px solid var(--border-main)' }}
+                              >
+                                {msg.subject ? <p className="text-[11px] font-bold uppercase tracking-wide opacity-80 mb-1">{msg.subject}</p> : null}
+                                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                <p className={`text-[10px] mt-1 ${isParentSender ? 'text-white/80' : ''}`} style={isParentSender ? {} : { color: 'var(--text-muted)' }}>
+                                  {new Date(msg.timestamp).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <textarea
+                        required
+                        value={inboxMessage}
+                        onChange={(e) => setInboxMessage(e.target.value)}
+                        placeholder="Type a message..."
+                        className="w-full rounded-xl py-3 px-4 border focus:outline-none min-h-[100px]"
+                        style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                      />
+                      <button type="submit" className="w-full py-3 rounded-xl text-sm font-bold text-white bg-sky-500 hover:bg-sky-600 transition">
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {activeTab === 'settings' && (
+                  <div className="space-y-4">
+                    <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                      <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Settings</h2>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <button onClick={() => setSettingsTab('create_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'create_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'create_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Create Child
+                        </button>
+                        <button onClick={() => setSettingsTab('edit_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'edit_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'edit_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Edit Child
+                        </button>
+                        <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Rewards
+                        </button>
+                        <button onClick={() => setSettingsTab('coparenting')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'coparenting' ? 'white' : 'var(--text-main)', background: settingsTab === 'coparenting' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Co-Parenting
+                        </button>
+                      </div>
+                    </div>
+
+                    {settingsTab === 'create_child' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <h3 className="text-base font-bold mb-3" style={{ color: 'var(--text-main)' }}>Create Child Account</h3>
+                        <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>Create a child profile under your family account.</p>
+                        <button onClick={() => setIsModaling(true)} className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                          + Create Child (Family)
+                        </button>
+                      </div>
+                    )}
+
+                    {settingsTab === 'edit_child' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <h3 className="text-base font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                          <Users2 size={18} /> Child Profiles
+                        </h3>
+                        {childrenLoading ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading child accounts...</p>
+                        ) : children.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No child accounts yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {children.map((child) => {
+                              const meta = enrichedChildProfiles.find((p) => p.id === child.id) as any;
+                              return (
+                                <div key={child.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                  <div>
+                                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{child.name || 'Child'}</p>
+                                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
+                                    {meta ? <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★</p> : null}
+                                  </div>
+                                  <Circle size={14} className="text-emerald-500 fill-current" />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {settingsTab === 'rewards' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-base font-bold" style={{ color: 'var(--text-main)' }}>Rewards Configuration</h3>
+                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length}</span>
+                        </div>
+                        <div className="space-y-4">
+                          <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
+                            <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Stars → Currency rate" type="number" min="0" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
+                              <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
+                              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
+                            </label>
+                            <div className="col-span-1 sm:col-span-3 flex gap-2">
+                              <button disabled={rewardLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : '+ Save Setting')}</button>
+                              {editRewardId ? (
+                                <button type="button" onClick={cancelEditReward} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
+                              ) : (
+                                <button type="button" onClick={() => { setRStarRate(''); setRWeeklyBonus(false); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                              )}
+                            </div>
+                          </form>
+                          <RewardManagement rewards={rewardItems} onCreateReward={createRewardForFamily} onUpdateReward={updateReward} onDeleteReward={deleteReward} loading={rewardItemsLoading} />
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsTab === 'coparenting' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <h3 className="text-base font-bold mb-3" style={{ color: 'var(--text-main)' }}>Co-Parenting</h3>
+                        <div className="space-y-4">
+                          <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <p className="text-sm font-bold mb-1">Your Family Link Code</p>
+                            <p className="text-xs opacity-70 mb-2">Share this code with your co-parent so they can link to your family account.</p>
+                            <div className="bg-black/10 dark:bg-black/30 p-2 rounded-lg font-mono text-center select-all">{user?.id}</div>
+                          </div>
+                          <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!coParentCode.trim() || !user) return;
+                            try {
+                              await updateDoc(doc(db, 'users', user.id), { linked_family_id: coParentCode.trim() });
+                              setSuccess('Successfully linked to family account! Please refresh the page to sync.');
+                            } catch (err) {
+                              setError('Failed to link family account.');
+                            }
+                          }} className="p-4 rounded-xl border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <p className="text-sm font-bold mb-1" style={{ color: 'var(--text-main)' }}>Join a Family Account</p>
+                            <p className="text-xs opacity-70 mb-3" style={{ color: 'var(--text-main)' }}>Enter your co-parent's Family Link Code here.</p>
+                            <input
+                              required
+                              value={coParentCode}
+                              onChange={(e) => setCoParentCode(e.target.value)}
+                              placeholder="Enter Family Code"
+                              className="w-full rounded-xl py-3 px-4 border focus:outline-none mb-3"
+                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                            />
+                            <button type="submit" className="w-full py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-500 hover:bg-indigo-600 transition">
+                              Link Account
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {activeTab === 'challenges' && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
@@ -2126,114 +2309,6 @@ function ParentDashboardContent() {
         </div>
       )}
 
-      {isInboxOpen && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="rounded-3xl w-full max-w-3xl p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
-            <button onClick={() => setIsInboxOpen(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
-            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Family Chat</h2>
-
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!inboxChildId || !inboxMessage.trim() || !user) return;
-              await sendMessage(inboxChildId, familyId, inboxMessage.trim(), 'parent', familyId, inboxSubject);
-              setInboxMessage('');
-              setInboxSubject('');
-              setSuccess('Message sent successfully!');
-              setTimeout(() => setSuccess(''), 3000);
-            }} className="space-y-4">
-              <select required value={inboxChildId} onChange={(e) => setInboxChildId(e.target.value)} className="w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                <option value="">Select Child...</option>
-                {children.map(c => <option key={c.id} value={c.id}>{c.name || c.email}</option>)}
-              </select>
-              <input
-                value={inboxSubject}
-                onChange={(e) => setInboxSubject(e.target.value)}
-                placeholder="Subject (optional)"
-                className="w-full rounded-xl py-3 px-4 border focus:outline-none"
-                style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-              />
-              <div className="rounded-xl border p-3 h-64 overflow-y-auto" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                {inboxChildId && selectedThread.length === 0 ? (
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No messages yet with this child.</p>
-                ) : null}
-                {!inboxChildId ? (
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Select a child to view conversation.</p>
-                ) : null}
-                {selectedThread.map((msg) => {
-                  const isParentSender = (msg.sender_role || 'parent') === 'parent';
-                  return (
-                    <div key={msg.id} className={`mb-2 flex ${isParentSender ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`max-w-[80%] rounded-2xl px-3 py-2 ${isParentSender ? 'bg-sky-500 text-white' : ''}`}
-                        style={isParentSender ? {} : { background: 'var(--surface)', color: 'var(--text-main)', border: '1px solid var(--border-main)' }}
-                      >
-                        {msg.subject ? <p className="text-[11px] font-bold uppercase tracking-wide opacity-80 mb-1">{msg.subject}</p> : null}
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                        <p className={`text-[10px] mt-1 ${isParentSender ? 'text-white/80' : ''}`} style={isParentSender ? {} : { color: 'var(--text-muted)' }}>
-                          {new Date(msg.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <textarea
-                required
-                value={inboxMessage}
-                onChange={(e) => setInboxMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="w-full rounded-xl py-3 px-4 border focus:outline-none min-h-[100px]"
-                style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-              />
-              <button type="submit" className="w-full py-3 rounded-xl text-sm font-bold text-white bg-sky-500 hover:bg-sky-600 transition">
-                Send
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="rounded-3xl w-full max-w-md p-6 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
-            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
-            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Parent Settings & Co-Parenting</h2>
-
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                 <p className="text-sm font-bold mb-1">Your Family Link Code</p>
-                 <p className="text-xs opacity-70 mb-2">Share this code with your co-parent so they can link to your family account.</p>
-                 <div className="bg-black/10 dark:bg-black/30 p-2 rounded-lg font-mono text-center select-all">{user?.id}</div>
-              </div>
-
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                if (!coParentCode.trim() || !user) return;
-                try {
-                  await updateDoc(doc(db, 'users', user.id), { linked_family_id: coParentCode.trim() });
-                  setSuccess('Successfully linked to family account! Please refresh the page to sync.');
-                } catch (err) {
-                  setError('Failed to link family account.');
-                }
-              }} className="p-4 rounded-xl border mt-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                 <p className="text-sm font-bold mb-1" style={{ color: 'var(--text-main)' }}>Join a Family Account</p>
-                 <p className="text-xs opacity-70 mb-3" style={{ color: 'var(--text-main)' }}>Enter your co-parent's Family Link Code here.</p>
-                 <input
-                   required
-                   value={coParentCode}
-                   onChange={(e) => setCoParentCode(e.target.value)}
-                   placeholder="Enter Family Code"
-                   className="w-full rounded-xl py-3 px-4 border focus:outline-none mb-3"
-                   style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
-                 />
-                 <button type="submit" className="w-full py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-500 hover:bg-indigo-600 transition">
-                   Link Account
-                 </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

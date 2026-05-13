@@ -20,6 +20,17 @@ import { db, storage } from '../config/firebase';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
 const MAX_CHILD_VISIBLE_TASKS = 7;
+const isTaskActiveForToday = (task: Task) => {
+  const today = getTodayKey();
+  const dueDateKey = task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : null;
+  const createdDateKey = task.created_at ? new Date(task.created_at).toISOString().slice(0, 10) : null;
+
+  if (task.status === 'completed') {
+    return false;
+  }
+
+  return dueDateKey === today || createdDateKey === today || !task.due_date;
+};
 
 export function useChildProfile(childId: string) {
   const [profile, setProfile] = useState<ChildProfile | null>(null);
@@ -97,7 +108,8 @@ export function useTodaysTasks(childId: string) {
       const logByTaskId = new Map(taskLogs.map((log) => [log.task_id, log]));
       let merged = taskDocs
         .filter((task) => task.child_id === childId)
-        .map((task) => ({ task, log: logByTaskId.get(task.id) }));
+        .map((task) => ({ task, log: logByTaskId.get(task.id) }))
+        .sort((a, b) => new Date(b.task.created_at || 0).getTime() - new Date(a.task.created_at || 0).getTime());
 
       if (merged.length > 0) {
         // --- Exam Planner Integration ---
@@ -126,7 +138,7 @@ export function useTodaysTasks(childId: string) {
           log: logByTaskId.get(vt.id) // Check if already logged/completed today
         }));
         
-        merged = [...virtualMerged, ...merged];
+        merged = [...virtualMerged, ...merged].filter(({ task }) => isTaskActiveForToday(task));
 
         merged.sort((a, b) => {
           if ((a.log?.status === 'completed') === (b.log?.status === 'completed')) return 0;
@@ -140,7 +152,7 @@ export function useTodaysTasks(childId: string) {
     };
 
     const unsubTasks = onSnapshot(
-      query(collection(db, 'tasks'), where('child_id', '==', childId), limit(20)),
+      query(collection(db, 'tasks'), where('child_id', '==', childId), limit(100)),
       (snapshot) => {
         taskDocs = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Task, 'id'>) }));
         syncState();
