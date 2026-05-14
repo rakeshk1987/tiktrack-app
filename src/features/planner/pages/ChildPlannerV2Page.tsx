@@ -5,7 +5,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import type { EventContentArg, EventInput } from '@fullcalendar/core';
+import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/core';
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../config/firebase';
 import { upsertSchoolTimetableCell } from '../services/planner.firestore';
@@ -36,6 +36,13 @@ export default function ChildPlannerV2Page() {
   const [teacher, setTeacher] = useState('');
   const [savingCell, setSavingCell] = useState(false);
   const [schoolError, setSchoolError] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<{
+    title: string;
+    category: string;
+    start: string;
+    end: string;
+  } | null>(null);
+  const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
 
   const { events, loading } = usePlannerEvents(childId, undefined, true);
   const { programs } = usePlannerPrograms(childId, true);
@@ -121,8 +128,13 @@ export default function ChildPlannerV2Page() {
     return allEvents.filter((event) => event.linkedProgramId === programId || event.category === 'tuition' || event.category === 'extracurricular');
   }, [activeTab, allEvents]);
 
+  const filteredEvents = useMemo(() => {
+    if (activeCategoryFilters.includes('all')) return visibleEvents;
+    return visibleEvents.filter((event) => activeCategoryFilters.includes(event.category));
+  }, [visibleEvents, activeCategoryFilters]);
+
   const calendarEvents = useMemo<EventInput[]>(
-    () => visibleEvents.map((event) => ({
+    () => filteredEvents.map((event) => ({
       id: event.id,
       title: event.title,
       start: event.startAt,
@@ -134,8 +146,15 @@ export default function ChildPlannerV2Page() {
         category: event.category
       }
     })),
-    [visibleEvents]
+    [filteredEvents]
   );
+
+  const schoolRoutineItems = useMemo(() => {
+    return allEvents
+      .filter((event) => ['school', 'homework', 'tuition', 'exam', 'extracurricular'].includes(event.category))
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
+      .slice(0, 20);
+  }, [allEvents]);
 
   useEffect(() => {
     if (!timetable) return;
@@ -175,6 +194,38 @@ export default function ChildPlannerV2Page() {
     );
   };
 
+  const onEventClick = (arg: EventClickArg) => {
+    const start = arg.event.start;
+    const end = arg.event.end;
+    setSelectedEvent({
+      title: arg.event.title || 'Event',
+      category: categoryLabel(String(arg.event.extendedProps.category || 'event')),
+      start: start ? start.toLocaleString() : '-',
+      end: end ? end.toLocaleString() : '-'
+    });
+  };
+
+  const filterOptions = [
+    { id: 'all', label: 'All' },
+    { id: 'school', label: 'School' },
+    { id: 'homework', label: 'Homework' },
+    { id: 'exam', label: 'Exams' },
+    { id: 'tuition', label: 'Tuition' },
+    { id: 'extracurricular', label: 'Activities' }
+  ];
+
+  function toggleFilter(id: string) {
+    if (id === 'all') {
+      setActiveCategoryFilters(['all']);
+      return;
+    }
+    setActiveCategoryFilters((prev) => {
+      const next = prev.includes('all') ? [] : [...prev];
+      const updated = next.includes(id) ? next.filter((x) => x !== id) : [...next, id];
+      return updated.length ? updated : ['all'];
+    });
+  }
+
   return (
     <div className="mx-auto mt-4 max-w-7xl space-y-4 pb-20">
       <section className="rounded-3xl border border-white/10 bg-[linear-gradient(150deg,rgba(36,25,71,0.85),rgba(18,27,62,0.95)_45%,rgba(8,14,35,0.98))] p-4 text-white shadow-[0_18px_50px_rgba(18,20,50,0.4)]">
@@ -186,7 +237,7 @@ export default function ChildPlannerV2Page() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setActiveTab('calendar')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'calendar' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Calendar</button>
-            <button type="button" onClick={() => setActiveTab('school')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'school' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>School</button>
+            <button type="button" onClick={() => setActiveTab('school')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'school' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>School Routine</button>
             {programs.map((program) => (
               <button key={program.id} type="button" onClick={() => setActiveTab(`program_${program.id}`)} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === `program_${program.id}` ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>
                 {program.name}
@@ -198,19 +249,37 @@ export default function ChildPlannerV2Page() {
 
       <PlannerConflictBanner conflictCount={insights.conflicts.length} />
 
-      {(activeTab === 'calendar' || activeTab.startsWith('program_')) ? (
+      {activeTab === 'calendar' ? (
         <section className="rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(20,30,64,0.97),rgba(11,16,35,0.98))] p-3 text-white shadow-[0_20px_70px_rgba(5,7,18,0.45)]">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {filterOptions.map((option) => {
+              const active = activeCategoryFilters.includes(option.id) || (option.id === 'all' && activeCategoryFilters.includes('all'));
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => toggleFilter(option.id)}
+                  className={`min-h-[34px] rounded-full border px-3 text-xs font-semibold ${
+                    active ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/8 text-white/80'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
           {loading ? <p className="px-2 py-3 text-sm text-white/70">Loading calendar...</p> : null}
-          <div className="[&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/20 [&_.fc-theme-standard_th]:border-white/20 [&_.fc-scrollgrid]:border-white/20 [&_.fc-col-header-cell-cushion]:text-xs [&_.fc-col-header-cell-cushion]:font-semibold [&_.fc-toolbar-title]:text-base [&_.fc-toolbar-title]:font-semibold [&_.fc-toolbar]:flex-nowrap [&_.fc-toolbar]:items-center [&_.fc-toolbar]:gap-2 [&_.fc-button]:min-h-[36px] [&_.fc-button]:rounded-full [&_.fc-button]:border [&_.fc-button]:border-white/20 [&_.fc-button]:bg-white/8 [&_.fc-button]:px-4 [&_.fc-button]:text-xs [&_.fc-button]:font-semibold [&_.fc-button]:text-white [&_.fc-button:hover]:bg-white/16 [&_.fc-button-active]:!border-cyan-300/80 [&_.fc-button-active]:!bg-cyan-400/25 [&_.fc-daygrid-day]:bg-transparent [&_.fc-timegrid-slot]:border-white/15 [&_.fc-timegrid-axis]:text-white/60 [&_.fc-list-day]:bg-white/5 [&_.fc-list-event]:bg-transparent [&_.fc-list-event:hover_td]:bg-white/10 [&_.fc-day-today]:!bg-cyan-400/10">
+          <div className="[&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/20 [&_.fc-theme-standard_th]:border-white/20 [&_.fc-scrollgrid]:border-white/20 [&_.fc-col-header-cell-cushion]:text-xs [&_.fc-col-header-cell-cushion]:font-semibold [&_.fc-toolbar-title]:text-base [&_.fc-toolbar-title]:font-semibold [&_.fc-toolbar]:flex-nowrap [&_.fc-toolbar]:items-center [&_.fc-toolbar]:gap-2 [&_.fc-button]:min-h-[36px] [&_.fc-button]:rounded-full [&_.fc-button]:border [&_.fc-button]:border-white/20 [&_.fc-button]:bg-white/8 [&_.fc-button]:px-4 [&_.fc-button]:text-xs [&_.fc-button]:font-semibold [&_.fc-button]:text-white [&_.fc-button:hover]:bg-white/16 [&_.fc-button-active]:!border-cyan-300/80 [&_.fc-button-active]:!bg-cyan-400/25 [&_.fc-daygrid-day]:bg-transparent [&_.fc-timegrid-slot]:border-white/15 [&_.fc-timegrid-axis]:text-white/60 [&_.fc-list-day]:bg-white/5 [&_.fc-list-event]:bg-transparent [&_.fc-list-event:hover_td]:bg-white/10 [&_.fc-day-today]:!bg-cyan-400/10 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!px-2 [&_.fc-daygrid-event]:!py-1 [&_.fc-daygrid-event]:!border-0">
             <FullCalendar
               plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
               initialView="dayGridMonth"
-              headerToolbar={{ left: 'dayGridMonth,timeGridWeek,timeGridDay,listYear', center: 'title', right: 'next' }}
-              buttonText={{ dayGridMonth: 'Month', timeGridWeek: 'Week', timeGridDay: 'Day', listYear: 'Year', next: 'Next' }}
+              headerToolbar={{ left: 'prev dayGridMonth,timeGridWeek,timeGridDay,listYear', center: 'title', right: 'next' }}
+              buttonText={{ dayGridMonth: 'Month', timeGridWeek: 'Week', timeGridDay: 'Day', listYear: 'Year', prev: 'Back', next: 'Next' }}
               events={calendarEvents}
               height="auto"
               dayMaxEvents={3}
               eventContent={eventContent}
+              eventClick={onEventClick}
             />
           </div>
         </section>
@@ -220,7 +289,23 @@ export default function ChildPlannerV2Page() {
         <section className="space-y-4 rounded-3xl border border-white/10 bg-[linear-gradient(165deg,rgba(17,36,69,0.96),rgba(22,17,50,0.98))] p-4 text-white shadow-[0_20px_70px_rgba(6,10,30,0.45)]">
           <div>
             <h2 className="text-lg font-semibold">School Timetable</h2>
-            <p className="text-sm text-white/70">Tap any timetable cell to load it into the editor, update details, and save.</p>
+            <p className="text-sm text-white/70">School routine with upcoming school-related tasks. No extra calendar view here.</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+            <h3 className="text-sm font-semibold text-white/85">School Tasks</h3>
+            <div className="mt-2 space-y-2">
+              {schoolRoutineItems.length ? schoolRoutineItems.map((event) => (
+                <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{event.title}</p>
+                    <p className="text-xs text-white/65">{new Date(event.startAt).toLocaleString()}</p>
+                  </div>
+                  <span className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
+                    {categoryLabel(event.category)}
+                  </span>
+                </div>
+              )) : <p className="text-xs text-white/60">No school tasks yet.</p>}
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
             <select value={period} onChange={(e) => setPeriod(e.target.value)} className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3 text-white">
@@ -257,6 +342,22 @@ export default function ChildPlannerV2Page() {
             />
           ) : null}
         </section>
+      ) : null}
+
+      {selectedEvent ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-cyan-300/35 bg-[linear-gradient(165deg,rgba(16,32,60,0.98),rgba(30,20,56,0.98))] p-5 text-white shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-semibold">{selectedEvent.title}</h3>
+              <button type="button" onClick={() => setSelectedEvent(null)} className="rounded-lg border border-white/20 px-2 py-1 text-xs text-white/85 hover:bg-white/10">Close</button>
+            </div>
+            <p className="mt-2 inline-block rounded-full border border-cyan-300/40 bg-cyan-400/20 px-2.5 py-1 text-xs font-semibold capitalize text-cyan-100">{selectedEvent.category}</p>
+            <div className="mt-4 space-y-2 text-sm text-white/85">
+              <p><span className="text-white/60">Start:</span> {selectedEvent.start}</p>
+              <p><span className="text-white/60">End:</span> {selectedEvent.end}</p>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
