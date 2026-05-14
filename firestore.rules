@@ -170,6 +170,18 @@ service cloud.firestore {
       allow delete: if isParent();
     }
 
+    match /programs/{programId} {
+      allow read: if signedIn() && (
+        (resource.data.family_id is string && sameFamily(resource.data.family_id)) ||
+        (resource.data.child_id is string && (isSelf(resource.data.child_id) || isParentOf(resource.data.child_id))) ||
+        isParent()
+      );
+      allow create, update, delete: if isParent() && (
+        !('family_id' in request.resource.data) ||
+        sameFamily(request.resource.data.family_id)
+      );
+    }
+
     match /school_timetables/{docId} {
       allow read: if (
         (resource.data.family_id is string && sameFamily(resource.data.family_id)) ||
