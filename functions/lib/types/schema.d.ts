@@ -149,6 +149,9 @@ export interface Reminder {
     schedule_time?: string;
     task_id?: string;
     exam_event_id?: string;
+    linked_exam_id?: string;
+    target_date?: string;
+    offset_days?: number;
     is_enabled: boolean;
     is_active?: boolean;
     frequency: 'once' | 'daily' | 'weekly';

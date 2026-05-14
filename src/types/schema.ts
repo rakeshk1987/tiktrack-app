@@ -92,10 +92,15 @@ export interface ExamResult {
   id: string;
   child_id: string;
   subject: string;
-  marks_scored: number;
-  total_marks: number;
+  marks_scored?: number | null;
+  total_marks?: number | null;
   exam_date: string;
   exam_type?: 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other';
+  status?: 'scheduled' | 'completed_pending_result' | 'result_published' | 'missed';
+  result_published_at?: string | null;
+  syllabus_scope?: string;
+  reminder_plan?: string[];
+  linked_program_id?: string | null;
 }
 
 export interface GrowthLog {
@@ -190,6 +195,9 @@ export interface Reminder {
   schedule_time?: string; // HH:MM format for daily reminders
   task_id?: string;
   exam_event_id?: string;
+  linked_exam_id?: string;
+  target_date?: string;
+  offset_days?: number;
   is_enabled: boolean;
   frequency: 'once' | 'daily' | 'weekly';
   days_of_week?: number[]; // 0-6, Sunday=0

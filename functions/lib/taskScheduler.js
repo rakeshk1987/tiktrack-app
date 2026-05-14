@@ -344,6 +344,7 @@ exports.generateMotivationalTasks = generateMotivationalTasks;
  * Smart task generation combining all logic
  */
 const generateSmartDailyTasks = (routineSlots, profile, exams, upcomingEvents, currentMood, weeklyCompletionRate = 50) => {
+    const MAX_CHILD_DAILY_TASKS = 7;
     let tasks = [];
     // Generate routine-based tasks
     const routineTasks = (0, exports.generateDailyTasks)(routineSlots, profile, exams, upcomingEvents, currentMood, 7 // Max 7 routine tasks
@@ -370,8 +371,8 @@ const generateSmartDailyTasks = (routineSlots, profile, exams, upcomingEvents, c
     // Add motivational tasks for struggling children
     const motivationalTasks = (0, exports.generateMotivationalTasks)(profile, currentMood);
     tasks = tasks.concat(motivationalTasks);
-    // Cap total tasks
-    return tasks.slice(0, 12);
+    // Enforce child-facing daily task ceiling.
+    return tasks.slice(0, MAX_CHILD_DAILY_TASKS);
 };
 exports.generateSmartDailyTasks = generateSmartDailyTasks;
 //# sourceMappingURL=taskScheduler.js.map

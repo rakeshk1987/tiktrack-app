@@ -47,6 +47,7 @@ import { ParentPlannerV2Page } from '../../features/planner';
 import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerPrograms';
 import { upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
 import type { PlannerActivityModule, PlannerProgram } from '../../features/planner/types/planner.types';
+import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTimetable';
 
 interface ChildAccount {
   id: string;
@@ -120,6 +121,7 @@ function ParentDashboardContent() {
   const [eMarks, setEMarks] = useState<number | ''>('');
   const [eTotal, setETotal] = useState<number | ''>('');
   const [eDate, setEDate] = useState('');
+  const [eSyllabusScope, setESyllabusScope] = useState('');
   const [editExamId, setEditExamId] = useState<string | null>(null);
   const [filterChild, setFilterChild] = useState<string>('');
   const [growthLogs, setGrowthLogs] = useState<Array<any>>([]);
@@ -166,6 +168,8 @@ function ParentDashboardContent() {
   const [activityName, setActivityName] = useState('');
   const [activityModules, setActivityModules] = useState<PlannerActivityModule[]>(['tasks']);
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<PlannerProgram | null>(null);
+  const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
 
   const parentTabs = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -192,6 +196,7 @@ function ParentDashboardContent() {
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
   const selectedActivityChildId = activityChildId || children[0]?.id || '';
   const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId, false);
+  const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, true);
 
   useEffect(() => {
     if (!user) {
@@ -909,29 +914,71 @@ function ParentDashboardContent() {
     setExamLoading(true);
 
     try {
+      const examDateIso = eDate ? new Date(eDate).toISOString() : new Date().toISOString();
+      const hasResult = eMarks !== '' && eTotal !== '';
+      const datePassed = new Date(examDateIso).getTime() < Date.now();
+      const computedStatus: 'scheduled' | 'completed_pending_result' | 'result_published' =
+        hasResult ? 'result_published' : (datePassed ? 'completed_pending_result' : 'scheduled');
+      const reminderPlan = ['7d', '3d', '1d', 'same_day'];
+
+      const syncExamCountdownReminders = async (examId: string, childId: string | null, examTitle: string, examDate: string, status: string) => {
+        if (!childId) return;
+        const offsetByPlan: Record<string, number> = { '7d': 7, '3d': 3, '1d': 1, same_day: 0 };
+        for (const planItem of reminderPlan) {
+          const offset = offsetByPlan[planItem] ?? 0;
+          const reminderId = `exam_${examId}_${planItem}`;
+          await setDoc(doc(db, 'reminders', reminderId), {
+            child_id: childId,
+            parent_id: familyId,
+            type: 'exam_countdown',
+            title: `Exam Reminder: ${examTitle}`,
+            message: offset === 0 ? `${examTitle} is today. You can do this!` : `${examTitle} in ${offset} day${offset === 1 ? '' : 's'}. Start preparation.`,
+            schedule_time: '07:00',
+            is_enabled: status === 'scheduled',
+            frequency: 'daily',
+            days_of_week: [0, 1, 2, 3, 4, 5, 6],
+            linked_exam_id: examId,
+            target_date: examDate,
+            offset_days: offset,
+            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString()
+          }, { merge: true });
+        }
+      };
+
       if (editExamId) {
         await updateDoc(doc(db, 'exams', editExamId), {
           child_id: eChild || null,
           subject: eSubject,
           exam_type: eType,
-          marks_scored: eMarks || 0,
-          total_marks: eTotal || 0,
-          exam_date: eDate ? new Date(eDate).toISOString() : new Date().toISOString(),
+          marks_scored: hasResult ? Number(eMarks) : null,
+          total_marks: hasResult ? Number(eTotal) : null,
+          exam_date: examDateIso,
+          status: computedStatus,
+          syllabus_scope: eSyllabusScope || '',
+          result_published_at: hasResult ? new Date().toISOString() : null,
+          reminder_plan: reminderPlan,
           updated_at: new Date().toISOString()
         });
+        await syncExamCountdownReminders(editExamId, eChild || null, eSubject, examDateIso, computedStatus);
         setSuccess('Exam updated.');
       } else {
-        await addDoc(collection(db, 'exams'), {
+        const createdRef = await addDoc(collection(db, 'exams'), {
           child_id: eChild || null,
           subject: eSubject,
           exam_type: eType,
-          marks_scored: eMarks || 0,
-          total_marks: eTotal || 0,
-          exam_date: eDate ? new Date(eDate).toISOString() : new Date().toISOString(),
+          marks_scored: hasResult ? Number(eMarks) : null,
+          total_marks: hasResult ? Number(eTotal) : null,
+          exam_date: examDateIso,
+          status: computedStatus,
+          syllabus_scope: eSyllabusScope || '',
+          result_published_at: hasResult ? new Date().toISOString() : null,
+          reminder_plan: ['7d', '3d', '1d', 'same_day'],
           parent_id: familyId,
           family_id: familyId,
           created_at: new Date().toISOString()
         });
+        await syncExamCountdownReminders(createdRef.id, eChild || null, eSubject, examDateIso, computedStatus);
         setSuccess('Exam result recorded.');
       }
 
@@ -941,6 +988,7 @@ function ParentDashboardContent() {
       setEMarks('');
       setETotal('');
       setEDate('');
+      setESyllabusScope('');
       setEditExamId(null);
     } catch (err) {
       console.error('Failed to create exam:', err);
@@ -968,6 +1016,7 @@ function ParentDashboardContent() {
     setEMarks(ex.marks_scored ?? '');
     setETotal(ex.total_marks ?? '');
     setEDate(ex.exam_date ? new Date(ex.exam_date).toISOString().slice(0,10) : '');
+    setESyllabusScope(ex.syllabus_scope || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -978,6 +1027,7 @@ function ParentDashboardContent() {
     setEMarks('');
     setETotal('');
     setEDate('');
+    setESyllabusScope('');
   };
 
   const handleCreateGrowth = async (ev: React.FormEvent) => {
@@ -1482,6 +1532,45 @@ function ParentDashboardContent() {
 
   const automatedTasks = tasks.filter((task) => task.is_generated === true);
   const manualTasks = tasks.filter((task) => task.is_generated !== true);
+  const selectedActivityTasks = selectedActivity
+    ? tasks.filter((task) => task.child_id === selectedActivity.childId && task.linked_program_id === selectedActivity.id)
+    : [];
+  const selectedActivityExams = selectedActivity
+    ? exams.filter((exam) => exam.child_id === selectedActivity.childId && exam.linked_program_id === selectedActivity.id)
+    : [];
+  const selectedActivityEvents = selectedActivity
+    ? events.filter((event) => event.child_id === selectedActivity.childId && event.linked_program_id === selectedActivity.id)
+    : [];
+
+  const mappableTasks = selectedActivity
+    ? tasks.filter((task) => task.child_id === selectedActivity.childId && !task.linked_program_id)
+    : [];
+  const mappableExams = selectedActivity
+    ? exams.filter((exam) => exam.child_id === selectedActivity.childId && !exam.linked_program_id)
+    : [];
+
+  const visibleExams = (filterChild ? exams.filter((x) => x.child_id === filterChild) : exams);
+  const upcomingExamSchedules = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'scheduled');
+  const pendingExamResults = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'completed_pending_result');
+  const publishedExamResults = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'result_published');
+
+  const linkTaskToActivity = async (taskId: string) => {
+    if (!selectedActivity) return;
+    await updateDoc(doc(db, 'tasks', taskId), {
+      linked_program_id: selectedActivity.id,
+      updated_at: new Date().toISOString()
+    });
+    setSuccess('Task mapped to activity.');
+  };
+
+  const linkExamToActivity = async (examId: string) => {
+    if (!selectedActivity) return;
+    await updateDoc(doc(db, 'exams', examId), {
+      linked_program_id: selectedActivity.id,
+      updated_at: new Date().toISOString()
+    });
+    setSuccess('Exam mapped to activity.');
+  };
 
   const clearActivityForm = () => {
     setActivityName('');
@@ -2191,7 +2280,7 @@ function ParentDashboardContent() {
                 ['family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'xl:col-span-12',
                 !['dashboard', 'family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'hidden'
               )}>
-                {(activeTab === 'dashboard' || activeTab === 'family') && (
+                {activeTab === 'dashboard' && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
                       <Users2 size={18} /> Child Accounts
@@ -2222,7 +2311,7 @@ function ParentDashboardContent() {
                   </div>
                 )}
 
-                {(activeTab === 'dashboard' || activeTab === 'family') && (
+                {activeTab === 'dashboard' && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Quick Metrics</h2>
                     <div className="grid grid-cols-3 gap-2">
@@ -2342,14 +2431,15 @@ function ParentDashboardContent() {
                             <option value="other">Other</option>
                           </select>
                           <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                          <input required value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                          <input required value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input value={eSyllabusScope} onChange={(ev) => setESyllabusScope(ev.target.value)} placeholder="Syllabus scope (optional)" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored (add later)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks (add later)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <div className="md:col-span-2 flex flex-wrap gap-2">
-                            <button disabled={examLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{examLoading ? 'Saving...' : (editExamId ? 'Save Changes' : '+ Record Exam')}</button>
+                            <button disabled={examLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{examLoading ? 'Saving...' : (editExamId ? 'Save Changes' : '+ Save Exam Schedule / Result')}</button>
                             {editExamId ? (
                               <button type="button" onClick={cancelEdit} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
                             ) : (
-                              <button type="button" onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                              <button type="button" onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
                             )}
                           </div>
                         </form>
@@ -2357,22 +2447,61 @@ function ParentDashboardContent() {
                         <div>
                           {examsLoading ? (
                             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading exams...</p>
-                          ) : (filterChild ? exams.filter((x) => x.child_id === filterChild) : exams).length === 0 ? (
+                          ) : visibleExams.length === 0 ? (
                             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No exam results recorded yet.</p>
                           ) : (
-                            <div className="space-y-2">
-                              {(filterChild ? exams.filter((x) => x.child_id === filterChild) : exams).map((ex) => (
-                                <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                                  <div>
-                                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
-                                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored}/{ex.total_marks} • {(ex.exam_type || 'exam').replace('_', ' ')} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
-                                    <button onClick={() => handleDeleteExam(ex.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
-                                  </div>
+                            <div className="space-y-4">
+                              <div>
+                                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-cyan-600">Upcoming Exams</p>
+                                <div className="space-y-2">
+                                  {upcomingExamSchedules.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No upcoming exams.</p> : null}
+                                  {upcomingExamSchedules.map((ex) => (
+                                    <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                      <div>
+                                        <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(ex.exam_type || 'exam').replace('_', ' ')} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                        <button onClick={() => handleDeleteExam(ex.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
+                              </div>
+                              <div>
+                                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-amber-600">Pending Results</p>
+                                <div className="space-y-2">
+                                  {pendingExamResults.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No pending results.</p> : null}
+                                  {pendingExamResults.map((ex) => (
+                                    <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                      <div>
+                                        <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(ex.exam_type || 'exam').replace('_', ' ')} • Exam done, add marks now.</p>
+                                      </div>
+                                      <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Add Marks</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-emerald-600">Published Results</p>
+                                <div className="space-y-2">
+                                  {publishedExamResults.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No published results yet.</p> : null}
+                                  {publishedExamResults.map((ex) => (
+                                    <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                      <div>
+                                        <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored ?? '-'} / {ex.total_marks ?? '-'} • {(ex.exam_type || 'exam').replace('_', ' ')} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                        <button onClick={() => handleDeleteExam(ex.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -2417,12 +2546,15 @@ function ParentDashboardContent() {
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No activities yet for this child.</p>
                       ) : (
                         activityPrograms.map((program) => (
-                          <div key={program.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <div key={program.id} className="rounded-2xl border p-4 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(6,182,212,0.1))' }}>
                             <div>
                               <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{program.name}</p>
-                              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Modules: {(program.modules || ['tasks']).join(', ')}</p>
+                              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === program.childId)?.name || 'Child'} • Modules: {(program.modules || ['tasks']).join(', ')}</p>
                             </div>
-                            <button type="button" onClick={() => startEditActivity(program)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>
+                              <button type="button" onClick={() => startEditActivity(program)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                            </div>
                           </div>
                         ))
                       )}
@@ -2712,6 +2844,98 @@ function ParentDashboardContent() {
           </main>
         </div>
       </div>
+
+      {selectedActivity ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-4xl rounded-3xl border bg-[var(--surface)] p-5 shadow-2xl" style={{ borderColor: 'var(--border-main)' }}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400">Activity</p>
+                <h3 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>{selectedActivity.name}</h3>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === selectedActivity.childId)?.name || 'Child'}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedActivity(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+            </div>
+
+            <div className="mb-4 flex flex-wrap gap-2">
+              {(selectedActivity.modules || ['tasks']).map((moduleId) => (
+                <button key={moduleId} type="button" onClick={() => setActivityModalTab(moduleId)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold', activityModalTab === moduleId ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}>
+                  {moduleId}
+                </button>
+              ))}
+            </div>
+
+            {activityModalTab === 'tasks' ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Mapped Tasks</p>
+                {selectedActivityTasks.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped tasks yet.</p> : null}
+                {selectedActivityTasks.map((task) => (
+                  <div key={task.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{task.title}</p>
+                  </div>
+                ))}
+                <p className="pt-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Map Existing Tasks</p>
+                {mappableTasks.map((task) => (
+                  <div key={task.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <p className="text-sm" style={{ color: 'var(--text-main)' }}>{task.title}</p>
+                    <button type="button" onClick={() => void linkTaskToActivity(task.id)} className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-white">Map</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {activityModalTab === 'exams' ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Mapped Exams</p>
+                {selectedActivityExams.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped exams yet.</p> : null}
+                {selectedActivityExams.map((exam) => (
+                  <div key={exam.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{exam.subject}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {(exam.status || 'scheduled').replaceAll('_', ' ')} • {exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'No date'} • {exam.marks_scored ?? '-'} / {exam.total_marks ?? '-'}
+                    </p>
+                  </div>
+                ))}
+                <p className="pt-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Map Existing Exams</p>
+                {mappableExams.map((exam) => (
+                  <div key={exam.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <p className="text-sm" style={{ color: 'var(--text-main)' }}>{exam.subject}</p>
+                    <button type="button" onClick={() => void linkExamToActivity(exam.id)} className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-white">Map</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {activityModalTab === 'events' ? (
+              <div className="space-y-3">
+                {selectedActivityEvents.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped events yet.</p> : null}
+                {selectedActivityEvents.map((ev) => (
+                  <div key={ev.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ev.title}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {activityModalTab === 'timetable' ? (
+              <div className="space-y-2">
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Timetable preview for selected child.</p>
+                {selectedChildTimetable ? (
+                  <div className="rounded-xl border p-3 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                    {selectedChildTimetable.periods.length} periods across {selectedChildTimetable.days.length} days.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {activityModalTab === 'challenges' ? (
+              <div className="space-y-2">
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Challenge mapping UI can be plugged here next.</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {isModaling && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">

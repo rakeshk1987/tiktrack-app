@@ -228,8 +228,8 @@ function ParentPlannerInner() {
 
       <section className="rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,44,0.97),rgba(14,18,35,0.97))] p-5 text-white shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Parent Planner</p>
-        <h2 className="mt-2 text-3xl font-display font-bold">Master Calendar Control Center</h2>
-        <p className="mt-2 text-sm text-white/70">Controlled scheduling flows with Firestore-backed create/edit and timetable CRUD.</p>
+        <h2 className="mt-2 text-3xl font-display font-bold">Calendar</h2>
+        <p className="mt-2 text-sm text-white/70">Shared family calendar with drag/drop planning.</p>
         <p className="mt-2 text-xs text-white/50">Feature flags: recurrence={String(PLANNER_FEATURE_FLAGS.advancedRecurrence)} burnout={String(PLANNER_FEATURE_FLAGS.burnoutEngine)} sync={String(PLANNER_FEATURE_FLAGS.googleSync)}</p>
       </section>
 

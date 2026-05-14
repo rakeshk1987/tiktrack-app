@@ -92,12 +92,15 @@ export default function ChildPlannerV2Page() {
         const row = d.data() as Record<string, unknown>;
         const startAt = typeof row.exam_date === 'string' ? `${row.exam_date}T09:00:00.000Z` : now;
         const endAt = typeof row.exam_date === 'string' ? `${row.exam_date}T11:00:00.000Z` : now;
+        const marksScored = typeof row.marks_scored === 'number' ? row.marks_scored : null;
+        const totalMarks = typeof row.total_marks === 'number' ? row.total_marks : null;
+        const resultSuffix = marksScored !== null && totalMarks !== null ? ` (${marksScored}/${totalMarks})` : '';
         return {
           id: `exam_${d.id}`,
           familyId,
           childId,
           parentId: familyId,
-          title: `${String(row.subject || 'Exam')} Exam`,
+          title: `${String(row.subject || 'Exam')} Exam${resultSuffix}`,
           category: 'exam',
           color: '#ef4444',
           startAt,

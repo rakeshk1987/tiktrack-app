@@ -142,8 +142,7 @@ exports.dispatchRemindersJob = functions
     console.log('🔔 Starting reminder dispatch job');
     try {
         const now = new Date();
-        const currentHour = now.getHours();
-        const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const { hour: currentHour, day: currentDay, dateKey: currentDateKey } = getKarachiHourAndDay(now);
         // Primary filter for current schema (`is_enabled`), fallback to legacy (`is_active`).
         let remindersSnapshot = await remindersRef.where('is_enabled', '==', true).get();
         if (remindersSnapshot.empty) {
@@ -159,7 +158,7 @@ exports.dispatchRemindersJob = functions
             const reminder = reminderDoc.data();
             try {
                 // Check if reminder should trigger now
-                if (!shouldDispatchReminder(reminder, currentHour, currentDay)) {
+                if (!shouldDispatchReminder(reminder, currentHour, currentDay, currentDateKey)) {
                     results.skipped++;
                     continue;
                 }
@@ -296,6 +295,8 @@ exports.cleanupExpiredDataJob = functions
     const results = {
         expiredTasksDeleted: 0,
         oldLogsDeleted: 0,
+        proofLogsDeleted: 0,
+        proofAssetsDeleted: 0,
         errors: 0,
     };
     try {
@@ -317,6 +318,29 @@ exports.cleanupExpiredDataJob = functions
         const deleteLogPromises = oldLogsQuery.docs.map(doc => doc.ref.delete());
         await Promise.all(deleteLogPromises);
         results.oldLogsDeleted = oldLogsQuery.size;
+        // Delete proof logs and proof assets older than 60 days (best-effort per file).
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(now.getDate() - 60);
+        const oldProofLogsQuery = await db.collection('proof_logs')
+            .where('timestamp', '<', sixtyDaysAgo.toISOString())
+            .get();
+        const maybeStorageBucket = typeof admin.storage === 'function' ? admin.storage().bucket() : null;
+        for (const proofDoc of oldProofLogsQuery.docs) {
+            const proof = proofDoc.data();
+            const storagePath = extractStoragePathFromProofUrl(proof.image_url);
+            if (maybeStorageBucket && storagePath) {
+                try {
+                    await maybeStorageBucket.file(storagePath).delete();
+                    results.proofAssetsDeleted++;
+                }
+                catch (error) {
+                    // Continue cleanup even if file is already missing or URL is stale.
+                    console.warn(`⚠️ Failed to delete proof asset: ${storagePath}`, error);
+                }
+            }
+            await proofDoc.ref.delete();
+            results.proofLogsDeleted++;
+        }
         console.log('📊 Cleanup job completed:', results);
         return results;
     }
@@ -329,10 +353,19 @@ exports.cleanupExpiredDataJob = functions
 /**
  * Helper function to determine if a reminder should be dispatched
  */
-function shouldDispatchReminder(reminder, currentHour, currentDay) {
+function shouldDispatchReminder(reminder, currentHour, currentDay, currentDateKey) {
     var _a, _b, _c;
     const scheduledHour = (_a = reminder.scheduled_time) !== null && _a !== void 0 ? _a : (reminder.schedule_time ? Number(reminder.schedule_time.split(':')[0]) : undefined);
     const scheduledDay = (_b = reminder.scheduled_day) !== null && _b !== void 0 ? _b : (_c = reminder.days_of_week) === null || _c === void 0 ? void 0 : _c[0];
+    if (reminder.type === 'exam_countdown' && reminder.target_date) {
+        const offset = Number(reminder.offset_days || 0);
+        const target = new Date(reminder.target_date);
+        target.setHours(0, 0, 0, 0);
+        const dispatchDate = new Date(target);
+        dispatchDate.setDate(dispatchDate.getDate() - offset);
+        const dispatchKey = dispatchDate.toISOString().slice(0, 10);
+        return dispatchKey === currentDateKey && scheduledHour === currentHour;
+    }
     // Check frequency
     switch (reminder.frequency) {
         case 'once':
@@ -348,6 +381,63 @@ function shouldDispatchReminder(reminder, currentHour, currentDay) {
             return scheduledDay === currentDay && scheduledHour === currentHour;
         default:
             return false;
+    }
+}
+function getKarachiHourAndDay(date) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Karachi',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'short',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const hour = Number((_b = (_a = parts.find((p) => p.type === 'hour')) === null || _a === void 0 ? void 0 : _a.value) !== null && _b !== void 0 ? _b : '0');
+    const minute = Number((_d = (_c = parts.find((p) => p.type === 'minute')) === null || _c === void 0 ? void 0 : _c.value) !== null && _d !== void 0 ? _d : '0');
+    const weekdayShort = (_f = (_e = parts.find((p) => p.type === 'weekday')) === null || _e === void 0 ? void 0 : _e.value) !== null && _f !== void 0 ? _f : 'Sun';
+    const year = (_h = (_g = parts.find((p) => p.type === 'year')) === null || _g === void 0 ? void 0 : _g.value) !== null && _h !== void 0 ? _h : '1970';
+    const month = (_k = (_j = parts.find((p) => p.type === 'month')) === null || _j === void 0 ? void 0 : _j.value) !== null && _k !== void 0 ? _k : '01';
+    const dayOfMonth = (_m = (_l = parts.find((p) => p.type === 'day')) === null || _l === void 0 ? void 0 : _l.value) !== null && _m !== void 0 ? _m : '01';
+    const dayMap = {
+        Sun: 0,
+        Mon: 1,
+        Tue: 2,
+        Wed: 3,
+        Thu: 4,
+        Fri: 5,
+        Sat: 6,
+    };
+    const roundedHour = minute >= 30 ? (hour + 1) % 24 : hour;
+    return { hour: roundedHour, day: (_o = dayMap[weekdayShort]) !== null && _o !== void 0 ? _o : 0, dateKey: `${year}-${month}-${dayOfMonth}` };
+}
+function extractStoragePathFromProofUrl(imageUrl) {
+    if (!imageUrl)
+        return null;
+    // Handle gs://bucket/path format.
+    if (imageUrl.startsWith('gs://')) {
+        const withoutScheme = imageUrl.slice('gs://'.length);
+        const slashIndex = withoutScheme.indexOf('/');
+        if (slashIndex === -1)
+            return null;
+        return withoutScheme.slice(slashIndex + 1);
+    }
+    // Handle Firebase download URL format:
+    // https://firebasestorage.googleapis.com/.../o/<encodedPath>?...
+    try {
+        const parsed = new URL(imageUrl);
+        const marker = '/o/';
+        const markerIndex = parsed.pathname.indexOf(marker);
+        if (markerIndex === -1)
+            return null;
+        const encodedPath = parsed.pathname.slice(markerIndex + marker.length);
+        return decodeURIComponent(encodedPath);
+    }
+    catch (_a) {
+        return null;
     }
 }
 /**

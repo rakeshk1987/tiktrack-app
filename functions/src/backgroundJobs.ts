@@ -143,7 +143,7 @@ export const dispatchRemindersJob = functions
 
     try {
       const now = new Date();
-      const { hour: currentHour, day: currentDay } = getKarachiHourAndDay(now);
+      const { hour: currentHour, day: currentDay, dateKey: currentDateKey } = getKarachiHourAndDay(now);
 
       // Primary filter for current schema (`is_enabled`), fallback to legacy (`is_active`).
       let remindersSnapshot = await remindersRef.where('is_enabled', '==', true).get();
@@ -163,7 +163,7 @@ export const dispatchRemindersJob = functions
 
         try {
           // Check if reminder should trigger now
-          if (!shouldDispatchReminder(reminder, currentHour, currentDay)) {
+          if (!shouldDispatchReminder(reminder, currentHour, currentDay, currentDateKey)) {
             results.skipped++;
             continue;
           }
@@ -394,11 +394,21 @@ export const cleanupExpiredDataJob = functions
 /**
  * Helper function to determine if a reminder should be dispatched
  */
-function shouldDispatchReminder(reminder: Reminder, currentHour: number, currentDay: number): boolean {
+function shouldDispatchReminder(reminder: Reminder, currentHour: number, currentDay: number, currentDateKey: string): boolean {
   const scheduledHour =
     reminder.scheduled_time ??
     (reminder.schedule_time ? Number(reminder.schedule_time.split(':')[0]) : undefined);
   const scheduledDay = reminder.scheduled_day ?? reminder.days_of_week?.[0];
+
+  if (reminder.type === 'exam_countdown' && reminder.target_date) {
+    const offset = Number(reminder.offset_days || 0);
+    const target = new Date(reminder.target_date);
+    target.setHours(0, 0, 0, 0);
+    const dispatchDate = new Date(target);
+    dispatchDate.setDate(dispatchDate.getDate() - offset);
+    const dispatchKey = dispatchDate.toISOString().slice(0, 10);
+    return dispatchKey === currentDateKey && scheduledHour === currentHour;
+  }
 
   // Check frequency
   switch (reminder.frequency) {
@@ -421,18 +431,24 @@ function shouldDispatchReminder(reminder: Reminder, currentHour: number, current
   }
 }
 
-function getKarachiHourAndDay(date: Date): { hour: number; day: number } {
+function getKarachiHourAndDay(date: Date): { hour: number; day: number; dateKey: string } {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Karachi',
     hour: '2-digit',
     minute: '2-digit',
     weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour12: false,
   });
   const parts = formatter.formatToParts(date);
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
   const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
   const weekdayShort = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun';
+  const year = parts.find((p) => p.type === 'year')?.value ?? '1970';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '01';
+  const dayOfMonth = parts.find((p) => p.type === 'day')?.value ?? '01';
   const dayMap: Record<string, number> = {
     Sun: 0,
     Mon: 1,
@@ -443,7 +459,7 @@ function getKarachiHourAndDay(date: Date): { hour: number; day: number } {
     Sat: 6,
   };
   const roundedHour = minute >= 30 ? (hour + 1) % 24 : hour;
-  return { hour: roundedHour, day: dayMap[weekdayShort] ?? 0 };
+  return { hour: roundedHour, day: dayMap[weekdayShort] ?? 0, dateKey: `${year}-${month}-${dayOfMonth}` };
 }
 
 function extractStoragePathFromProofUrl(imageUrl?: string): string | null {
