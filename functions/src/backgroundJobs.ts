@@ -3,7 +3,6 @@ import * as admin from 'firebase-admin';
 import {
   generateSmartDailyTasks,
   generateExamPrepTasks,
-  GeneratedTask,
 } from './taskScheduler';
 import { Reminder, RoutineConfiguration, ChildProfile, ExamResult, Event, MoodLog } from './types/schema';
 
@@ -267,6 +266,9 @@ export const generateExamPrepTasksJob = functions
           }
 
           // Get child profile
+          if (!exam.child_id) {
+            continue;
+          }
           const profileDoc = await profilesRef.doc(exam.child_id).get();
           if (!profileDoc.exists) continue;
 
@@ -492,36 +494,36 @@ function extractStoragePathFromProofUrl(imageUrl?: string): string | null {
  */
 export const triggerDailyTasksJob = functions.https.onRequest(async (req, res) => {
   try {
-    const result = await generateDailyTasksJob.run({});
+    const result = await (generateDailyTasksJob as any).run({}, {});
     res.json({ success: true, result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
 export const triggerReminderDispatchJob = functions.https.onRequest(async (req, res) => {
   try {
-    const result = await dispatchRemindersJob.run({});
+    const result = await (dispatchRemindersJob as any).run({}, {});
     res.json({ success: true, result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
 export const triggerExamPrepJob = functions.https.onRequest(async (req, res) => {
   try {
-    const result = await generateExamPrepTasksJob.run({});
+    const result = await (generateExamPrepTasksJob as any).run({}, {});
     res.json({ success: true, result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
 export const triggerCleanupJob = functions.https.onRequest(async (req, res) => {
   try {
-    const result = await cleanupExpiredDataJob.run({});
+    const result = await (cleanupExpiredDataJob as any).run({}, {});
     res.json({ success: true, result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });

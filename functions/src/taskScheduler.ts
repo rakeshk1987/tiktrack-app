@@ -3,7 +3,6 @@ import {
   RoutineSlot,
   ChildProfile,
   ExamResult,
-  MoodLog,
   Event,
 } from './types/schema';
 

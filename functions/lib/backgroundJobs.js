@@ -248,6 +248,9 @@ exports.generateExamPrepTasksJob = functions
                     continue;
                 }
                 // Get child profile
+                if (!exam.child_id) {
+                    continue;
+                }
                 const profileDoc = await profilesRef.doc(exam.child_id).get();
                 if (!profileDoc.exists)
                     continue;
@@ -445,38 +448,38 @@ function extractStoragePathFromProofUrl(imageUrl) {
  */
 exports.triggerDailyTasksJob = functions.https.onRequest(async (req, res) => {
     try {
-        const result = await exports.generateDailyTasksJob.run({});
+        const result = await exports.generateDailyTasksJob.run({}, {});
         res.json({ success: true, result });
     }
     catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
 });
 exports.triggerReminderDispatchJob = functions.https.onRequest(async (req, res) => {
     try {
-        const result = await exports.dispatchRemindersJob.run({});
+        const result = await exports.dispatchRemindersJob.run({}, {});
         res.json({ success: true, result });
     }
     catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
 });
 exports.triggerExamPrepJob = functions.https.onRequest(async (req, res) => {
     try {
-        const result = await exports.generateExamPrepTasksJob.run({});
+        const result = await exports.generateExamPrepTasksJob.run({}, {});
         res.json({ success: true, result });
     }
     catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
 });
 exports.triggerCleanupJob = functions.https.onRequest(async (req, res) => {
     try {
-        const result = await exports.cleanupExpiredDataJob.run({});
+        const result = await exports.cleanupExpiredDataJob.run({}, {});
         res.json({ success: true, result });
     }
     catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
 });
 //# sourceMappingURL=backgroundJobs.js.map
