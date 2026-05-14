@@ -256,3 +256,14 @@ export interface MoneyPotEntry {
   note?: string;
   created_at?: string;
 }
+
+export interface MoneyPotTarget {
+  id: string;
+  child_id: string;
+  parent_id?: string;
+  title: string;
+  target_amount: number;
+  period: 'monthly' | 'yearly';
+  created_at?: string;
+  achieved_at?: string;
+}
