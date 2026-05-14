@@ -141,13 +141,13 @@ function ParentDashboardContent() {
   const [editRewardId, setEditRewardId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'growth' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner'
+    'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner'
   >('dashboard');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
-  const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'coparenting'>('create_child');
+  const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'growth' | 'coparenting'>('create_child');
 
   const [chTitle, setChTitle] = useState('');
   const [chChild, setChChild] = useState('');
@@ -163,7 +163,6 @@ function ParentDashboardContent() {
     { id: 'proofs', label: 'Proofs' },
     { id: 'events', label: 'Events' },
     { id: 'planner', label: 'Planner' },
-    { id: 'growth', label: 'Growth' },
     { id: 'exams', label: 'Exams' },
     { id: 'challenges', label: 'Challenges' },
     { id: 'communication', label: 'Communication' },
@@ -1632,7 +1631,7 @@ function ParentDashboardContent() {
                   <ParentPlannerV2Page />
                 </div>
 
-                <div className={activeTab === 'growth' ? 'xl:col-span-12' : 'hidden'}>
+                <div className={activeTab === 'settings' && settingsTab === 'growth' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Growth & Health</h2>
@@ -2379,7 +2378,7 @@ function ParentDashboardContent() {
                   <div className="space-y-4">
                     <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                       <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Settings</h2>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
                         <button onClick={() => setSettingsTab('create_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'create_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'create_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Create Child
                         </button>
@@ -2388,6 +2387,9 @@ function ParentDashboardContent() {
                         </button>
                         <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Rewards
+                        </button>
+                        <button onClick={() => setSettingsTab('growth')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'growth' ? 'white' : 'var(--text-main)', background: settingsTab === 'growth' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Growth
                         </button>
                         <button onClick={() => setSettingsTab('coparenting')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'coparenting' ? 'white' : 'var(--text-main)', background: settingsTab === 'coparenting' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Co-Parenting

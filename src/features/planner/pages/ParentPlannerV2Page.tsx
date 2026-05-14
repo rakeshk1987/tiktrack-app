@@ -4,17 +4,16 @@ import type { DateSelectArg, EventClickArg, EventDropArg, EventInput } from '@fu
 import { useAuth } from '../../../contexts/AuthContext';
 import { PLANNER_EVENT_CATEGORIES, PLANNER_FEATURE_FLAGS } from '../constants/planner.constants';
 import type { PlannerEvent } from '../types/planner.types';
-import { createParentPlannerEvent, updateParentPlannerEvent, upsertSchoolTimetableCell } from '../services/planner.firestore';
+import { createParentPlannerEvent, updateParentPlannerEvent } from '../services/planner.firestore';
 import { usePlannerEvents } from '../hooks/usePlannerEvents';
 import { usePlannerInsights } from '../hooks/usePlannerInsights';
 import { usePlannerPrograms } from '../hooks/usePlannerPrograms';
-import { usePlannerTimetable } from '../hooks/usePlannerTimetable';
 import { usePlannerLightInsights } from '../hooks/usePlannerLightInsights';
 import { usePlannerMutationQueue } from '../hooks/usePlannerMutationQueue';
 import { usePlannerToast, PlannerToastProvider } from '../hooks/usePlannerToast';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
-import { plannerTimetableCellSchema, type PlannerEventInput } from '../utils/planner.validation';
+import { type PlannerEventInput } from '../utils/planner.validation';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import { PlannerFilterBar } from '../components/shared/PlannerFilterBar';
 import { PlannerLegend } from '../components/shared/PlannerLegend';
@@ -29,7 +28,6 @@ import { ParentPlannerCalendarPanel } from '../components/parent/ParentPlannerCa
 import { ParentPlannerSidebar } from '../components/parent/ParentPlannerSidebar';
 import { ParentSyncStatus } from '../components/parent/ParentSyncStatus';
 import { ParentWeeklyOverview } from '../components/parent/ParentWeeklyOverview';
-import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
 
 function ParentPlannerInner() {
   const { user } = useAuth();
@@ -47,20 +45,10 @@ function ParentPlannerInner() {
   const [editingEvent, setEditingEvent] = useState<PlannerEvent | null>(null);
   const [optimisticEvents, setOptimisticEvents] = useState<PlannerEvent[]>([]);
 
-  const [period, setPeriod] = useState('Period 1');
-  const [day, setDay] = useState('Mon');
-  const [subject, setSubject] = useState('');
-  const [room, setRoom] = useState('');
-  const [teacher, setTeacher] = useState('');
-  const [timetableError, setTimetableError] = useState('');
-  const [timetableSaving, setTimetableSaving] = useState(false);
-
-  const timetableDirty = Boolean(subject || room || teacher);
-  useUnsavedChangesGuard(timetableDirty, 'You have unsaved timetable changes. Leave anyway?');
+  useUnsavedChangesGuard(false, 'You have unsaved timetable changes. Leave anyway?');
 
   const { events: fetchedEvents, loading: eventsLoading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, true);
   const { programs, loading: programsLoading } = usePlannerPrograms(childId, true);
-  const { timetable, loading: timetableLoading, refresh: refreshTimetable } = usePlannerTimetable(childId, true);
 
   const mergedEvents = useMemo(() => {
     const byId = new Map<string, PlannerEvent>();
@@ -233,31 +221,6 @@ function ParentPlannerInner() {
     }
   }
 
-  async function handleSaveTimetableCell() {
-    setTimetableError('');
-    const parsed = plannerTimetableCellSchema.safeParse({ period, day, subject, room, teacher });
-    if (!parsed.success) {
-      setTimetableError(parsed.error.issues[0]?.message || 'Invalid timetable data');
-      pushToast({ type: 'error', message: parsed.error.issues[0]?.message || 'Invalid timetable data' });
-      return;
-    }
-
-    setTimetableSaving(true);
-    try {
-      await safeMutation('Timetable updated', async () => {
-        await upsertSchoolTimetableCell(childId, familyId, parsed.data);
-        await refreshTimetable();
-      });
-      setSubject('');
-      setRoom('');
-      setTeacher('');
-    } catch (error) {
-      setTimetableError(error instanceof Error ? error.message : 'Failed to save timetable cell');
-    } finally {
-      setTimetableSaving(false);
-    }
-  }
-
   return (
     <div className="mx-auto max-w-[1500px] space-y-4 pb-8">
       <PlannerToastViewport />
@@ -316,26 +279,9 @@ function ParentPlannerInner() {
             <ParentPlannerCalendarPanel events={calendarEvents} onSelectSlot={onSelectSlot} onClickEvent={onClickEvent} onEventDrop={(arg) => void handleEventMoveOrResize(arg)} onEventResize={(arg) => void handleEventMoveOrResize(arg)} />
             <p className="rounded-2xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-2 text-xs text-cyan-100">{calendarNote}</p>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="mb-3 text-sm font-semibold text-white/85">Timetable Editor (Parent)</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
-                <input aria-label="Timetable period" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="Period" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300" />
-                <input aria-label="Timetable day" value={day} onChange={(e) => setDay(e.target.value)} placeholder="Day" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300" />
-                <input aria-label="Timetable subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300" />
-                <input aria-label="Timetable room" value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room (optional)" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300" />
-                <input aria-label="Timetable teacher" value={teacher} onChange={(e) => setTeacher(e.target.value)} placeholder="Teacher (optional)" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300" />
-              </div>
-              {timetableError ? <p className="mt-2 text-sm text-rose-300">{timetableError}</p> : null}
-              <button type="button" onClick={() => void handleSaveTimetableCell()} disabled={timetableSaving} className="mt-3 min-h-[44px] rounded-xl bg-cyan-500/30 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">{timetableSaving ? 'Saving...' : 'Save Timetable Entry'}</button>
-            </div>
-
-            {timetableLoading ? <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70">Loading timetable...</p> : null}
-            {!timetableLoading && !timetable ? (
-              <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
-                No timetable configured. Use the editor above or <Link to="/parent/onboarding" className="text-cyan-300 underline">seed sample timetable</Link>.
-              </p>
-            ) : null}
-            {timetable ? <SchoolTimetableTable periods={timetable.periods} days={timetable.days} data={timetable.data} /> : null}
+            <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+              School timetable is managed in Child Planner under the <span className="text-cyan-300">School</span> tab.
+            </p>
           </div>
         }
         right={

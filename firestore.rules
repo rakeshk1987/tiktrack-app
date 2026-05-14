@@ -175,10 +175,14 @@ service cloud.firestore {
         (resource.data.family_id is string && sameFamily(resource.data.family_id)) ||
         isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id)
       );
-      allow create, update, delete: if isParent() && (
-        !('family_id' in request.resource.data) ||
-        sameFamily(request.resource.data.family_id)
+      allow create, update: if (
+        (isParent() && (
+          !('family_id' in request.resource.data) ||
+          sameFamily(request.resource.data.family_id)
+        )) ||
+        (isChild() && request.resource.data.child_id == request.auth.uid && sameFamily(request.resource.data.family_id))
       );
+      allow delete: if isParent();
     }
 
     match /achievements/{achievementId} {
