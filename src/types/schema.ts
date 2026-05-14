@@ -40,6 +40,12 @@ export interface ChildProfile {
   money_weekly_goal?: number;
   money_wish_title?: string;
   money_wish_target?: number;
+  avatar_emoji?: string;
+  interests?: string[];
+  early_bird_count?: number;
+  reading_completed_count?: number;
+  study_completed_count?: number;
+  perfect_week_count?: number;
 }
 
 export interface Task {
@@ -60,6 +66,8 @@ export interface Task {
   status?: 'pending' | 'completed';
   created_at?: string;
   completed_at?: string;
+  recurrence_type?: 'none' | 'daily' | 'weekly';
+  recurrence_days?: number[]; // 0-6 for weekly recurrence
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'failed' | 'skipped';
@@ -87,6 +95,7 @@ export interface ExamResult {
   marks_scored: number;
   total_marks: number;
   exam_date: string;
+  exam_type?: 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other';
 }
 
 export interface GrowthLog {

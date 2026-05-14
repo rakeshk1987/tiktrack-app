@@ -43,6 +43,7 @@ import { useTaskScheduler } from '../../hooks/useTaskScheduler';
 import { getDefaultReminders, useReminders } from '../../hooks/useReminders';
 import { getDefaultRewards, useRedemptions, useRewards } from '../../hooks/useRedemptions';
 import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
+import { ParentPlannerV2Page } from '../../features/planner';
 
 interface ChildAccount {
   id: string;
@@ -94,6 +95,7 @@ function ParentDashboardContent() {
   const [children, setChildren] = useState<ChildAccount[]>([]);
   const [childrenLoading, setChildrenLoading] = useState(true);
   const [pendingProofs, setPendingProofs] = useState<PendingProof[]>([]);
+  const [proofReviewComment, setProofReviewComment] = useState('');
   const [pendingChildTasks, setPendingChildTasks] = useState<ChildSubmission[]>([]);
   const [pendingChildEvents, setPendingChildEvents] = useState<ChildSubmission[]>([]);
   const [pendingAchievements, setPendingAchievements] = useState<ChildSubmission[]>([]);
@@ -103,12 +105,15 @@ function ParentDashboardContent() {
   const [tDesc, setTDesc] = useState('');
   const [tPoints, setTPoints] = useState<number | ''>('');
   const [tDue, setTDue] = useState('');
+  const [tRecurrenceType, setTRecurrenceType] = useState<'none' | 'daily' | 'weekly'>('none');
+  const [tRecurrenceDays, setTRecurrenceDays] = useState<number[]>([]);
   const [tChild, setTChild] = useState('');
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [exams, setExams] = useState<Array<any>>([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [eChild, setEChild] = useState('');
   const [eSubject, setESubject] = useState('');
+  const [eType, setEType] = useState<'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other'>('weekly_test');
   const [eMarks, setEMarks] = useState<number | ''>('');
   const [eTotal, setETotal] = useState<number | ''>('');
   const [eDate, setEDate] = useState('');
@@ -136,7 +141,7 @@ function ParentDashboardContent() {
   const [editRewardId, setEditRewardId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'growth' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings'
+    'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'growth' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner'
   >('dashboard');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
@@ -157,6 +162,7 @@ function ParentDashboardContent() {
     { id: 'automation', label: 'Automation' },
     { id: 'proofs', label: 'Proofs' },
     { id: 'events', label: 'Events' },
+    { id: 'planner', label: 'Planner' },
     { id: 'growth', label: 'Growth' },
     { id: 'exams', label: 'Exams' },
     { id: 'challenges', label: 'Challenges' },
@@ -294,6 +300,8 @@ function ParentDashboardContent() {
     setTDesc('');
     setTPoints('');
     setTDue('');
+    setTRecurrenceType('none');
+    setTRecurrenceDays([]);
     setEditTaskId(null);
   };
 
@@ -304,6 +312,8 @@ function ParentDashboardContent() {
     setTDesc(task.description || '');
     setTPoints(task.points ?? task.star_value ?? '');
     setTDue(task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : '');
+    setTRecurrenceType((task.recurrence_type as 'none' | 'daily' | 'weekly') || 'none');
+    setTRecurrenceDays(Array.isArray(task.recurrence_days) ? task.recurrence_days : []);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -341,6 +351,8 @@ function ParentDashboardContent() {
         child_id: tChild,
         child_name: selectedChild.name || selectedChild.email || '',
         due_date: tDue ? new Date(tDue).toISOString() : null,
+        recurrence_type: tRecurrenceType,
+        recurrence_days: tRecurrenceType === 'weekly' ? tRecurrenceDays : [],
         parent_id: familyId,
         family_id: familyId
       };
@@ -789,7 +801,11 @@ function ParentDashboardContent() {
 
   const handleProofDecision = async (proofId: string, status: 'approved' | 'rejected') => {
     try {
-      await updateDoc(doc(db, 'proof_logs', proofId), { approval_status: status });
+      await updateDoc(doc(db, 'proof_logs', proofId), {
+        approval_status: status,
+        review_comment: proofReviewComment.trim() || null,
+        reviewed_at: new Date().toISOString()
+      });
 
       // Read proof record to identify child and task
       const proofSnap = await getDoc(doc(db, 'proof_logs', proofId));
@@ -845,6 +861,9 @@ function ParentDashboardContent() {
         }
 
         setSuccess('Proof approved. Completion and stars are now reflected for the child.');
+        if (childId && familyId) {
+          await sendMessage(childId, familyId, `Proof approved${proofReviewComment.trim() ? `: ${proofReviewComment.trim()}` : '.'}`, 'parent', familyId, 'Proof review');
+        }
       } else {
         if (childId && taskId) {
           await setDoc(doc(db, 'task_logs', logId), {
@@ -856,7 +875,11 @@ function ParentDashboardContent() {
           }, { merge: true });
         }
         setInfo('Proof rejected and removed from the pending queue.');
+        if (childId && familyId) {
+          await sendMessage(childId, familyId, `Proof rejected${proofReviewComment.trim() ? `: ${proofReviewComment.trim()}` : '. Please retry and upload again.'}`, 'parent', familyId, 'Proof review');
+        }
       }
+      setProofReviewComment('');
     } catch (err) {
       console.error('Failed to update proof status:', err);
       setError('Could not update proof approval. Please try again.');
@@ -874,6 +897,7 @@ function ParentDashboardContent() {
         await updateDoc(doc(db, 'exams', editExamId), {
           child_id: eChild || null,
           subject: eSubject,
+          exam_type: eType,
           marks_scored: eMarks || 0,
           total_marks: eTotal || 0,
           exam_date: eDate ? new Date(eDate).toISOString() : new Date().toISOString(),
@@ -884,6 +908,7 @@ function ParentDashboardContent() {
         await addDoc(collection(db, 'exams'), {
           child_id: eChild || null,
           subject: eSubject,
+          exam_type: eType,
           marks_scored: eMarks || 0,
           total_marks: eTotal || 0,
           exam_date: eDate ? new Date(eDate).toISOString() : new Date().toISOString(),
@@ -896,6 +921,7 @@ function ParentDashboardContent() {
 
       setEChild('');
       setESubject('');
+      setEType('weekly_test');
       setEMarks('');
       setETotal('');
       setEDate('');
@@ -922,6 +948,7 @@ function ParentDashboardContent() {
     setEditExamId(ex.id);
     setEChild(ex.child_id || '');
     setESubject(ex.subject || '');
+    setEType((ex.exam_type as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other') || 'weekly_test');
     setEMarks(ex.marks_scored ?? '');
     setETotal(ex.total_marks ?? '');
     setEDate(ex.exam_date ? new Date(ex.exam_date).toISOString().slice(0,10) : '');
@@ -1598,8 +1625,12 @@ function ParentDashboardContent() {
                     </div>
                   </div>
                 </div>
-              </section>
+                </section>
             </div>
+
+                <div className={activeTab === 'planner' ? 'xl:col-span-12' : 'hidden'}>
+                  <ParentPlannerV2Page />
+                </div>
 
                 <div className={activeTab === 'growth' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
@@ -1818,6 +1849,25 @@ function ParentDashboardContent() {
                       <input required value={tTitle} onChange={(e) => setTTitle(e.target.value)} placeholder="Task title" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Points" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tDue} onChange={(e) => setTDue(e.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <select value={tRecurrenceType} onChange={(e) => setTRecurrenceType(e.target.value as 'none' | 'daily' | 'weekly')} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="none">One-time</option>
+                        <option value="daily">Daily quest</option>
+                        <option value="weekly">Weekly quest</option>
+                      </select>
+                      {tRecurrenceType === 'weekly' ? (
+                        <div className="col-span-1 sm:col-span-2 flex flex-wrap gap-2 rounded-xl py-2 px-2 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIndex) => (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => setTRecurrenceDays((prev) => prev.includes(dayIndex) ? prev.filter((x) => x !== dayIndex) : [...prev, dayIndex])}
+                              className={clsx('px-2 py-1 rounded-lg text-xs font-semibold border', tRecurrenceDays.includes(dayIndex) ? 'bg-cyan-100 text-cyan-700 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       <input value={tDesc} onChange={(e) => setTDesc(e.target.value)} placeholder="Short description" className="col-span-1 sm:col-span-3 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <div className="col-span-1 sm:col-span-3 flex gap-2">
                         <button disabled={taskLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{taskLoading ? 'Saving...' : (editTaskId ? 'Save Changes' : '+ Create Task')}</button>
@@ -1979,6 +2029,16 @@ function ParentDashboardContent() {
                       No proof submissions yet. Add a child account first, then submitted task proofs will show up here.
                     </div>
                   )}
+                  <div className="mt-3">
+                    <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Review comment (optional)</label>
+                    <input
+                      value={proofReviewComment}
+                      onChange={(event) => setProofReviewComment(event.target.value)}
+                      placeholder="Share a quick note for the child..."
+                      className="mt-1 w-full rounded-xl py-2 px-3 border text-sm"
+                      style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                    />
+                  </div>
 
                   <div className="mt-5 rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                     <div className="mb-3 flex items-center justify-between">
@@ -2185,6 +2245,14 @@ function ParentDashboardContent() {
                             {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                           </select>
                           <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <select value={eType} onChange={(ev) => setEType(ev.target.value as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other')} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <option value="weekly_test">Weekly Test</option>
+                            <option value="unit_test">Unit Test</option>
+                            <option value="midterm">Midterm</option>
+                            <option value="final">Final</option>
+                            <option value="practice">Practice</option>
+                            <option value="other">Other</option>
+                          </select>
                           <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input required value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input required value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
@@ -2209,7 +2277,7 @@ function ParentDashboardContent() {
                                 <div key={ex.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                                   <div>
                                     <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ex.subject} • {getChildName(ex.child_id)}</p>
-                                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored}/{ex.total_marks} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
+                                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.marks_scored}/{ex.total_marks} • {(ex.exam_type || 'exam').replace('_', ' ')} • {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString() : 'No date'}</p>
                                   </div>
                                   <div className="flex gap-2">
                                     <button onClick={() => startEditExam(ex)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>

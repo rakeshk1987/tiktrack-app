@@ -26,6 +26,36 @@ service cloud.firestore {
       return signedIn() && userDoc(childId).data.parent_id == request.auth.uid;
     }
 
+    function familyIdFor(uid) {
+      return userDoc(uid).data.linked_family_id != null
+        ? userDoc(uid).data.linked_family_id
+        : (
+          userDoc(uid).data.parent_id != null
+            ? userDoc(uid).data.parent_id
+            : uid
+        );
+    }
+
+    function sameFamily(familyId) {
+      return signedIn() && familyId is string && familyId == familyIdFor(request.auth.uid);
+    }
+
+    function sameFamilyOnCreate() {
+      return request.resource.data.family_id is string && sameFamily(request.resource.data.family_id);
+    }
+
+    function validChildScopedEventCreate() {
+      return isChild() &&
+        request.resource.data.child_id == request.auth.uid &&
+        request.resource.data.created_by == 'child' &&
+        request.resource.data.source == 'manual' &&
+        (
+          request.resource.data.category == 'personal' ||
+          request.resource.data.category == 'custom' ||
+          request.resource.data.category == 'homework'
+        );
+    }
+
     match /users/{userId} {
       allow read: if isSelf(userId) || isParent();
       allow create: if signedIn() && (isSelf(userId) || isParent());
@@ -120,15 +150,35 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      allow read: if signedIn();
-      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow read: if signedIn() && (
+        (resource.data.family_id is string && sameFamily(resource.data.family_id)) ||
+        (resource.data.child_id is string && (isSelf(resource.data.child_id) || isParentOf(resource.data.child_id)))
+      );
+      allow create: if sameFamilyOnCreate() && (isParent() || validChildScopedEventCreate());
       allow update: if isParent() || (
         isChild() &&
         resource.data.child_id == request.auth.uid &&
-        resource.data.approval_status != 'approved' &&
-        request.resource.data.approval_status == resource.data.approval_status
+        (
+          resource.data.category == 'personal' ||
+          resource.data.category == 'custom' ||
+          resource.data.category == 'homework'
+        ) &&
+        request.resource.data.child_id == resource.data.child_id &&
+        request.resource.data.created_by == resource.data.created_by &&
+        request.resource.data.parent_id == resource.data.parent_id
       );
-      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /school_timetables/{docId} {
+      allow read: if (
+        (resource.data.family_id is string && sameFamily(resource.data.family_id)) ||
+        isParent() || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id)
+      );
+      allow create, update, delete: if isParent() && (
+        !('family_id' in request.resource.data) ||
+        sameFamily(request.resource.data.family_id)
+      );
     }
 
     match /achievements/{achievementId} {
@@ -154,8 +204,15 @@ service cloud.firestore {
     }
 
     match /reward_settings/{settingId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isParent();
+      allow read: if signedIn() && (
+        ('family_id' in resource.data && sameFamily(resource.data.family_id)) ||
+        resource.data.parent_id == request.auth.uid ||
+        isParent()
+      );
+      allow create, update, delete: if isParent() && (
+        !('family_id' in request.resource.data) ||
+        sameFamily(request.resource.data.family_id)
+      );
     }
 
     match /routine_configurations/{routineId} {
@@ -178,8 +235,15 @@ service cloud.firestore {
     }
 
     match /reward_items/{rewardId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isParent();
+      allow read: if signedIn() && (
+        ('family_id' in resource.data && sameFamily(resource.data.family_id)) ||
+        isParent() ||
+        (resource.data.child_id is string && isParentOf(resource.data.child_id))
+      );
+      allow create, update, delete: if isParent() && (
+        !('family_id' in request.resource.data) ||
+        sameFamily(request.resource.data.family_id)
+      );
     }
 
     match /redemptions/{redemptionId} {
@@ -189,8 +253,17 @@ service cloud.firestore {
     }
 
     match /messages/{messageId} {
-      allow read: if signedIn();
-      allow create: if signedIn();
+      allow read: if signedIn() && (
+        isParent() ||
+        resource.data.child_id == request.auth.uid ||
+        resource.data.parent_id == request.auth.uid ||
+        isParentOf(resource.data.child_id)
+      );
+      allow create: if signedIn() && (
+        isParent() ||
+        request.resource.data.child_id == request.auth.uid ||
+        request.resource.data.parent_id == request.auth.uid
+      );
       allow update, delete: if isParent();
     }
 

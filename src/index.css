@@ -38,6 +38,11 @@
     color: var(--text-main);
     transition: background-color 250ms ease, color 250ms ease;
   }
+
+  :focus-visible {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 2px;
+  }
 }
 
 @layer components {
@@ -60,4 +65,10 @@
 
 .animate-float {
   animation: bounce-subtle 2s infinite ease-in-out;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .mobile-safe-scroll {
+    padding-bottom: 5.5rem;
+  }
 }

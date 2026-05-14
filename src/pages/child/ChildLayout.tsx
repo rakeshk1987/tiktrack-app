@@ -103,6 +103,9 @@ export interface ChildLayoutContextValue {
   diaryDraft: string;
   diarySaving: boolean;
   uploading: boolean;
+  uploadProgress: number;
+  retryProofUpload: () => Promise<string | null>;
+  hasPendingProofRetry: boolean;
   softTextClass: string;
   accentCaptionClass: string;
   tasks: ReturnType<typeof useTodaysTasks>['tasks'];
@@ -159,7 +162,7 @@ export default function ChildLayout() {
   const { reminders } = useChildReminders(childId);
   const { moodLog, saving: moodSaving, saveMood } = useChildMood(childId);
   const { entries, saving: diarySaving, addEntry } = useDiaryEntries(childId);
-  const { proofs, uploading, uploadProof } = useChildProofs(childId);
+  const { proofs, uploading, uploadProgress, uploadProof, retryUpload, hasPendingRetry } = useChildProofs(childId);
   const { completeTask, markTaskPendingProof, saving: questSaving } = useQuestActions(childId);
   const { messages, sendMessage } = useMessages(childId, 'child');
   const parentId = profile?.family_id || profile?.parent_id || '';
@@ -169,6 +172,7 @@ export default function ChildLayout() {
   const [notice, setNotice] = useState('');
   const [diaryDraft, setDiaryDraft] = useState('');
   const [pendingProofTask, setPendingProofTask] = useState<Task | null>(null);
+  const [questCelebration, setQuestCelebration] = useState<{ title: string; stars: number } | null>(null);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [todaySpecialTheme, setTodaySpecialTheme] = useState<'birthday' | 'festival' | 'celebration' | 'custom' | null>(null);
   const [rewardsAlert, setRewardsAlert] = useState(false);
@@ -567,6 +571,8 @@ export default function ChildLayout() {
     try {
       await completeTask(task);
       setNotice(`Quest complete. ${task.star_value} stars added.`);
+      setQuestCelebration({ title: task.title, stars: Number(task.star_value || 0) });
+      setTimeout(() => setQuestCelebration(null), 1600);
     } catch (error) {
       console.error('Quest completion failed:', error);
       setNotice('Quest could not be completed right now.');
@@ -587,7 +593,7 @@ export default function ChildLayout() {
       setNotice(`Proof uploaded for ${pendingProofTask.title}. Waiting for parent approval.`);
     } catch (error) {
       console.error('Proof upload failed:', error);
-      setNotice('Proof upload failed. Please try again.');
+      setNotice('Proof upload failed. You can retry from the upload banner.');
     } finally {
       event.target.value = '';
       setPendingProofTask(null);
@@ -693,6 +699,9 @@ export default function ChildLayout() {
     softTextClass,
     tasks: adaptiveTasks,
     uploading,
+    uploadProgress,
+    retryProofUpload: retryUpload,
+    hasPendingProofRetry: hasPendingRetry,
     events,
     parentId
   };
@@ -866,6 +875,30 @@ export default function ChildLayout() {
           </div>
         </div>
         )}
+
+        {uploading && (
+          <div className={clsx('mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-[0_10px_25px_rgba(14,165,233,0.12)]', isDark ? 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-700')}>
+            <p>Uploading proof... {uploadProgress}%</p>
+            <div className={clsx('mt-2 h-2 rounded-full', isDark ? 'bg-white/10' : 'bg-cyan-100')}>
+              <div className="h-2 rounded-full bg-[linear-gradient(90deg,#22d3ee,#60a5fa)] transition-all duration-200" style={{ width: `${uploadProgress}%` }} />
+            </div>
+          </div>
+        )}
+
+        {!uploading && hasPendingRetry ? (
+          <div className={clsx('mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-[0_10px_25px_rgba(251,191,36,0.18)]', isDark ? 'border-amber-300/25 bg-amber-400/10 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-700')}>
+            <p>Proof upload interrupted. Retry when ready.</p>
+            <button onClick={() => void retryUpload()} className="mt-2 rounded-xl bg-amber-400/20 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em]">
+              Retry Upload
+            </button>
+          </div>
+        ) : null}
+
+        {questCelebration ? (
+          <div className={clsx('mt-4 rounded-2xl border px-4 py-3 text-sm font-black shadow-[0_12px_30px_rgba(16,185,129,0.2)] animate-pulse', isDark ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100' : 'border-emerald-200 bg-emerald-50 text-emerald-700')}>
+            Quest complete: {questCelebration.title} • +{questCelebration.stars} stars
+          </div>
+        ) : null}
 
         {notice && <div className={clsx('mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-[0_10px_25px_rgba(14,165,233,0.12)]', isDark ? 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-700')}>{notice}</div>}
 

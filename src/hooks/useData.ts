@@ -15,18 +15,28 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
 const MAX_CHILD_VISIBLE_TASKS = 7;
 const isTaskActiveForToday = (task: Task) => {
   const today = getTodayKey();
+  const todayWeekday = new Date().getDay();
   const dueDateKey = task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : null;
   const createdDateKey = task.created_at ? new Date(task.created_at).toISOString().slice(0, 10) : null;
 
   if (task.status === 'completed') {
     return false;
+  }
+
+  if (task.recurrence_type === 'daily') {
+    return true;
+  }
+
+  if (task.recurrence_type === 'weekly') {
+    const days = Array.isArray(task.recurrence_days) ? task.recurrence_days : [];
+    return days.includes(todayWeekday);
   }
 
   return dueDateKey === today || createdDateKey === today || !task.due_date;
@@ -328,6 +338,8 @@ export interface ChildProofItem extends ProofLog {
 export function useChildProofs(childId: string) {
   const [proofs, setProofs] = useState<ChildProofItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [pendingRetry, setPendingRetry] = useState<{ task: Task; file: File } | null>(null);
 
   useEffect(() => {
     if (!childId) {
@@ -356,10 +368,27 @@ export function useChildProofs(childId: string) {
     if (!childId) throw new Error('Missing child id');
 
     setUploading(true);
+    setUploadProgress(0);
+    setPendingRetry(null);
     try {
       const optimizedBlob = await optimizeImage(file);
       const fileRef = ref(storage, `proofs/${childId}/${task.id}/${Date.now()}-${file.name.replace(/\.[^/.]+$/, "")}.jpg`);
-      await uploadBytes(fileRef, optimizedBlob);
+      const uploadTask = uploadBytesResumable(fileRef, optimizedBlob);
+
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = snapshot.totalBytes > 0
+              ? Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+              : 0;
+            setUploadProgress(progress);
+          },
+          (error) => reject(error),
+          () => resolve()
+        );
+      });
+
       const imageUrl = await getDownloadURL(fileRef);
 
       const proofDoc = await addDoc(collection(db, 'proof_logs'), {
@@ -373,12 +402,21 @@ export function useChildProofs(childId: string) {
       });
 
       return proofDoc.id;
+    } catch (error) {
+      setPendingRetry({ task, file });
+      throw error;
     } finally {
       setUploading(false);
+      setTimeout(() => setUploadProgress(0), 800);
     }
   }, [childId]);
 
-  return { proofs, uploading, uploadProof };
+  const retryUpload = useCallback(async () => {
+    if (!pendingRetry) return null;
+    return uploadProof(pendingRetry.task, pendingRetry.file);
+  }, [pendingRetry, uploadProof]);
+
+  return { proofs, uploading, uploadProgress, uploadProof, retryUpload, hasPendingRetry: Boolean(pendingRetry) };
 }
 
 export function useQuestActions(childId: string) {

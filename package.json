@@ -16,13 +16,20 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/list": "^6.1.20",
+    "@fullcalendar/react": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
     "clsx": "^2.1.1",
     "firebase": "^10.12.0",
     "lucide-react": "^1.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
-    "tailwind-merge": "^2.2.0"
+    "tailwind-merge": "^2.2.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^8.57.0",
@@ -41,8 +48,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
     "firebase-admin": "^11.11.1",
-    "firebase-tools": "^13.35.1",
     "firebase-functions": "^4.3.1",
+    "firebase-tools": "^13.35.1",
     "globals": "^13.24.0",
     "jsdom": "^23.2.0",
     "postcss": "^8.5.9",

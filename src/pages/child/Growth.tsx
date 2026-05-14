@@ -25,7 +25,7 @@ export default function ChildGrowth() {
   }, [profile.id]);
 
   const saveGrowth = async () => {
-    if (!heightCm || !weightKg) return;
+    if (!heightCm || !weightKg || Number(heightCm) < 50 || Number(weightKg) < 10) return;
     setSaving(true);
     try {
       await addDoc(collection(db, 'growth_logs'), {
@@ -57,6 +57,7 @@ export default function ChildGrowth() {
       return `${x},${y}`;
     }).join(' ');
   }, [logs]);
+
   const weightChartPoints = useMemo(() => {
     if (logs.length < 2) return '';
     const width = 680;
@@ -72,11 +73,36 @@ export default function ChildGrowth() {
     }).join(' ');
   }, [logs]);
 
+  const monthlyTrend = useMemo(() => {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const monthLogs = logs.filter((log) => {
+      const d = new Date(log.date);
+      return d.getMonth() === month && d.getFullYear() === year;
+    });
+
+    if (monthLogs.length < 2) {
+      return 'Keep adding updates this month. Your growth story builds over time.';
+    }
+
+    const first = monthLogs[0];
+    const last = monthLogs[monthLogs.length - 1];
+    const heightDelta = (last.height_cm || 0) - (first.height_cm || 0);
+
+    if (heightDelta > 0) {
+      return `Great consistency this month. Height trend is up by ${heightDelta.toFixed(1)} cm.`;
+    }
+
+    return 'Consistency is a strength. Small steady updates matter and help build healthy habits.';
+  }, [logs]);
+
   return (
     <div className="mt-6 space-y-5">
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h2 className="text-3xl font-display font-bold">Height & Weight Tracker</h2>
-        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Add your growth updates and see your trend graph.</p>
+        <h2 className="text-3xl font-display font-bold">Growth Tracker</h2>
+        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Capture height and weight updates with positive healthy encouragement.</p>
+        <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">{monthlyTrend}</div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
             <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Date</p>
@@ -92,29 +118,23 @@ export default function ChildGrowth() {
           </div>
         </div>
         <div className="mt-3">
-          <button onClick={() => void saveGrowth()} disabled={saving || !heightCm || !weightKg} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+          <button onClick={() => void saveGrowth()} disabled={saving || !heightCm || !weightKg} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save Update'}</button>
         </div>
       </div>
 
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h3 className="text-2xl font-display font-bold">Growth Graphs</h3>
+        <h3 className="text-2xl font-display font-bold">Growth Charts</h3>
         {logs.length < 2 ? (
-          <p className={clsx('mt-3 text-sm', mutedTextClass)}>Add at least 2 entries to show graph.</p>
+          <p className={clsx('mt-3 text-sm', mutedTextClass)}>Add at least 2 updates to unlock chart view.</p>
         ) : (
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
             <div className="overflow-x-auto rounded-2xl border border-cyan-300/20 bg-cyan-500/5 p-3">
               <p className="mb-2 text-sm font-bold text-cyan-200">Height (cm)</p>
-              <svg viewBox="0 0 680 220" className="h-[220px] min-w-[680px] w-full">
-                <polyline fill="none" stroke="#22d3ee" strokeWidth="3" points={chartPoints} />
-              </svg>
+              <svg viewBox="0 0 680 220" className="h-[220px] min-w-[680px] w-full"><polyline fill="none" stroke="#22d3ee" strokeWidth="3" points={chartPoints} /></svg>
             </div>
             <div className="overflow-x-auto rounded-2xl border border-violet-300/20 bg-violet-500/5 p-3">
               <p className="mb-2 text-sm font-bold text-violet-200">Weight (kg)</p>
-              <svg viewBox="0 0 680 220" className="h-[220px] min-w-[680px] w-full">
-                <polyline fill="none" stroke="#a78bfa" strokeWidth="3" points={weightChartPoints} />
-              </svg>
+              <svg viewBox="0 0 680 220" className="h-[220px] min-w-[680px] w-full"><polyline fill="none" stroke="#a78bfa" strokeWidth="3" points={weightChartPoints} /></svg>
             </div>
           </div>
         )}

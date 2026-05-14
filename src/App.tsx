@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ErrorBoundary } from './ErrorBoundary';
 import { activeFirebaseEnv, firebaseInitError, isUsingFirebaseEmulators } from './config/firebase';
-import ParentDashboard from './pages/parent/Dashboard';
+import { AppChromeSignals } from './components/AppChromeSignals';
 
 const ChildHome = lazy(() => import('./pages/child/Dashboard'));
 const ChildLayout = lazy(() => import('./pages/child/ChildLayout'));
@@ -17,6 +17,10 @@ const ChildGrowth = lazy(() => import('./pages/child/Growth'));
 const ChildRewards = lazy(() => import('./pages/child/Rewards'));
 const ChildMoneyPot = lazy(() => import('./pages/child/MoneyPot'));
 const ChildMockups = lazy(() => import('./pages/child/Mockups'));
+const ParentDashboard = lazy(() => import('./pages/parent/Dashboard'));
+const ParentOnboardingPage = lazy(() => import('./pages/parent/Onboarding'));
+const ChildPlannerV2Page = lazy(() => import('./features/planner/pages/ChildPlannerV2Page'));
+const ParentPlannerV2Page = lazy(() => import('./features/planner/pages/ParentPlannerV2Page'));
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
 
@@ -102,6 +106,30 @@ function AppRoutes() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/parent/onboarding"
+          element={
+            <PrivateRoute requiredRole="parent_admin">
+              <ParentOnboardingPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/planner/child"
+          element={
+            <PrivateRoute requiredRole="child_user">
+              <ChildPlannerV2Page />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/planner/parent"
+          element={
+            <PrivateRoute requiredRole="parent_admin">
+              <ParentPlannerV2Page />
+            </PrivateRoute>
+          }
+        />
         <Route path="/" element={<WelcomeRedirect />} />
       </Routes>
     </Suspense>
@@ -119,6 +147,7 @@ function App() {
         <AuthProvider>
           <Router>
             <AppRoutes />
+            <AppChromeSignals />
           </Router>
         </AuthProvider>
       </ThemeProvider>

@@ -6,8 +6,37 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function userDoc(uid) {
+      return firestore.get(/databases/(default)/documents/users/$(uid));
+    }
+
+    function isParent() {
+      return signedIn() && userDoc(request.auth.uid).data.role == 'parent_admin';
+    }
+
+    function isChild() {
+      return signedIn() && userDoc(request.auth.uid).data.role == 'child_user';
+    }
+
+    function isParentOf(childId) {
+      return signedIn() && userDoc(childId).data.parent_id == request.auth.uid;
+    }
+
+    function validImageUpload() {
+      return request.resource != null &&
+        request.resource.contentType.matches('image/.*') &&
+        request.resource.size < 5 * 1024 * 1024;
+    }
+
     match /proofs/{childId}/{allPaths=**} {
-      allow read, write: if signedIn();
+      allow read: if signedIn() && (request.auth.uid == childId || isParentOf(childId) || isParent());
+      allow write: if signedIn() &&
+        validImageUpload() &&
+        (
+          (isChild() && request.auth.uid == childId) ||
+          isParentOf(childId) ||
+          isParent()
+        );
     }
 
     match /{allPaths=**} {

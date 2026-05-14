@@ -37,6 +37,9 @@ TikTrack helps families manage chores and rewards with separate parent and child
 ## User Documentation
 
 - End-user walkthrough: `docs/guides/USER_GUIDE.md`
+- Firebase setup and env guide: `docs/guides/FIREBASE_SETUP.md`
+- Launch readiness report: `docs/reports/LAUNCH_READINESS.md`
+- Architecture and route map: `docs/reports/ARCHITECTURE_SUMMARY.md`
 
 ## Tech Stack
 
@@ -141,6 +144,15 @@ Local deploy flow:
 npm run build
 firebase deploy --only hosting
 ```
+
+## Vercel Deployment
+
+This repo includes `vercel.json` for SPA rewrite and cache headers.
+
+1. Import repo in Vercel.
+2. Set build command: `npm run build`.
+3. Set output directory: `dist`.
+4. Add `VITE_FIREBASE_*` variables only if overriding defaults.
 
 ## GitHub Actions Deployment
 
