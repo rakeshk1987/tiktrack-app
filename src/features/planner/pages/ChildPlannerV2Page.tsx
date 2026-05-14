@@ -16,9 +16,10 @@ import { usePlannerInsights } from '../hooks/usePlannerInsights';
 import { plannerTimetableCellSchema } from '../utils/planner.validation';
 import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
-import type { PlannerEvent } from '../types/planner.types';
+import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 
-type ChildPlannerTab = 'calendar' | 'school' | `program_${string}`;
+type ChildPlannerTab = 'calendar' | `activity_${string}`;
+type ActivitySubTab = PlannerActivityModule;
 
 function categoryLabel(category: string) {
   return category.replace('_', ' ');
@@ -29,6 +30,7 @@ export default function ChildPlannerV2Page() {
   const childId = user?.id || '';
   const familyId = user?.linked_family_id || user?.id || '';
   const [activeTab, setActiveTab] = useState<ChildPlannerTab>('calendar');
+  const [activitySubTab, setActivitySubTab] = useState<ActivitySubTab>('tasks');
   const [period, setPeriod] = useState('Period 1');
   const [day, setDay] = useState('Mon');
   const [subject, setSubject] = useState('');
@@ -122,11 +124,35 @@ export default function ChildPlannerV2Page() {
 
   const allEvents = useMemo(() => [...events, ...taskEvents, ...examEvents], [events, taskEvents, examEvents]);
 
+  const activityTabs = useMemo<Array<{ id: string; label: string; modules: PlannerActivityModule[] }>>(() => {
+    const cleaned = programs
+      .map((program) => ({
+        id: program.id,
+        label: program.name?.trim() || 'Activity',
+        modules: (program.modules && program.modules.length ? program.modules : ['tasks']) as PlannerActivityModule[]
+      }))
+      .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
+    const hasSchool = cleaned.some((program) => program.label.toLowerCase() === 'school');
+    if (!hasSchool) {
+      return [{ id: 'school', label: 'School', modules: ['tasks', 'exams', 'timetable'] as PlannerActivityModule[] }, ...cleaned];
+    }
+    return cleaned;
+  }, [programs]);
+
+  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
+  const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
+  const activeActivityLabel = activeActivity?.label || '';
+  const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
+  const isSchoolActivity = activeActivityLabel.toLowerCase() === 'school' || activeActivityId === 'school';
+
   const visibleEvents = useMemo(() => {
-    if (activeTab === 'calendar' || activeTab === 'school') return allEvents;
-    const programId = activeTab.replace('program_', '');
-    return allEvents.filter((event) => event.linkedProgramId === programId || event.category === 'tuition' || event.category === 'extracurricular');
-  }, [activeTab, allEvents]);
+    if (activeTab === 'calendar') return allEvents;
+    if (!activeActivityId) return allEvents;
+    if (isSchoolActivity) {
+      return allEvents.filter((event) => ['school', 'homework', 'exam', 'tuition'].includes(event.category));
+    }
+    return allEvents.filter((event) => event.linkedProgramId === activeActivityId || event.category === 'extracurricular' || event.category === 'custom');
+  }, [activeTab, allEvents, activeActivityId, isSchoolActivity]);
 
   const filteredEvents = useMemo(() => {
     if (activeCategoryFilters.includes('all')) return visibleEvents;
@@ -155,6 +181,13 @@ export default function ChildPlannerV2Page() {
       .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
       .slice(0, 20);
   }, [allEvents]);
+  const schoolExamItems = useMemo(() => schoolRoutineItems.filter((event) => event.category === 'exam'), [schoolRoutineItems]);
+
+  useEffect(() => {
+    if (!activeActivityModules.includes(activitySubTab)) {
+      setActivitySubTab(activeActivityModules[0] || 'tasks');
+    }
+  }, [activeActivityModules, activitySubTab]);
 
   useEffect(() => {
     if (!timetable) return;
@@ -237,10 +270,9 @@ export default function ChildPlannerV2Page() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setActiveTab('calendar')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'calendar' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Calendar</button>
-            <button type="button" onClick={() => setActiveTab('school')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'school' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>School Routine</button>
-            {programs.map((program) => (
-              <button key={program.id} type="button" onClick={() => setActiveTab(`program_${program.id}`)} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === `program_${program.id}` ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>
-                {program.name}
+            {activityTabs.map((activity) => (
+              <button key={activity.id} type="button" onClick={() => setActiveTab(`activity_${activity.id}`)} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === `activity_${activity.id}` ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>
+                {activity.label}
               </button>
             ))}
           </div>
@@ -285,28 +317,59 @@ export default function ChildPlannerV2Page() {
         </section>
       ) : null}
 
-      {activeTab === 'school' ? (
+      {activeTab !== 'calendar' ? (
         <section className="space-y-4 rounded-3xl border border-white/10 bg-[linear-gradient(165deg,rgba(17,36,69,0.96),rgba(22,17,50,0.98))] p-4 text-white shadow-[0_20px_70px_rgba(6,10,30,0.45)]">
           <div>
-            <h2 className="text-lg font-semibold">School Timetable</h2>
-            <p className="text-sm text-white/70">School routine with upcoming school-related tasks. No extra calendar view here.</p>
+            <h2 className="text-lg font-semibold">{isSchoolActivity ? 'School' : activeActivityLabel || 'Activity'}</h2>
+            <p className="text-sm text-white/70">{isSchoolActivity ? 'School routine with configurable subtabs.' : 'Activity-specific tasks and schedule managed by your parent.'}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-            <h3 className="text-sm font-semibold text-white/85">School Tasks</h3>
-            <div className="mt-2 space-y-2">
-              {schoolRoutineItems.length ? schoolRoutineItems.map((event) => (
-                <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{event.title}</p>
-                    <p className="text-xs text-white/65">{new Date(event.startAt).toLocaleString()}</p>
+
+          <div className="flex flex-wrap gap-2">
+            {activeActivityModules.map((moduleId: PlannerActivityModule) => (
+              <button key={moduleId} type="button" onClick={() => setActivitySubTab(moduleId)} className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold ${activitySubTab === moduleId ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/8 text-white/80'}`}>
+                {moduleId === 'tasks' ? 'Tasks' : moduleId === 'exams' ? 'Exams' : moduleId === 'timetable' ? 'Class Timetable' : moduleId === 'challenges' ? 'Challenges' : 'Events'}
+              </button>
+            ))}
+          </div>
+
+          {activitySubTab === 'tasks' ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <h3 className="text-sm font-semibold text-white/85">{isSchoolActivity ? 'School Tasks' : `${activeActivityLabel || 'Activity'} Tasks`}</h3>
+              <div className="mt-2 space-y-2">
+                {visibleEvents.length ? visibleEvents.slice(0, 20).map((event) => (
+                  <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{event.title}</p>
+                      <p className="text-xs text-white/65">{new Date(event.startAt).toLocaleString()}</p>
+                    </div>
+                    <span className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
+                      {categoryLabel(event.category)}
+                    </span>
                   </div>
-                  <span className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
-                    {categoryLabel(event.category)}
-                  </span>
-                </div>
-              )) : <p className="text-xs text-white/60">No school tasks yet.</p>}
+                )) : <p className="text-xs text-white/60">No tasks yet.</p>}
+              </div>
             </div>
-          </div>
+          ) : null}
+
+          {activitySubTab === 'exams' ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <h3 className="text-sm font-semibold text-white/85">Exams & Tests</h3>
+              <div className="mt-2 space-y-2">
+                {(isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).length ? (isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).map((event) => (
+                  <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/20 bg-rose-400/10 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{event.title}</p>
+                      <p className="text-xs text-white/65">{new Date(event.startAt).toLocaleString()}</p>
+                    </div>
+                    <span className="rounded-full border border-rose-300/35 bg-rose-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-rose-100">Exam</span>
+                  </div>
+                )) : <p className="text-xs text-white/60">No exams scheduled.</p>}
+              </div>
+            </div>
+          ) : null}
+
+          {activitySubTab === 'timetable' ? (
+            <>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
             <select value={period} onChange={(e) => setPeriod(e.target.value)} className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3 text-white">
               {(timetable?.periods || []).map((rowPeriod) => <option key={rowPeriod} value={rowPeriod} className="bg-slate-900">{rowPeriod}</option>)}
@@ -340,6 +403,20 @@ export default function ChildPlannerV2Page() {
                 setTeacher(existing?.teacher || '');
               }}
             />
+          ) : null}
+            </>
+          ) : null}
+          {activitySubTab === 'challenges' ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <h3 className="text-sm font-semibold text-white/85">Challenges</h3>
+              <p className="mt-2 text-xs text-white/60">Challenges configured for School will appear here.</p>
+            </div>
+          ) : null}
+          {activitySubTab === 'events' ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <h3 className="text-sm font-semibold text-white/85">Events</h3>
+              <p className="mt-2 text-xs text-white/60">Events configured for School will appear here.</p>
+            </div>
           ) : null}
         </section>
       ) : null}

@@ -62,6 +62,8 @@ export const MOCK_PLANNER_PROGRAMS: PlannerProgram[] = [
     category: 'school',
     reminderDefaults: { minutesBefore: [30], pushEnabled: true },
     recurrenceRule: null,
+    modules: ['tasks', 'exams', 'timetable'],
+    isDefault: true,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -76,6 +78,8 @@ export const MOCK_PLANNER_PROGRAMS: PlannerProgram[] = [
     category: 'exam',
     reminderDefaults: { minutesBefore: [60, 15], pushEnabled: true },
     recurrenceRule: null,
+    modules: ['tasks', 'exams', 'events'],
+    isDefault: false,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()

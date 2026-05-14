@@ -1,7 +1,7 @@
 import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { PLANNER_CATEGORY_COLORS } from '../constants/planner.constants';
-import type { PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable } from '../types/planner.types';
+import type { PlannerActivityModule, PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable } from '../types/planner.types';
 import type { PlannerEventInput, PlannerQuickAddInput, PlannerTimetableCellInput } from '../utils/planner.validation';
 
 function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEvent {
@@ -47,6 +47,7 @@ function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEv
 }
 
 function mapPlannerProgram(docId: string, raw: Record<string, unknown>): PlannerProgram {
+  const modulesRaw = Array.isArray(raw.modules) ? (raw.modules as PlannerActivityModule[]) : [];
   return {
     id: docId,
     familyId: String(raw.family_id || ''),
@@ -62,6 +63,8 @@ function mapPlannerProgram(docId: string, raw: Record<string, unknown>): Planner
       pushEnabled: Boolean((raw.reminder_defaults as Record<string, unknown> | undefined)?.push_enabled ?? true)
     },
     recurrenceRule: (raw.recurrence_rule as string) || null,
+    modules: modulesRaw.length ? modulesRaw : ['tasks'],
+    isDefault: Boolean(raw.is_default || false),
     isActive: raw.is_active !== false,
     createdAt: String(raw.created_at || new Date().toISOString()),
     updatedAt: String(raw.updated_at || raw.created_at || new Date().toISOString())
@@ -96,6 +99,48 @@ export async function fetchPlannerPrograms(childId: string): Promise<PlannerProg
   const q = query(collection(db, 'programs'), where('child_id', '==', childId), where('is_active', '==', true), orderBy('name', 'asc'), limit(120));
   const snap = await getDocs(q);
   return snap.docs.map((docRow) => mapPlannerProgram(docRow.id, docRow.data() as Record<string, unknown>));
+}
+
+export interface PlannerProgramInput {
+  name: string;
+  icon?: string;
+  color?: string;
+  category?: PlannerProgram['category'];
+  modules: PlannerActivityModule[];
+  isDefault?: boolean;
+}
+
+export async function upsertPlannerProgram(childId: string, familyId: string, input: PlannerProgramInput, programId?: string): Promise<string> {
+  const payload = {
+    family_id: familyId,
+    child_id: childId,
+    name: input.name.trim(),
+    icon: input.icon || '📘',
+    color: input.color || '#3b82f6',
+    category: input.category || 'custom',
+    reminder_defaults: {
+      minutes_before: [30],
+      push_enabled: true
+    },
+    recurrence_rule: null,
+    modules: input.modules,
+    is_default: Boolean(input.isDefault),
+    is_active: true,
+    updated_at: new Date().toISOString(),
+    updated_ts: serverTimestamp()
+  };
+
+  if (programId) {
+    await updateDoc(doc(db, 'programs', programId), payload);
+    return programId;
+  }
+
+  const ref = await addDoc(collection(db, 'programs'), {
+    ...payload,
+    created_at: new Date().toISOString(),
+    created_ts: serverTimestamp()
+  });
+  return ref.id;
 }
 
 export async function fetchSchoolTimetable(childId: string): Promise<PlannerTimetable | null> {

@@ -44,6 +44,9 @@ import { getDefaultReminders, useReminders } from '../../hooks/useReminders';
 import { getDefaultRewards, useRedemptions, useRewards } from '../../hooks/useRedemptions';
 import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
 import { ParentPlannerV2Page } from '../../features/planner';
+import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerPrograms';
+import { upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
+import type { PlannerActivityModule, PlannerProgram } from '../../features/planner/types/planner.types';
 
 interface ChildAccount {
   id: string;
@@ -143,6 +146,10 @@ function ParentDashboardContent() {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner'
   >('dashboard');
+  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'proofs', 'rewards'] as const;
+  const topLevelActiveTab: 'dashboard' | 'planner' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
+    ? 'planner'
+    : (activeTab as 'dashboard' | 'communication' | 'settings');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
@@ -155,18 +162,26 @@ function ParentDashboardContent() {
   const [chDesc, setChDesc] = useState('');
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [automationChildId, setAutomationChildId] = useState('');
+  const [activityChildId, setActivityChildId] = useState('');
+  const [activityName, setActivityName] = useState('');
+  const [activityModules, setActivityModules] = useState<PlannerActivityModule[]>(['tasks']);
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
 
   const parentTabs = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'tasks', label: 'Tasks' },
-    { id: 'automation', label: 'Automation' },
-    { id: 'proofs', label: 'Proofs' },
-    { id: 'events', label: 'Events' },
     { id: 'planner', label: 'Planner' },
-    { id: 'exams', label: 'Exams' },
-    { id: 'challenges', label: 'Challenges' },
     { id: 'communication', label: 'Communication' },
     { id: 'settings', label: 'Settings' }
+  ] as const;
+
+  const plannerWorkspaceTabs = [
+    { id: 'planner', label: 'Main Planner' },
+    { id: 'family', label: 'Kid Activities' },
+    { id: 'tasks', label: 'Tasks / Duties' },
+    { id: 'exams', label: 'Exams / Tests' },
+    { id: 'challenges', label: 'Challenges' },
+    { id: 'events', label: 'Events' },
+    { id: 'automation', label: 'Automation' }
   ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
@@ -175,6 +190,8 @@ function ParentDashboardContent() {
     .filter((m) => !inboxChildId || m.child_id === inboxChildId)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
+  const selectedActivityChildId = activityChildId || children[0]?.id || '';
+  const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId, false);
 
   useEffect(() => {
     if (!user) {
@@ -1239,6 +1256,12 @@ function ParentDashboardContent() {
   }, [automationChildId, children]);
 
   useEffect(() => {
+    if (!activityChildId && children[0]?.id) {
+      setActivityChildId(children[0].id);
+    }
+  }, [activityChildId, children]);
+
+  useEffect(() => {
     if (!user) {
       setChildProfiles([]);
       return;
@@ -1460,6 +1483,50 @@ function ParentDashboardContent() {
   const automatedTasks = tasks.filter((task) => task.is_generated === true);
   const manualTasks = tasks.filter((task) => task.is_generated !== true);
 
+  const clearActivityForm = () => {
+    setActivityName('');
+    setActivityModules(['tasks']);
+    setEditingActivityId(null);
+  };
+
+  const toggleActivityModule = (moduleId: PlannerActivityModule) => {
+    setActivityModules((prev) => {
+      const hasModule = prev.includes(moduleId);
+      const next = hasModule ? prev.filter((item) => item !== moduleId) : [...prev, moduleId];
+      return next.length ? next : ['tasks'];
+    });
+  };
+
+  const startEditActivity = (program: PlannerProgram) => {
+    setEditingActivityId(program.id);
+    setActivityName(program.name || '');
+    setActivityModules(program.modules && program.modules.length ? program.modules : ['tasks']);
+  };
+
+  const handleSaveActivity = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedActivityChildId || !activityName.trim()) return;
+    try {
+      await upsertPlannerProgram(
+        selectedActivityChildId,
+        familyId,
+        {
+          name: activityName.trim(),
+          category: activityName.trim().toLowerCase() === 'school' ? 'school' : 'custom',
+          modules: activityModules,
+          isDefault: activityName.trim().toLowerCase() === 'school'
+        },
+        editingActivityId || undefined
+      );
+      await refreshActivityPrograms();
+      clearActivityForm();
+      setSuccess('Activity saved.');
+    } catch (err) {
+      console.error('Failed to save activity:', err);
+      setError('Could not save activity.');
+    }
+  };
+
   return (
     <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto max-w-[1680px] rounded-[2rem] border bg-[var(--surface)]/95 backdrop-blur-md p-3 sm:p-4 lg:p-5" style={{ borderColor: 'var(--border-main)' }}>
@@ -1530,10 +1597,10 @@ function ParentDashboardContent() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => setActiveTab(tab.id === 'planner' ? 'planner' : tab.id)}
                     className={clsx(
                       'rounded-full px-4 py-2 text-sm font-semibold transition',
-                      activeTab === tab.id
+                      topLevelActiveTab === tab.id
                         ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
                         : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700'
                     )}
@@ -1543,6 +1610,28 @@ function ParentDashboardContent() {
                 ))}
               </div>
             </div>
+
+            {topLevelActiveTab === 'planner' ? (
+              <div className="mb-4 overflow-x-auto">
+                <div className="inline-flex min-w-max gap-2 rounded-full bg-slate-100 p-1 dark:bg-slate-800">
+                  {plannerWorkspaceTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id)}
+                      className={clsx(
+                        'rounded-full px-4 py-2 text-sm font-semibold transition',
+                        activeTab === tab.id
+                          ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+                          : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700'
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {(error || success || info) && (
               <div className="space-y-2 mb-4">
@@ -2299,14 +2388,44 @@ function ParentDashboardContent() {
 
                 {activeTab === 'family' && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--text-main)' }}>Family Hub Actions</h2>
-                    <div className="space-y-2">
-                      <button onClick={() => setIsModaling(true)} className="w-full py-2 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
-                        + Add Child Account
-                      </button>
-                      <button onClick={() => setInfo('Co-parent invite flow is in pending implementation list.')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)', background: 'var(--surface-soft)' }}>
-                        + Invite Co-Parent
-                      </button>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Kid Activities</h2>
+                      <select value={selectedActivityChildId} onChange={(e) => setActivityChildId(e.target.value)} className="rounded-xl py-2 px-3 border text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">Select child</option>
+                        {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                      </select>
+                    </div>
+                    <p className="mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>Create root activities (School, Extra Curricular, etc.) and choose which branches appear on the child side.</p>
+                    <form onSubmit={handleSaveActivity} className="grid grid-cols-1 gap-2 rounded-2xl border p-3 sm:grid-cols-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <input required value={activityName} onChange={(e) => setActivityName(e.target.value)} placeholder="Activity name" className="rounded-xl py-2 px-3 border sm:col-span-1" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                      <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+                        {(['tasks', 'exams', 'timetable', 'challenges', 'events'] as PlannerActivityModule[]).map((moduleId) => (
+                          <button key={moduleId} type="button" onClick={() => toggleActivityModule(moduleId)} className={clsx('rounded-full px-3 py-1.5 text-xs font-semibold border', activityModules.includes(moduleId) ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}>
+                            {moduleId}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="sm:col-span-3 flex gap-2">
+                        <button type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{editingActivityId ? 'Save Activity' : '+ Add Activity'}</button>
+                        <button type="button" onClick={clearActivityForm} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                      </div>
+                    </form>
+                    <div className="mt-4 space-y-2">
+                      {activityProgramsLoading ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading activities...</p>
+                      ) : activityPrograms.length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No activities yet for this child.</p>
+                      ) : (
+                        activityPrograms.map((program) => (
+                          <div key={program.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <div>
+                              <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{program.name}</p>
+                              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Modules: {(program.modules || ['tasks']).join(', ')}</p>
+                            </div>
+                            <button type="button" onClick={() => startEditActivity(program)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
