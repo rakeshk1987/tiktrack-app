@@ -334,6 +334,7 @@ function ParentDashboardContent() {
   };
 
   const startEditTask = (task: any) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditTaskId(task.id);
     setTChild(task.child_id || '');
     setTTitle(task.title || '');
@@ -1019,6 +1020,7 @@ function ParentDashboardContent() {
   };
 
   const startEditExam = (ex: any) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditExamId(ex.id);
     setEChild(ex.child_id || '');
     setESubject(ex.subject || '');
@@ -1101,6 +1103,7 @@ function ParentDashboardContent() {
   };
 
   const startEditGrowth = (g: any) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditGrowthId(g.id);
     setGChild(g.child_id || '');
     setGHeight(g.height_cm ?? '');
@@ -1173,6 +1176,7 @@ function ParentDashboardContent() {
   };
 
   const startEditEvent = (ev: any) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditEventId(ev.id);
     setEvChild(ev.child_id || '');
     setEvTitle(ev.title || '');
@@ -1237,6 +1241,7 @@ function ParentDashboardContent() {
   };
 
   const startEditReward = (r: any) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditRewardId(r.id);
     setRStarRate(r.star_to_currency_rate ?? '');
     setRWeeklyBonus(Boolean(r.weekly_bonus_enabled));
@@ -1626,6 +1631,7 @@ function ParentDashboardContent() {
   };
 
   const startEditActivity = (program: PlannerProgram) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditingActivityId(program.id);
     setActivityName(program.name || '');
     setActivityModules(program.modules && program.modules.length ? program.modules : ['tasks']);
