@@ -416,6 +416,7 @@ function ParentDashboardContent() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
       setSuccess('Task deleted.');
@@ -1010,6 +1011,7 @@ function ParentDashboardContent() {
   };
 
   const handleDeleteExam = async (examId: string) => {
+    if (!window.confirm('Are you sure you want to delete this exam?')) return;
     try {
       await deleteDoc(doc(db, 'exams', examId));
       setSuccess('Exam removed.');
@@ -1093,6 +1095,7 @@ function ParentDashboardContent() {
   };
 
   const handleDeleteGrowth = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this growth record?')) return;
     try {
       await deleteDoc(doc(db, 'growth_logs', id));
       setSuccess('Growth log deleted.');
@@ -1166,6 +1169,7 @@ function ParentDashboardContent() {
   };
 
   const handleDeleteEvent = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this event?')) return;
     try {
       await deleteDoc(doc(db, 'events', id));
       setSuccess('Event deleted.');
@@ -1231,6 +1235,7 @@ function ParentDashboardContent() {
   };
 
   const handleDeleteReward = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this reward?')) return;
     try {
       await deleteDoc(doc(db, 'reward_settings', id));
       setSuccess('Reward setting deleted.');
@@ -1655,9 +1660,20 @@ function ParentDashboardContent() {
       await refreshActivityPrograms();
       clearActivityForm();
       setSuccess('Activity saved.');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save activity:', err);
-      setError('Could not save activity.');
+      setError(err.message || 'Could not save activity.');
+    }
+  };
+
+  const handleDeleteActivity = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this activity?')) return;
+    try {
+      await deleteDoc(doc(db, 'programs', id));
+      await refreshActivityPrograms();
+      setSuccess('Activity deleted.');
+    } catch (err: any) {
+      setError(err.message || 'Could not delete activity.');
     }
   };
 
@@ -2600,6 +2616,7 @@ function ParentDashboardContent() {
                             <div className="flex gap-2">
                               <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>
                               <button type="button" onClick={() => startEditActivity(program)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                              <button type="button" onClick={() => handleDeleteActivity(program.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
                             </div>
                           </div>
                         ))
