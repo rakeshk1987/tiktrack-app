@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DateSelectArg, EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core';
-import { useAuth } from '../../../contexts/AuthContext';
+
 import { PLANNER_EVENT_CATEGORIES } from '../constants/planner.constants';
 import type { PlannerEvent } from '../types/planner.types';
 import { createParentPlannerEvent, updateParentPlannerEvent } from '../services/planner.firestore';
