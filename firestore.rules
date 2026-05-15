@@ -11,14 +11,16 @@ service cloud.firestore {
     }
 
     function isParent() {
+      let data = userDoc(request.auth.uid).data;
       return signedIn() && (
-        userDoc(request.auth.uid).data.role == 'parent_admin' ||
-        userDoc(request.auth.uid).data.role == 'parent'
+        ('role' in data && data.role == 'parent_admin') ||
+        ('role' in data && data.role == 'parent')
       );
     }
 
     function isChild() {
-      return signedIn() && userDoc(request.auth.uid).data.role == 'child_user';
+      let data = userDoc(request.auth.uid).data;
+      return signedIn() && 'role' in data && data.role == 'child_user';
     }
 
     function isSelf(uid) {
@@ -26,15 +28,17 @@ service cloud.firestore {
     }
 
     function isParentOf(childId) {
-      return signedIn() && userDoc(childId).data.parent_id == request.auth.uid;
+      let data = userDoc(childId).data;
+      return signedIn() && 'parent_id' in data && data.parent_id == request.auth.uid;
     }
 
     function familyIdFor(uid) {
-      return userDoc(uid).data.linked_family_id != null
-        ? userDoc(uid).data.linked_family_id
+      let data = userDoc(uid).data;
+      return ('linked_family_id' in data && data.linked_family_id != null)
+        ? data.linked_family_id
         : (
-          userDoc(uid).data.parent_id != null
-            ? userDoc(uid).data.parent_id
+          ('parent_id' in data && data.parent_id != null)
+            ? data.parent_id
             : uid
         );
     }

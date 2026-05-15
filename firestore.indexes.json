@@ -4,33 +4,92 @@
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "child_id", "order": "ASCENDING" },
-        { "fieldPath": "start_at", "order": "ASCENDING" }
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "start_at",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "programs",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "child_id", "order": "ASCENDING" },
-        { "fieldPath": "is_active", "order": "ASCENDING" },
-        { "fieldPath": "name", "order": "ASCENDING" }
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "is_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "school_timetables",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "child_id", "order": "ASCENDING" },
-        { "fieldPath": "is_active", "order": "ASCENDING" }
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "is_active",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "exam_results",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "child_id", "order": "ASCENDING" },
-        { "fieldPath": "exam_date", "order": "DESCENDING" }
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "exam_date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "reward_settings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "parent_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "is_generated",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expires_at",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

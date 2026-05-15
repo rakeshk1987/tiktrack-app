@@ -512,7 +512,7 @@ function ParentDashboardContent() {
     }
 
     setEventsLoading(true);
-    const evq = query(collection(db, 'events'), limit(800));
+    const evq = query(collection(db, 'events'), where('family_id', '==', familyId), limit(800));
 
     const unsub = onSnapshot(
       evq,
@@ -612,7 +612,7 @@ function ParentDashboardContent() {
       return;
     }
 
-    const eventsQuery = query(collection(db, 'events'), where('parent_id', '==', familyId), limit(100));
+    const eventsQuery = query(collection(db, 'events'), where('family_id', '==', familyId), limit(100));
     const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
       const mapped = snapshot.docs
         .map((d) => ({ id: d.id, ...(d.data() as any) }))
