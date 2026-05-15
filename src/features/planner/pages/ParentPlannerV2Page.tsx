@@ -29,14 +29,11 @@ import { ParentPlannerSidebar } from '../components/parent/ParentPlannerSidebar'
 import { ParentSyncStatus } from '../components/parent/ParentSyncStatus';
 import { ParentWeeklyOverview } from '../components/parent/ParentWeeklyOverview';
 
-function ParentPlannerInner() {
+function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: string }) {
   const { user } = useAuth();
   const { pushToast } = usePlannerToast();
   const { isOnline } = useNetworkStatus();
   const { queue, enqueue, retryOne, hasQueued } = usePlannerMutationQueue();
-
-  const childId = user?.linked_family_id || user?.id || 'child_mock_1';
-  const familyId = user?.linked_family_id || user?.id || 'fam_mock_1';
 
   const [activeCategories, setActiveCategories] = useState<PlannerEvent['category'][]>([...PLANNER_EVENT_CATEGORIES]);
   const [calendarNote, setCalendarNote] = useState('Tap events or drag to simulate rescheduling.');
@@ -48,8 +45,8 @@ function ParentPlannerInner() {
 
   useUnsavedChangesGuard(false, 'You have unsaved timetable changes. Leave anyway?');
 
-  const { events: fetchedEvents, loading: eventsLoading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, true);
-  const { programs, loading: programsLoading } = usePlannerPrograms(childId, true);
+  const { events: fetchedEvents, loading: eventsLoading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
+  const { programs, loading: programsLoading } = usePlannerPrograms(childId, false);
 
   const mergedEvents = useMemo(() => {
     const byId = new Map<string, PlannerEvent>();
@@ -335,10 +332,10 @@ function ParentPlannerInner() {
   );
 }
 
-export default function ParentPlannerV2Page() {
+export default function ParentPlannerV2Page({ childId, familyId }: { childId: string; familyId: string }) {
   return (
     <PlannerToastProvider>
-      <ParentPlannerInner />
+      <ParentPlannerInner childId={childId} familyId={familyId} />
     </PlannerToastProvider>
   );
 }

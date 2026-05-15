@@ -1842,7 +1842,7 @@ function ParentDashboardContent() {
             </div>
 
                 <div className={activeTab === 'planner' ? 'xl:col-span-12' : 'hidden'}>
-                  <ParentPlannerV2Page />
+                  <ParentPlannerV2Page childId={selectedActivityChildId} familyId={familyId} />
                 </div>
 
                 <div className="hidden">
