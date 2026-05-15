@@ -44,6 +44,7 @@ function ParentPlannerInner() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingEvent, setEditingEvent] = useState<PlannerEvent | null>(null);
   const [optimisticEvents, setOptimisticEvents] = useState<PlannerEvent[]>([]);
+  const [insightFocus, setInsightFocus] = useState<'none' | 'workload' | 'conflicts' | 'burnout' | 'exams' | 'sync'>('none');
 
   useUnsavedChangesGuard(false, 'You have unsaved timetable changes. Leave anyway?');
 
@@ -61,9 +62,43 @@ function ParentPlannerInner() {
   const insights = usePlannerInsights(filteredEvents);
   const lightInsights = usePlannerLightInsights(filteredEvents);
 
-  const calendarEvents = useMemo<EventInput[]>(() => filteredEvents.map((event) => ({ id: event.id, title: event.title, start: event.startAt, end: event.endAt, color: event.color })), [filteredEvents]);
+  const focusedEvents = useMemo(() => {
+    if (insightFocus === 'none' || insightFocus === 'workload' || insightFocus === 'sync') return filteredEvents;
+    if (insightFocus === 'exams') return filteredEvents.filter((event) => event.category === 'exam');
+    if (insightFocus === 'burnout') {
+      const heavy = new Set(['school', 'exam', 'tuition', 'homework']);
+      return filteredEvents.filter((event) => heavy.has(event.category));
+    }
+    if (insightFocus === 'conflicts') {
+      const ids = new Set<string>();
+      for (const conflict of insights.conflicts) {
+        ids.add(conflict.eventAId);
+        ids.add(conflict.eventBId);
+      }
+      return filteredEvents.filter((event) => ids.has(event.id));
+    }
+    return filteredEvents;
+  }, [filteredEvents, insightFocus, insights.conflicts]);
+
+  const calendarEvents = useMemo<EventInput[]>(
+    () => focusedEvents.map((event) => ({ id: event.id, title: event.title, start: event.startAt, end: event.endAt, color: event.color })),
+    [focusedEvents]
+  );
 
   const upcomingExamCount = filteredEvents.filter((event) => event.category === 'exam' && new Date(event.startAt).getTime() >= Date.now()).length;
+
+  function toggleFocus(mode: 'workload' | 'conflicts' | 'burnout' | 'exams' | 'sync') {
+    setInsightFocus((prev) => {
+      const next = prev === mode ? 'none' : mode;
+      if (next === 'none') setCalendarNote('Showing all planner events.');
+      if (next === 'workload') setCalendarNote('Workload focus active. Showing all events.');
+      if (next === 'conflicts') setCalendarNote('Conflict focus active. Showing overlapping events.');
+      if (next === 'burnout') setCalendarNote('Burnout focus active. Showing high-load categories.');
+      if (next === 'exams') setCalendarNote('Exam focus active. Showing exam events only.');
+      if (next === 'sync') setCalendarNote('Sync status viewed. Google integration is not connected.');
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!isOnline) {
@@ -279,11 +314,11 @@ function ParentPlannerInner() {
         }
         right={
           <div className="space-y-4">
-            <ParentWeeklyOverview weeklyScore={insights.burnout.weeklyScore} />
-            <ParentConflictPanel count={insights.conflicts.length} />
-            <ParentBurnoutPanel level={insights.burnout.level} recommendation={insights.burnout.recommendation} />
-            <ParentExamTracker upcomingExamCount={upcomingExamCount} />
-            <ParentSyncStatus status="not_connected" />
+            <ParentWeeklyOverview weeklyScore={insights.burnout.weeklyScore} active={insightFocus === 'workload'} onClick={() => toggleFocus('workload')} />
+            <ParentConflictPanel count={insights.conflicts.length} active={insightFocus === 'conflicts'} onClick={() => toggleFocus('conflicts')} />
+            <ParentBurnoutPanel level={insights.burnout.level} recommendation={insights.burnout.recommendation} active={insightFocus === 'burnout'} onClick={() => toggleFocus('burnout')} />
+            <ParentExamTracker upcomingExamCount={upcomingExamCount} active={insightFocus === 'exams'} onClick={() => toggleFocus('exams')} />
+            <ParentSyncStatus status="not_connected" active={insightFocus === 'sync'} onClick={() => toggleFocus('sync')} />
           </div>
         }
       />

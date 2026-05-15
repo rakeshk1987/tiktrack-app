@@ -189,6 +189,15 @@ function ParentDashboardContent() {
   ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
+  const belongsToFamily = (row: any) => {
+    if (!row) return false;
+    return (
+      row.family_id === familyId ||
+      row.parent_id === familyId ||
+      row.parent_id === user?.id ||
+      (row.child_id && children.some((child) => child.id === row.child_id))
+    );
+  };
   const { messages: inboxMessages, sendMessage } = useMessages(familyId, 'parent');
   const selectedThread = inboxMessages
     .filter((m) => !inboxChildId || m.child_id === inboxChildId)
@@ -282,19 +291,14 @@ function ParentDashboardContent() {
     }
 
     setTasksLoading(true);
-    const tasksQuery = query(
-      collection(db, 'tasks'),
-      orderBy('created_at', 'desc'),
-      limit(300)
-    );
-
-    const childIdSet = new Set(children.map((child) => child.id));
+    const tasksQuery = query(collection(db, 'tasks'), limit(500));
     const unsub = onSnapshot(
       tasksQuery,
       (snap) => {
         const mapped = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((task) => task.child_id && childIdSet.has(task.child_id));
+          .filter((task) => belongsToFamily(task))
+          .sort((a, b) => new Date(b.created_at || b.updated_at || b.due_date || 0).getTime() - new Date(a.created_at || a.updated_at || a.due_date || 0).getTime());
         setTasks(mapped);
         setTasksLoading(false);
       },
@@ -305,7 +309,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsub();
-  }, [user, children]);
+  }, [user, children, familyId]);
 
   useEffect(() => {
     if (!user || children.length === 0 || tChild || editTaskId) return;
@@ -450,16 +454,15 @@ function ParentDashboardContent() {
     }
 
     setExamsLoading(true);
-    const examsQuery = query(
-      collection(db, 'exams'),
-      where('parent_id', '==', familyId),
-      orderBy('exam_date', 'desc')
-    );
+    const examsQuery = query(collection(db, 'exams'), limit(500));
 
     const unsub = onSnapshot(
       examsQuery,
       (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((exam) => belongsToFamily(exam))
+          .sort((a, b) => new Date(b.exam_date || b.created_at || 0).getTime() - new Date(a.exam_date || a.created_at || 0).getTime());
         setExams(mapped);
         setExamsLoading(false);
       },
@@ -480,16 +483,15 @@ function ParentDashboardContent() {
     }
 
     setGrowthLoading(true);
-    const gql = query(
-      collection(db, 'growth_logs'),
-      where('parent_id', '==', familyId),
-      orderBy('date', 'desc')
-    );
+    const gql = query(collection(db, 'growth_logs'), limit(500));
 
     const unsub = onSnapshot(
       gql,
       (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((log) => belongsToFamily(log))
+          .sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime());
         setGrowthLogs(mapped);
         setGrowthLoading(false);
       },
@@ -510,16 +512,15 @@ function ParentDashboardContent() {
     }
 
     setEventsLoading(true);
-    const evq = query(
-      collection(db, 'events'),
-      where('parent_id', '==', familyId),
-      orderBy('date', 'desc')
-    );
+    const evq = query(collection(db, 'events'), limit(800));
 
     const unsub = onSnapshot(
       evq,
       (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((event) => belongsToFamily(event))
+          .sort((a, b) => new Date(b.start_at || b.date || b.created_at || 0).getTime() - new Date(a.start_at || a.date || a.created_at || 0).getTime());
         setEvents(mapped);
         setEventsLoading(false);
       },
@@ -586,7 +587,7 @@ function ParentDashboardContent() {
     );
 
     return () => unsubscribe();
-  }, [user, familyId]);
+  }, [user, familyId, children]);
 
   useEffect(() => {
     if (!user) {
@@ -603,7 +604,7 @@ function ParentDashboardContent() {
     });
 
     return () => unsubscribe();
-  }, [user, familyId]);
+  }, [user, familyId, children]);
 
   useEffect(() => {
     if (!user) {
@@ -620,7 +621,7 @@ function ParentDashboardContent() {
     });
 
     return () => unsubscribe();
-  }, [user, familyId]);
+  }, [user, familyId, children]);
 
   useEffect(() => {
     if (!user) {
@@ -1059,6 +1060,14 @@ function ParentDashboardContent() {
         setSuccess('Growth log saved.');
       }
 
+      if (gChild) {
+        await setDoc(doc(db, 'child_profile', gChild), {
+          height_cm: gHeight || 0,
+          weight_kg: gWeight || 0,
+          updated_at: new Date().toISOString()
+        }, { merge: true });
+      }
+
       setGChild('');
       setGHeight('');
       setGWeight('');
@@ -1159,7 +1168,8 @@ function ParentDashboardContent() {
     setEvChild(ev.child_id || '');
     setEvTitle(ev.title || '');
     setEvType(ev.type || 'event');
-    setEvDate(ev.date ? new Date(ev.date).toISOString().slice(0,10) : '');
+    const rawDate = ev.start_at || ev.date || ev.created_at;
+    setEvDate(rawDate ? new Date(rawDate).toISOString().slice(0,10) : '');
     setEvReminderDays(ev.reminder_days_before ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1242,6 +1252,13 @@ function ParentDashboardContent() {
   const [pendingProofCount, setPendingProofCount] = useState(0);
   const [upcomingEventsCount, setUpcomingEventsCount] = useState(0);
   const [examsCount, setExamsCount] = useState(0);
+  const getEventDateValue = (event: any) => event.start_at || event.date || event.created_at || null;
+  const calculateBmi = (heightCm?: number, weightKg?: number) => {
+    const h = Number(heightCm) || 0;
+    const w = Number(weightKg) || 0;
+    if (h <= 0 || w <= 0) return null;
+    return Number((w / ((h / 100) * (h / 100))).toFixed(1));
+  };
   const selectedAutomationChildId = automationChildId || children[0]?.id || '';
   const selectedAutomationProfile = (childProfiles.find((profile) => profile.id === selectedAutomationChildId) || null) as ChildProfile | null;
   const selectedAutomationName = children.find((child) => child.id === selectedAutomationChildId)?.name || 'Child';
@@ -1256,7 +1273,11 @@ function ParentDashboardContent() {
       total_marks: Number(exam.total_marks) || 0,
       exam_date: exam.exam_date || exam.date || new Date().toISOString()
     })) as ExamResult[];
-  const upcomingExamEvents = selectedChildEvents.filter((event) => event.type === 'exam' && event.date && new Date(event.date) >= new Date(new Date().toDateString()));
+  const upcomingExamEvents = selectedChildEvents.filter((event) => {
+    const eventDate = getEventDateValue(event);
+    const eventKind = event.type || (event as any).category;
+    return eventKind === 'exam' && eventDate && new Date(eventDate) >= new Date(new Date().toDateString());
+  });
   const {
     routine,
     loading: routineLoading,
@@ -1410,7 +1431,8 @@ function ParentDashboardContent() {
     const today = new Date();
     const upcoming = events.filter((ev) => {
       try {
-        return ev.date && new Date(ev.date) >= new Date(today.toDateString());
+        const eventDate = getEventDateValue(ev);
+        return eventDate && new Date(eventDate) >= new Date(today.toDateString());
       } catch {
         return false;
       }
@@ -1454,8 +1476,11 @@ function ParentDashboardContent() {
     .sort((a, b) => new Date(b.exam_date || 0).getTime() - new Date(a.exam_date || 0).getTime())
     .slice(0, 3);
   const upcomingEventsPreview = events
-    .filter((ev) => ev.date && new Date(ev.date) >= new Date(new Date().toDateString()))
-    .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+    .filter((ev) => {
+      const eventDate = getEventDateValue(ev);
+      return eventDate && new Date(eventDate) >= new Date(new Date().toDateString());
+    })
+    .sort((a, b) => new Date(getEventDateValue(a) || 0).getTime() - new Date(getEventDateValue(b) || 0).getTime())
     .slice(0, 3);
   const latestGrowthLogs = [...growthLogs]
     .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
@@ -1809,7 +1834,7 @@ function ParentDashboardContent() {
                   <ParentPlannerV2Page />
                 </div>
 
-                <div className={activeTab === 'settings' && settingsTab === 'growth' ? 'xl:col-span-12' : 'hidden'}>
+                <div className="hidden">
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Growth & Health</h2>
@@ -1848,6 +1873,7 @@ function ParentDashboardContent() {
                               <div>
                                 <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{children.find((c) => c.id === g.child_id)?.name || 'Child'}</p>
                                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Height: {g.height_cm} cm • Weight: {g.weight_kg} kg</p>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>BMI: {calculateBmi(g.height_cm, g.weight_kg) ?? 'N/A'} (kg/m²)</p>
                                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{g.date ? new Date(g.date).toLocaleDateString() : '—'}</p>
                               </div>
                               <div className="flex gap-2">
@@ -1907,7 +1933,7 @@ function ParentDashboardContent() {
                             <div key={ev.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                               <div>
                                 <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ev.title} • {ev.type}</p>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ev.child_id ? children.find((c) => c.id === ev.child_id)?.name : 'Family'} • {ev.date ? new Date(ev.date).toLocaleDateString() : '—'}</p>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ev.child_id ? children.find((c) => c.id === ev.child_id)?.name : 'Family'} • {getEventDateValue(ev) ? new Date(getEventDateValue(ev) as string).toLocaleDateString() : '—'}</p>
                                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Remind {ev.reminder_days_before ?? 0} days before</p>
                               </div>
                               <div className="flex gap-2">
@@ -2378,7 +2404,7 @@ function ParentDashboardContent() {
                         ) : upcomingEventsPreview.map((ev) => (
                           <div key={ev.id} className="py-2 border-t first:border-t-0" style={{ borderColor: 'var(--border-main)' }}>
                             <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{ev.title}</p>
-                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ev.child_id ? getChildName(ev.child_id) : 'Family'} • {ev.date ? new Date(ev.date).toLocaleDateString() : 'No date'}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ev.child_id ? getChildName(ev.child_id) : 'Family'} • {getEventDateValue(ev) ? new Date(getEventDateValue(ev) as string).toLocaleDateString() : 'No date'}</p>
                           </div>
                         ))}
                       </div>
@@ -2719,6 +2745,61 @@ function ParentDashboardContent() {
                             </div>
                           </form>
                           <RewardManagement rewards={rewardItems} onCreateReward={createRewardForFamily} onUpdateReward={updateReward} onDeleteReward={deleteReward} loading={rewardItemsLoading} />
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsTab === 'growth' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-base font-bold" style={{ color: 'var(--text-main)' }}>Growth & Health</h3>
+                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{growthLogs.length}</span>
+                        </div>
+                        <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                          BMI formula: weight (kg) / (height (m) × height (m)). Height and weight come from each growth log entry.
+                        </p>
+                        <div className="space-y-3">
+                          <form onSubmit={handleCreateGrowth} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <select value={gChild} onChange={(ev) => setGChild(ev.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <option value="">-- Child --</option>
+                              {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                            </select>
+                            <input required value={gHeight as any} onChange={(ev) => setGHeight(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Height (cm)" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input required value={gWeight as any} onChange={(ev) => setGWeight(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Weight (kg)" type="number" step="0.1" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input required value={gDate} onChange={(ev) => setGDate(ev.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <div className="col-span-1 sm:col-span-2 flex gap-2">
+                              <button disabled={growthLoading2} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{growthLoading2 ? 'Saving...' : (editGrowthId ? 'Save Changes' : '+ Save Growth')}</button>
+                              {editGrowthId ? (
+                                <button type="button" onClick={cancelEditGrowth} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
+                              ) : (
+                                <button type="button" onClick={() => { setGChild(''); setGHeight(''); setGWeight(''); setGDate(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                              )}
+                            </div>
+                          </form>
+                          <div>
+                            {growthLoading ? (
+                              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading growth logs...</p>
+                            ) : (filterChild ? growthLogs.filter((x) => x.child_id === filterChild) : growthLogs).length === 0 ? (
+                              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No growth logs yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {(filterChild ? growthLogs.filter((x) => x.child_id === filterChild) : growthLogs).map((g) => (
+                                  <div key={g.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                    <div>
+                                      <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{children.find((c) => c.id === g.child_id)?.name || 'Child'}</p>
+                                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Height: {g.height_cm} cm • Weight: {g.weight_kg} kg</p>
+                                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>BMI: {calculateBmi(g.height_cm, g.weight_kg) ?? 'N/A'} (kg/m²)</p>
+                                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{g.date ? new Date(g.date).toLocaleDateString() : '—'}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => startEditGrowth(g)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                      <button onClick={() => handleDeleteGrowth(g.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

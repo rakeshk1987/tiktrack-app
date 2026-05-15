@@ -11,7 +11,10 @@ service cloud.firestore {
     }
 
     function isParent() {
-      return signedIn() && userDoc(request.auth.uid).data.role == 'parent_admin';
+      return signedIn() && (
+        userDoc(request.auth.uid).data.role == 'parent_admin' ||
+        userDoc(request.auth.uid).data.role == 'parent'
+      );
     }
 
     function isChild() {
