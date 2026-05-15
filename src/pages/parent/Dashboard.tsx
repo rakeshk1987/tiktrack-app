@@ -294,14 +294,14 @@ function ParentDashboardContent() {
     const tasksQuery = query(
       collection(db, 'tasks'),
       where('parent_id', '==', familyId),
-      orderBy('created_at', 'desc'),
       limit(500)
     );
     const unsub = onSnapshot(
       tasksQuery,
       (snap) => {
         const mapped = snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }));
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
         setTasks(mapped);
         setTasksLoading(false);
       },
@@ -460,14 +460,15 @@ function ParentDashboardContent() {
     const examsQuery = query(
       collection(db, 'exams'),
       where('family_id', '==', familyId),
-      orderBy('exam_date', 'desc'),
       limit(500)
     );
 
     const unsub = onSnapshot(
       examsQuery,
       (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .sort((a, b) => new Date(b.exam_date || b.created_at || 0).getTime() - new Date(a.exam_date || a.created_at || 0).getTime());
         setExams(mapped);
         setExamsLoading(false);
       },
@@ -491,14 +492,15 @@ function ParentDashboardContent() {
     const gql = query(
       collection(db, 'growth_logs'),
       where('family_id', '==', familyId),
-      orderBy('date', 'desc'),
       limit(500)
     );
 
     const unsub = onSnapshot(
       gql,
       (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const mapped = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime());
         setGrowthLogs(mapped);
         setGrowthLoading(false);
       },
@@ -1369,13 +1371,14 @@ function ParentDashboardContent() {
     const logQuery = query(
       collection(db, 'task_logs'),
       where('parent_id', '==', familyId),
-      where('status', '==', 'completed'),
       limit(500)
     );
     const unsub = onSnapshot(
       logQuery,
       (snap) => {
-        const visibleCompleted = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const visibleCompleted = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((d) => d.status === 'completed');
 
         setTasksCompletedCount(visibleCompleted.length);
 

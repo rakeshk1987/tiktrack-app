@@ -96,9 +96,12 @@ export async function fetchPlannerEventsByRange(childId: string, range: PlannerD
 }
 
 export async function fetchPlannerPrograms(childId: string): Promise<PlannerProgram[]> {
-  const q = query(collection(db, 'programs'), where('child_id', '==', childId), where('is_active', '==', true), orderBy('name', 'asc'), limit(120));
+  const q = query(collection(db, 'programs'), where('child_id', '==', childId), limit(500));
   const snap = await getDocs(q);
-  return snap.docs.map((docRow) => mapPlannerProgram(docRow.id, docRow.data() as Record<string, unknown>));
+  return snap.docs
+    .map((docRow) => mapPlannerProgram(docRow.id, docRow.data() as Record<string, unknown>))
+    .filter((p) => p.isActive)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface PlannerProgramInput {

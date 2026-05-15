@@ -33,7 +33,8 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
       } else {
         setEvents(rows);
       }
-    } catch {
+    } catch (err) {
+      console.error('usePlannerEvents error:', err);
       setEvents(useMockFallback ? MOCK_PLANNER_EVENTS.map((event) => ({ ...event, childId })) : []);
     } finally {
       setLoading(false);

@@ -22,7 +22,8 @@ export function usePlannerPrograms(childId: string, useMockFallback = true) {
       } else {
         setPrograms(rows);
       }
-    } catch {
+    } catch (err) {
+      console.error('usePlannerPrograms error:', err);
       setPrograms(useMockFallback ? MOCK_PLANNER_PROGRAMS.map((program) => ({ ...program, childId })) : []);
     } finally {
       setLoading(false);

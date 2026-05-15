@@ -1,4 +1,4 @@
-﻿import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -126,7 +126,7 @@ function AppRoutes() {
           path="/planner/parent"
           element={
             <PrivateRoute requiredRole="parent_admin">
-              <ParentPlannerV2Page />
+              <ParentPlannerStandalone />
             </PrivateRoute>
           }
         />
@@ -156,3 +156,9 @@ function App() {
 }
 
 export default App;
+
+function ParentPlannerStandalone() {
+  const { user } = useAuth();
+  const familyId = user?.linked_family_id || user?.id || '';
+  return <ParentPlannerV2Page childId={familyId} familyId={familyId} />;
+}

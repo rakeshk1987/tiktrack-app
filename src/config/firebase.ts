@@ -90,4 +90,9 @@ const db = dbInstance as Firestore;
 const auth = authInstance as Auth;
 const storage = storageInstance as FirebaseStorage;
 
+if (typeof window !== 'undefined') {
+  (window as any).firebase_db = db;
+  (window as any).firebase_auth = auth;
+}
+
 export { app, analytics, auth, db, firebaseConfig, firebaseInitError, storage, messaging };

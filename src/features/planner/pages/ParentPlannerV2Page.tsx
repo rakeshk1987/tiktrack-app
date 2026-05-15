@@ -30,7 +30,6 @@ import { ParentSyncStatus } from '../components/parent/ParentSyncStatus';
 import { ParentWeeklyOverview } from '../components/parent/ParentWeeklyOverview';
 
 function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: string }) {
-  const { user } = useAuth();
   const { pushToast } = usePlannerToast();
   const { isOnline } = useNetworkStatus();
   const { queue, enqueue, retryOne, hasQueued } = usePlannerMutationQueue();
