@@ -89,12 +89,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             if (userDoc.exists()) {
               const data = userDoc.data();
+              const inferredRole = fallbackUser.role; // from email
+              const isParentUser = inferredRole === 'parent_admin';
+
+              // Self-heal: fix missing/incorrect role or empty linked_family_id.
+              // Uses isSelf permission which always works regardless of the role field.
+              const needsRoleHeal = isParentUser && data.role !== 'parent_admin' && data.role !== 'parent';
+              const needsFamilyIdHeal = isParentUser && (!data.linked_family_id || data.linked_family_id === '');
+
+              if (needsRoleHeal || needsFamilyIdHeal) {
+                const healPayload: Record<string, string> = { updated_at: new Date().toISOString() };
+                if (needsRoleHeal) healPayload.role = 'parent_admin';
+                if (needsFamilyIdHeal) healPayload.linked_family_id = firebaseUser.uid;
+                // Fire-and-forget — don't block user from continuing
+                setDoc(doc(db, 'users', firebaseUser.uid), healPayload, { merge: true }).catch(
+                  (e) => console.warn('Self-heal of user doc failed (non-fatal):', e)
+                );
+              }
+
               setUser({
                 id: firebaseUser.uid,
                 email: firebaseUser.email || '',
-                role: data.role ?? fallbackUser.role,
+                role: (needsRoleHeal ? 'parent_admin' : data.role) ?? fallbackUser.role,
                 parent_id: data.parent_id,
-                linked_family_id: data.linked_family_id
+                linked_family_id: needsFamilyIdHeal ? firebaseUser.uid : (data.linked_family_id || undefined)
               });
             } else {
               // Safeguard fallback if document creation lagged.

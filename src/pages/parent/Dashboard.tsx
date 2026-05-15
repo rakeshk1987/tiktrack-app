@@ -291,14 +291,17 @@ function ParentDashboardContent() {
     }
 
     setTasksLoading(true);
-    const tasksQuery = query(collection(db, 'tasks'), limit(500));
+    const tasksQuery = query(
+      collection(db, 'tasks'),
+      where('parent_id', '==', familyId),
+      orderBy('created_at', 'desc'),
+      limit(500)
+    );
     const unsub = onSnapshot(
       tasksQuery,
       (snap) => {
         const mapped = snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((task) => belongsToFamily(task))
-          .sort((a, b) => new Date(b.created_at || b.updated_at || b.due_date || 0).getTime() - new Date(a.created_at || a.updated_at || a.due_date || 0).getTime());
+          .map((d) => ({ id: d.id, ...(d.data() as any) }));
         setTasks(mapped);
         setTasksLoading(false);
       },
@@ -454,15 +457,17 @@ function ParentDashboardContent() {
     }
 
     setExamsLoading(true);
-    const examsQuery = query(collection(db, 'exams'), limit(500));
+    const examsQuery = query(
+      collection(db, 'exams'),
+      where('family_id', '==', familyId),
+      orderBy('exam_date', 'desc'),
+      limit(500)
+    );
 
     const unsub = onSnapshot(
       examsQuery,
       (snap) => {
-        const mapped = snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((exam) => belongsToFamily(exam))
-          .sort((a, b) => new Date(b.exam_date || b.created_at || 0).getTime() - new Date(a.exam_date || a.created_at || 0).getTime());
+        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         setExams(mapped);
         setExamsLoading(false);
       },
@@ -483,15 +488,17 @@ function ParentDashboardContent() {
     }
 
     setGrowthLoading(true);
-    const gql = query(collection(db, 'growth_logs'), limit(500));
+    const gql = query(
+      collection(db, 'growth_logs'),
+      where('family_id', '==', familyId),
+      orderBy('date', 'desc'),
+      limit(500)
+    );
 
     const unsub = onSnapshot(
       gql,
       (snap) => {
-        const mapped = snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((log) => belongsToFamily(log))
-          .sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime());
+        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         setGrowthLogs(mapped);
         setGrowthLoading(false);
       },
@@ -1359,12 +1366,16 @@ function ParentDashboardContent() {
       return;
     }
 
-    const logQuery = query(collection(db, 'task_logs'), where('status', '==', 'completed'));
+    const logQuery = query(
+      collection(db, 'task_logs'),
+      where('parent_id', '==', familyId),
+      where('status', '==', 'completed'),
+      limit(500)
+    );
     const unsub = onSnapshot(
       logQuery,
       (snap) => {
-        const completedLogs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-        const visibleCompleted = completedLogs.filter((entry) => children.some((c) => c.id === entry.child_id));
+        const visibleCompleted = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
         setTasksCompletedCount(visibleCompleted.length);
 
