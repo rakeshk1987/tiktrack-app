@@ -6,21 +6,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userDocExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
     function userDoc(uid) {
       return get(/databases/$(database)/documents/users/$(uid));
     }
 
     function isParent() {
-      let data = userDoc(request.auth.uid).data;
-      return signedIn() && (
-        ('role' in data && data.role == 'parent_admin') ||
-        ('role' in data && data.role == 'parent')
+      return signedIn() && userDocExists(request.auth.uid) && (
+        ('role' in userDoc(request.auth.uid).data && userDoc(request.auth.uid).data.role == 'parent_admin') ||
+        ('role' in userDoc(request.auth.uid).data && userDoc(request.auth.uid).data.role == 'parent')
       );
     }
 
     function isChild() {
-      let data = userDoc(request.auth.uid).data;
-      return signedIn() && 'role' in data && data.role == 'child_user';
+      return signedIn() && userDocExists(request.auth.uid) && 'role' in userDoc(request.auth.uid).data && userDoc(request.auth.uid).data.role == 'child_user';
     }
 
     function isSelf(uid) {
@@ -28,19 +30,21 @@ service cloud.firestore {
     }
 
     function isParentOf(childId) {
-      let data = userDoc(childId).data;
-      return signedIn() && 'parent_id' in data && data.parent_id == request.auth.uid;
+      return signedIn() && userDocExists(childId) && 'parent_id' in userDoc(childId).data && userDoc(childId).data.parent_id == request.auth.uid;
     }
 
     function familyIdFor(uid) {
-      let data = userDoc(uid).data;
-      return ('linked_family_id' in data && data.linked_family_id != null && data.linked_family_id != '')
-        ? data.linked_family_id
-        : (
-          ('parent_id' in data && data.parent_id != null && data.parent_id != '')
-            ? data.parent_id
-            : uid
-        );
+      return userDocExists(uid) 
+        ? (
+            ('linked_family_id' in userDoc(uid).data && userDoc(uid).data.linked_family_id != null && userDoc(uid).data.linked_family_id != '')
+              ? userDoc(uid).data.linked_family_id
+              : (
+                ('parent_id' in userDoc(uid).data && userDoc(uid).data.parent_id != null && userDoc(uid).data.parent_id != '')
+                  ? userDoc(uid).data.parent_id
+                  : uid
+              )
+          )
+        : uid;
     }
 
     function sameFamily(familyId) {
