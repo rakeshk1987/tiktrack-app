@@ -253,7 +253,7 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-4 pb-8">
+    <div className="mx-auto max-w-[1680px] space-y-4 pb-8">
       <PlannerToastViewport />
       <PlannerOfflineBanner isOnline={isOnline} hasQueuedMutations={hasQueued} onRetryQueued={() => { for (const item of queue) void retryOne(item.id); }} />
 

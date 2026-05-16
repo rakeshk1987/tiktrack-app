@@ -79,6 +79,8 @@ export default function ChildPlannerV2Page() {
 
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectTeacher, setNewSubjectTeacher] = useState('');
+  const [newSubjectIncludeInExam, setNewSubjectIncludeInExam] = useState(true);
   const [subjectCreating, setSubjectCreating] = useState(false);
 
   const [showEventForm, setShowEventForm] = useState(false);
@@ -315,20 +317,23 @@ export default function ChildPlannerV2Page() {
     }
   }
 
-  async function handleCreateSubject(e: React.FormEvent) {
+  const handleCreateSubject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!childId || !newSubjectName.trim() || !activeActivityId) return;
+    if (!newSubjectName.trim()) return;
     setSubjectCreating(true);
     try {
-      await addNewSubject(newSubjectName.trim(), familyId);
+      await addNewSubject(newSubjectName, familyId, newSubjectTeacher, newSubjectIncludeInExam);
       setNewSubjectName('');
+      setNewSubjectTeacher('');
+      setNewSubjectIncludeInExam(true);
       setShowSubjectForm(false);
     } catch (err) {
-      console.error('Failed to create subject:', err);
+      console.error(err);
     } finally {
       setSubjectCreating(false);
     }
-  }
+  };
+
 
   async function handleCreateEvent(e: React.FormEvent) {
     e.preventDefault();
@@ -428,7 +433,7 @@ export default function ChildPlannerV2Page() {
   }
 
     return (
-    <div className="mx-auto mt-4 max-w-7xl space-y-6 pb-24 px-4">
+    <div className="mx-auto mt-4 max-w-[1680px] space-y-6 pb-24 px-4">
       {/* Header & Top Navigation */}
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-800/40 p-1 backdrop-blur-xl shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-purple-500/10 opacity-50" />
@@ -621,7 +626,7 @@ export default function ChildPlannerV2Page() {
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
                       />
                       <input 
-                        type="date"
+                        type="datetime-local"
                         value={newTaskDue}
                         onChange={(e) => setNewTaskDue(e.target.value)}
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
@@ -689,7 +694,7 @@ export default function ChildPlannerV2Page() {
                 {showExamForm && (
                   <form onSubmit={handleCreateExam} className="mb-8 rounded-3xl border border-rose-400/20 bg-rose-400/5 p-6 animate-in zoom-in-95 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      {subjects.length > 0 ? (
+                      {subjects.filter(s => s.includeInExams).length > 0 ? (
                         <select 
                           required
                           value={newExamSubjectId}
@@ -700,19 +705,19 @@ export default function ChildPlannerV2Page() {
                           className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
                         >
                           <option value="" className="bg-slate-900">Select Subject</option>
-                          {subjects.map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
+                          {subjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
                         </select>
                       ) : (
                         <input 
                           required
                           value={newExamSubject}
                           onChange={(e) => setNewExamSubject(e.target.value)}
-                          placeholder="Exam Subject"
+                          placeholder="Exam Subject (Add subjects first)"
                           className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
                         />
                       )}
                       <input 
-                        type="date"
+                        type="datetime-local"
                         value={newExamDate}
                         onChange={(e) => setNewExamDate(e.target.value)}
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
@@ -793,7 +798,12 @@ export default function ChildPlannerV2Page() {
                   {subjects.length > 0 ? (
                     <select 
                       value={subject} 
-                      onChange={(e) => setSubject(e.target.value)} 
+                      onChange={(e) => {
+                        const subName = e.target.value;
+                        setSubject(subName);
+                        const subObj = subjects.find(s => s.name === subName);
+                        if (subObj?.teacherName) setTeacher(subObj.teacherName);
+                      }} 
                       className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white focus:bg-white/10 transition-all outline-none"
                     >
                       <option value="" className="bg-slate-900">Select Subject</option>
@@ -864,20 +874,40 @@ export default function ChildPlannerV2Page() {
 
                 {showSubjectForm && (
                   <form onSubmit={handleCreateSubject} className="mb-8 rounded-3xl border border-indigo-400/20 bg-indigo-400/5 p-6 animate-in zoom-in-95 duration-300">
-                    <div className="flex gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <input 
                         required
                         value={newSubjectName}
                         onChange={(e) => setNewSubjectName(e.target.value)}
                         placeholder="Subject Name (e.g. Mathematics)"
-                        className="flex-1 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-indigo-500/50"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-indigo-500/50"
                       />
+                      <input 
+                        value={newSubjectTeacher}
+                        onChange={(e) => setNewSubjectTeacher(e.target.value)}
+                        placeholder="Teacher Name (optional)"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-indigo-500/50"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <div className={`flex h-6 w-11 items-center rounded-full transition-colors duration-300 ${newSubjectIncludeInExam ? 'bg-indigo-500' : 'bg-slate-700'}`}>
+                          <input 
+                            type="checkbox"
+                            className="hidden"
+                            checked={newSubjectIncludeInExam}
+                            onChange={(e) => setNewSubjectIncludeInExam(e.target.checked)}
+                          />
+                          <div className={`h-4 w-4 rounded-full bg-white transition-transform duration-300 ${newSubjectIncludeInExam ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </div>
+                        <span className="text-xs font-black uppercase tracking-widest text-white/60 group-hover:text-white transition-colors">Include in Exam List</span>
+                      </label>
                       <button 
                         type="submit" 
                         disabled={subjectCreating}
                         className="rounded-2xl bg-indigo-400 px-8 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-indigo-400/20 disabled:opacity-50"
                       >
-                        {subjectCreating ? 'Adding...' : 'Add'}
+                        {subjectCreating ? 'Adding Subject...' : 'Record Subject Protocol'}
                       </button>
                     </div>
                   </form>
@@ -885,11 +915,18 @@ export default function ChildPlannerV2Page() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {subjects.length ? subjects.map((sub) => (
-                    <div key={sub.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
-                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-lg">📚</div>
-                      <div>
-                        <p className="text-sm font-bold text-white">{sub.name}</p>
-                        <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{new Date(sub.createdAt).toLocaleDateString()}</p>
+                    <div key={sub.id} className="relative group overflow-hidden flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:bg-white/[0.05]">
+                      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="relative z-10 h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl shadow-inner">📚</div>
+                      <div className="relative z-10 flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-bold text-white truncate">{sub.name}</p>
+                          {sub.includeInExams && (
+                            <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" title="Included in Exams" />
+                          )}
+                        </div>
+                        <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
+                        <p className="text-[9px] text-white/20 font-black uppercase tracking-[0.15em] mt-1">Matrix Ref: {sub.id.slice(-6)}</p>
                       </div>
                     </div>
                   )) : (
@@ -1006,59 +1043,6 @@ export default function ChildPlannerV2Page() {
                 </div>
               </div>
             )}
-
-            {activitySubTab === 'subjects' && (
-              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="mb-6 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Subject Mastery</h3>
-                    <p className="text-xs text-white/40">Define the core subjects for this program.</p>
-                  </div>
-                  <button 
-                    onClick={() => setShowSubjectForm(!showSubjectForm)}
-                    className="rounded-full bg-indigo-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 hover:bg-indigo-400/20 transition-all"
-                  >
-                    {showSubjectForm ? 'Cancel' : '+ New Subject'}
-                  </button>
-                </div>
-
-                {showSubjectForm && (
-                  <form onSubmit={handleCreateSubject} className="mb-8 rounded-3xl border border-indigo-400/20 bg-indigo-400/5 p-6 animate-in zoom-in-95 duration-300">
-                    <div className="flex gap-4">
-                      <input 
-                        required
-                        value={newSubjectName}
-                        onChange={(e) => setNewSubjectName(e.target.value)}
-                        placeholder="Subject Name (e.g. Mathematics)"
-                        className="flex-1 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-indigo-500/50"
-                      />
-                      <button 
-                        type="submit" 
-                        disabled={subjectCreating}
-                        className="rounded-2xl bg-indigo-400 px-8 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-indigo-400/20 disabled:opacity-50"
-                      >
-                        {subjectCreating ? 'Adding...' : 'Add'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {subjects.length ? subjects.map((sub) => (
-                    <div key={sub.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
-                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-lg">📚</div>
-                      <div>
-                        <p className="text-sm font-bold text-white">{sub.name}</p>
-                        <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{new Date(sub.createdAt).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="col-span-full py-20 text-center text-white/20 font-medium">No subjects registered in this protocol.</div>
-                  )}
-                </div>
-              </div>
-            )}
-
             {activitySubTab === 'events' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6 flex items-center justify-between">

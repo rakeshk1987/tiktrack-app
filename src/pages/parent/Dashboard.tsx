@@ -48,6 +48,7 @@ import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerProgr
 import { upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
 import type { PlannerActivityModule, PlannerProgram } from '../../features/planner/types/planner.types';
 import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTimetable';
+import { usePlannerSubjects } from '../../features/planner/hooks/usePlannerSubjects';
 import { usePlannerChallenges } from '../../features/planner/hooks/usePlannerChallenges';
 
 interface ChildAccount {
@@ -123,6 +124,7 @@ function ParentDashboardContent() {
   const [eMarks, setEMarks] = useState<number | ''>('');
   const [eTotal, setETotal] = useState<number | ''>('');
   const [eDate, setEDate] = useState('');
+  const [eActivityId, setEActivityId] = useState('');
   const [eSyllabusScope, setESyllabusScope] = useState('');
   const [editExamId, setEditExamId] = useState<string | null>(null);
   const [filterChild, setFilterChild] = useState<string>('');
@@ -211,6 +213,12 @@ function ParentDashboardContent() {
   const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId);
   const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, false);
   const { challenges: activityChallenges, incrementScore: incrementActivityChallengeScore, createChallenge: createActivityChallenge } = usePlannerChallenges(selectedActivityChildId, selectedActivity?.id);
+  const { subjects: activitySubjects, addSubject: addActivitySubject, removeSubject: removeActivitySubject } = usePlannerSubjects(selectedActivityChildId, selectedActivity?.id);
+  const { programs: examPrograms } = usePlannerPrograms(eChild);
+  const { subjects: examSubjects } = usePlannerSubjects(eChild, eActivityId);
+  const [newSubName, setNewSubName] = useState('');
+  const [newSubTeacher, setNewSubTeacher] = useState('');
+  const [newSubInExam, setNewSubInExam] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -975,6 +983,7 @@ function ParentDashboardContent() {
           syllabus_scope: eSyllabusScope || '',
           result_published_at: hasResult ? new Date().toISOString() : null,
           reminder_plan: reminderPlan,
+          linked_program_id: eActivityId || null,
           updated_at: new Date().toISOString()
         });
         await syncExamCountdownReminders(editExamId, eChild || null, eSubject, examDateIso, computedStatus);
@@ -991,6 +1000,7 @@ function ParentDashboardContent() {
           syllabus_scope: eSyllabusScope || '',
           result_published_at: hasResult ? new Date().toISOString() : null,
           reminder_plan: ['7d', '3d', '1d', 'same_day'],
+          linked_program_id: eActivityId || null,
           parent_id: familyId,
           family_id: familyId,
           created_at: new Date().toISOString()
@@ -1000,6 +1010,7 @@ function ParentDashboardContent() {
       }
 
       setEChild('');
+      setEActivityId('');
       setESubject('');
       setEType('weekly_test');
       setEMarks('');
@@ -1030,11 +1041,12 @@ function ParentDashboardContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditExamId(ex.id);
     setEChild(ex.child_id || '');
+    setEActivityId(ex.linked_program_id || '');
     setESubject(ex.subject || '');
     setEType((ex.exam_type as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other') || 'weekly_test');
     setEMarks(ex.marks_scored ?? '');
     setETotal(ex.total_marks ?? '');
-    setEDate(ex.exam_date ? new Date(ex.exam_date).toISOString().slice(0,10) : '');
+    setEDate(ex.exam_date ? new Date(ex.exam_date).toISOString().slice(0, 16) : '');
     setESyllabusScope(ex.syllabus_scope || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1042,7 +1054,9 @@ function ParentDashboardContent() {
   const cancelEdit = () => {
     setEditExamId(null);
     setEChild('');
+    setEActivityId('');
     setESubject('');
+    setEType('weekly_test');
     setEMarks('');
     setETotal('');
     setEDate('');
@@ -1958,7 +1972,7 @@ function ParentDashboardContent() {
                         <option value="reminder">Reminder</option>
                       </select>
 
-                      <input required value={evDate} onChange={(ev) => setEvDate(ev.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input required value={evDate} onChange={(ev) => setEvDate(ev.target.value)} type="datetime-local" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={evReminderDays as any} onChange={(ev) => setEvReminderDays(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Remind days before" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <div className="col-span-1 sm:col-span-3 flex gap-2">
                         <button disabled={eventLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{eventLoading ? 'Saving...' : (editEventId ? 'Save Changes' : '+ Create Event')}</button>
@@ -2099,7 +2113,7 @@ function ParentDashboardContent() {
                       </select>
                       <input required value={tTitle} onChange={(e) => setTTitle(e.target.value)} placeholder="Task title" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Points" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <input value={tDue} onChange={(e) => setTDue(e.target.value)} type="date" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input value={tDue} onChange={(e) => setTDue(e.target.value)} type="datetime-local" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <select value={tRecurrenceType} onChange={(e) => setTRecurrenceType(e.target.value as 'none' | 'daily' | 'weekly')} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="none">One-time</option>
                         <option value="daily">Daily quest</option>
@@ -2146,7 +2160,7 @@ function ParentDashboardContent() {
                                     <div>
                                       <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{t.title}</p>
                                       <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.description}</p>
-                                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{getChildName(t.child_id)} • {t.points ?? t.star_value} pts • {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'no due date'}</p>
+                                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{getChildName(t.child_id)} • {t.points ?? t.star_value} pts • {t.due_date ? new Date(t.due_date).toLocaleString() : 'no due date'}</p>
                                     </div>
                                     <div className="flex gap-2">
                                       <button onClick={() => startEditTask(t)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
@@ -2488,14 +2502,30 @@ function ParentDashboardContent() {
                           <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{exams.length}</span>
                         </div>
                       </div>
-
                       <div className="space-y-3">
                         <form onSubmit={handleCreateExam} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                          <select value={eChild} onChange={(ev) => setEChild(ev.target.value)} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                          <select value={eChild} onChange={(ev) => { setEChild(ev.target.value); setEActivityId(''); setESubject(''); }} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                             <option value="">-- Child --</option>
                             {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                           </select>
-                          <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <select required value={eActivityId} onChange={(ev) => { setEActivityId(ev.target.value); setESubject(''); }} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <option value="">-- Activity / Program --</option>
+                            {examPrograms.filter(p => (p.modules || []).includes('exams')).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                          </select>
+                          {examSubjects.filter(s => s.includeInExams).length > 0 ? (
+                            <select 
+                              required 
+                              value={eSubject} 
+                              onChange={(ev) => setESubject(ev.target.value)} 
+                              className="rounded-xl py-2 px-3 border min-w-0" 
+                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                            >
+                              <option value="">-- Select Subject --</option>
+                              {examSubjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                            </select>
+                          ) : (
+                            <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject (Add subjects first)" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          )}
                           <select value={eType} onChange={(ev) => setEType(ev.target.value as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other')} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                             <option value="weekly_test">Weekly Test</option>
                             <option value="unit_test">Unit Test</option>
@@ -2504,7 +2534,7 @@ function ParentDashboardContent() {
                             <option value="practice">Practice</option>
                             <option value="other">Other</option>
                           </select>
-                          <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="date" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="datetime-local" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input value={eSyllabusScope} onChange={(ev) => setESyllabusScope(ev.target.value)} placeholder="Syllabus scope (optional)" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored (add later)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks (add later)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
@@ -3138,6 +3168,78 @@ function ParentDashboardContent() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            ) : null}
+
+            {activityModalTab === 'subjects' ? (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-widest text-indigo-400">Add New Subject</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    <input 
+                      value={newSubName} 
+                      onChange={(e) => setNewSubName(e.target.value)} 
+                      placeholder="Subject Name" 
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" 
+                    />
+                    <input 
+                      value={newSubTeacher} 
+                      onChange={(e) => setNewSubTeacher(e.target.value)} 
+                      placeholder="Teacher Name" 
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={newSubInExam} 
+                        onChange={(e) => setNewSubInExam(e.target.checked)} 
+                        className="rounded border-slate-300 text-indigo-500 focus:ring-indigo-500" 
+                      />
+                      <span className="text-xs font-semibold text-slate-600 uppercase">Include in Exams</span>
+                    </label>
+                    <button 
+                      onClick={async () => {
+                        if (!newSubName.trim()) return;
+                        await addActivitySubject(newSubName, familyId, newSubTeacher, newSubInExam);
+                        setNewSubName('');
+                        setNewSubTeacher('');
+                        setNewSubInExam(true);
+                      }} 
+                      className="rounded-lg bg-indigo-500 px-4 py-2 text-xs font-bold text-white shadow-sm"
+                    >
+                      + Add Subject
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {activitySubjects.map((sub) => (
+                    <div key={sub.id} className="group relative rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-white hover:shadow-md">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-slate-800">{sub.name}</p>
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{sub.teacherName || 'No Teacher'}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {sub.includeInExams && (
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 uppercase">Exam</span>
+                          )}
+                          <button 
+                            onClick={() => void removeActivitySubject(sub.id)} 
+                            className="text-slate-300 hover:text-rose-500 transition-colors"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {activitySubjects.length === 0 && (
+                    <div className="col-span-full py-10 text-center text-slate-400 text-sm italic font-medium">No subjects defined for this activity yet.</div>
+                  )}
                 </div>
               </div>
             ) : null}

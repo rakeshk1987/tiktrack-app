@@ -8,17 +8,22 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!childId || !programId) {
+    if (!childId) {
       setSubjects([]);
       setLoading(false);
       return;
     }
 
-    const q = query(
-      collection(db, 'planner_subjects'),
-      where('childId', '==', childId),
-      where('programId', '==', programId)
-    );
+    const q = programId 
+      ? query(
+          collection(db, 'planner_subjects'),
+          where('childId', '==', childId),
+          where('programId', '==', programId)
+        )
+      : query(
+          collection(db, 'planner_subjects'),
+          where('childId', '==', childId)
+        );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items: PlannerSubject[] = snapshot.docs.map((d) => ({
@@ -32,13 +37,15 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
     return () => unsubscribe();
   }, [childId, programId]);
 
-  async function addSubject(name: string, familyId: string, description?: string) {
+  async function addSubject(name: string, familyId: string, teacherName?: string, includeInExams?: boolean, description?: string) {
     if (!childId || !programId || !name.trim()) return;
     await addDoc(collection(db, 'planner_subjects'), {
       childId,
       familyId,
       programId,
       name: name.trim(),
+      teacherName: teacherName || '',
+      includeInExams: includeInExams ?? true,
       description: description || '',
       createdAt: new Date().toISOString()
     });

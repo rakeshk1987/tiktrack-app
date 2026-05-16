@@ -52,6 +52,8 @@ export interface PlannerSubject {
   childId: string;
   programId: string;
   name: string;
+  teacherName?: string;
+  includeInExams?: boolean;
   description?: string;
   color?: string;
   createdAt: string;

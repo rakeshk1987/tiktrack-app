@@ -716,7 +716,7 @@ export default function ChildLayout() {
         <InboxPanel childId={childId} parentId={parentId} isDark={isDark} onClose={() => setIsInboxOpen(false)} />
       )}
 
-      <div className="mx-auto max-w-[1500px] px-3 pb-10 pt-4 relative z-10 sm:px-5 lg:px-8 lg:pt-6">
+      <div className="mx-auto max-w-[1680px] px-3 pb-10 pt-4 relative z-10 sm:px-5 lg:px-8 lg:pt-6">
         <div className={clsx('sticky top-3 z-30 mb-4 hidden gap-3 rounded-[1.35rem] border px-3 py-2 shadow-[0_16px_45px_rgba(15,23,42,0.16)] backdrop-blur-xl md:flex md:flex-col xl:flex-row xl:items-center xl:justify-between', navShellClass)}>
           <div className="flex flex-wrap items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/15 bg-white/8 text-sky-300">
