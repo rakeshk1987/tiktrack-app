@@ -298,13 +298,14 @@ service cloud.firestore {
 
     match /planner_subjects/{subjectId} {
       allow read: if signedIn() && (
-        (resource.data.familyId is string && sameFamily(resource.data.familyId)) ||
-        (resource.data.childId is string && (isSelf(resource.data.childId) || isParentOf(resource.data.childId))) ||
-        isParent()
+        isParent() ||
+        resource.data.childId == request.auth.uid ||
+        resource.data.familyId == familyIdFor(request.auth.uid) ||
+        isParentOf(resource.data.childId)
       );
       allow create, update: if signedIn() && (
         isParent() || 
-        (request.resource.data.childId is string && isSelf(request.resource.data.childId))
+        request.resource.data.childId == request.auth.uid
       );
       allow delete: if isParent();
     }
