@@ -115,6 +115,7 @@ function ParentDashboardContent() {
   const [tRecurrenceType, setTRecurrenceType] = useState<'none' | 'daily' | 'weekly'>('none');
   const [tRecurrenceDays, setTRecurrenceDays] = useState<number[]>([]);
   const [tChild, setTChild] = useState('');
+  const [tActivityId, setTActivityId] = useState('');
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [exams, setExams] = useState<Array<any>>([]);
   const [examsLoading, setExamsLoading] = useState(true);
@@ -138,6 +139,7 @@ function ParentDashboardContent() {
   const [events, setEvents] = useState<Array<any>>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [evChild, setEvChild] = useState('');
+  const [evActivityId, setEvActivityId] = useState('');
   const [evTitle, setEvTitle] = useState('');
   const [evType, setEvType] = useState('event');
   const [evDate, setEvDate] = useState('');
@@ -164,6 +166,7 @@ function ParentDashboardContent() {
 
   const [chTitle, setChTitle] = useState('');
   const [chChild, setChChild] = useState('');
+  const [chActivityId, setChActivityId] = useState('');
   const [chTarget, setChTarget] = useState<number | ''>('');
   const [chDesc, setChDesc] = useState('');
   const [challengeLoading, setChallengeLoading] = useState(false);
@@ -215,6 +218,9 @@ function ParentDashboardContent() {
   const { challenges: activityChallenges, incrementScore: incrementActivityChallengeScore, createChallenge: createActivityChallenge } = usePlannerChallenges(selectedActivityChildId, selectedActivity?.id);
   const { subjects: activitySubjects, addSubject: addActivitySubject, removeSubject: removeActivitySubject } = usePlannerSubjects(selectedActivityChildId, selectedActivity?.id);
   const { programs: examPrograms } = usePlannerPrograms(eChild);
+  const { programs: taskPrograms } = usePlannerPrograms(tChild);
+  const { programs: eventPrograms } = usePlannerPrograms(evChild);
+  const { programs: chPrograms } = usePlannerPrograms(chChild);
   const { subjects: examSubjects } = usePlannerSubjects(eChild, eActivityId);
   const [newSubName, setNewSubName] = useState('');
   const [newSubTeacher, setNewSubTeacher] = useState('');
@@ -337,6 +343,7 @@ function ParentDashboardContent() {
 
   const clearTaskForm = () => {
     setTChild('');
+    setTActivityId('');
     setTTitle('');
     setTDesc('');
     setTPoints('');
@@ -350,6 +357,7 @@ function ParentDashboardContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditTaskId(task.id);
     setTChild(task.child_id || '');
+    setTActivityId(task.linked_program_id || '');
     setTTitle(task.title || '');
     setTDesc(task.description || '');
     setTPoints(task.points ?? task.star_value ?? '');
@@ -395,6 +403,7 @@ function ParentDashboardContent() {
         due_date: tDue ? new Date(tDue).toISOString() : null,
         recurrence_type: tRecurrenceType,
         recurrence_days: tRecurrenceType === 'weekly' ? tRecurrenceDays : [],
+        linked_program_id: tActivityId || null,
         parent_id: familyId,
         family_id: familyId
       };
@@ -1151,6 +1160,7 @@ function ParentDashboardContent() {
             type: evType,
             date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
             reminder_days_before: evReminderDays || 0,
+            linked_program_id: evActivityId || null,
             updated_at: new Date().toISOString()
           }),
           'update-event'
@@ -1164,6 +1174,7 @@ function ParentDashboardContent() {
             type: evType,
             date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
             reminder_days_before: evReminderDays || 0,
+            linked_program_id: evActivityId || null,
             parent_id: familyId,
             family_id: familyId,
             created_at: new Date().toISOString()
@@ -1174,6 +1185,7 @@ function ParentDashboardContent() {
       }
 
       setEvChild('');
+      setEvActivityId('');
       setEvTitle('');
       setEvType('event');
       setEvDate('');
@@ -1202,6 +1214,7 @@ function ParentDashboardContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditEventId(ev.id);
     setEvChild(ev.child_id || '');
+    setEvActivityId(ev.linked_program_id || '');
     setEvTitle(ev.title || '');
     setEvType(ev.type || 'event');
     const rawDate = ev.start_at || ev.date || ev.created_at;
@@ -1213,6 +1226,7 @@ function ParentDashboardContent() {
   const cancelEditEvent = () => {
     setEditEventId(null);
     setEvChild('');
+    setEvActivityId('');
     setEvTitle('');
     setEvType('event');
     setEvDate('');
@@ -1960,9 +1974,13 @@ function ParentDashboardContent() {
 
                   <div className="space-y-3">
                     <form onSubmit={handleCreateEvent} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <select value={evChild} onChange={(ev) => setEvChild(ev.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <select value={evChild} onChange={(ev) => { setEvChild(ev.target.value); setEvActivityId(''); }} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">-- Child (optional) --</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                      </select>
+                      <select value={evActivityId} onChange={(ev) => setEvActivityId(ev.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">-- Activity (Optional) --</option>
+                        {eventPrograms.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                       </select>
                       <input required value={evTitle} onChange={(ev) => setEvTitle(ev.target.value)} placeholder="Title" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <select value={evType} onChange={(ev) => setEvType(ev.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
@@ -2107,9 +2125,13 @@ function ParentDashboardContent() {
 
                   <div className="space-y-3">
                     <form onSubmit={handleCreateTask} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <select required value={tChild} onChange={(e) => setTChild(e.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <select required value={tChild} onChange={(e) => { setTChild(e.target.value); setTActivityId(''); }} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">-- Child --</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                      </select>
+                      <select value={tActivityId} onChange={(e) => setTActivityId(e.target.value)} className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">-- Activity (Optional) --</option>
+                        {taskPrograms.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                       </select>
                       <input required value={tTitle} onChange={(e) => setTTitle(e.target.value)} placeholder="Task title" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Points" type="number" className="col-span-1 sm:col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
@@ -2512,20 +2534,23 @@ function ParentDashboardContent() {
                             <option value="">-- Activity / Program --</option>
                             {examPrograms.filter(p => (p.modules || []).includes('exams')).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                           </select>
-                          {examSubjects.filter(s => s.includeInExams).length > 0 ? (
-                            <select 
-                              required 
-                              value={eSubject} 
-                              onChange={(ev) => setESubject(ev.target.value)} 
-                              className="rounded-xl py-2 px-3 border min-w-0" 
-                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                            >
-                              <option value="">-- Select Subject --</option>
-                              {examSubjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                            </select>
-                          ) : (
-                            <input required value={eSubject} onChange={(ev) => setESubject(ev.target.value)} placeholder="Subject (Add subjects first)" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                          )}
+                          <select 
+                            required 
+                            value={eSubject} 
+                            onChange={(ev) => setESubject(ev.target.value)} 
+                            className="rounded-xl py-2 px-3 border min-w-0" 
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                            disabled={!eActivityId}
+                          >
+                            <option value="">-- Select Subject --</option>
+                            {examSubjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                            {eActivityId && examSubjects.filter(s => s.includeInExams).length === 0 && (
+                              <option value="" disabled>No subjects with "Exam" enabled</option>
+                            )}
+                            {!eActivityId && (
+                              <option value="" disabled>Select an activity first</option>
+                            )}
+                          </select>
                           <select value={eType} onChange={(ev) => setEType(ev.target.value as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other')} className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                             <option value="weekly_test">Weekly Test</option>
                             <option value="unit_test">Unit Test</option>
@@ -2923,8 +2948,8 @@ function ParentDashboardContent() {
                       if (!chTitle || !chChild || !chTarget) return;
                       setChallengeLoading(true);
                       try {
-                        await createChallenge(chTitle, chChild, Number(chTarget), chDesc);
-                        setChTitle(''); setChChild(''); setChTarget(''); setChDesc('');
+                        await createChallenge(chTitle, chChild, Number(chTarget), chDesc, chActivityId);
+                        setChTitle(''); setChChild(''); setChActivityId(''); setChTarget(''); setChDesc('');
                         setSuccess('Challenge created!');
                       } catch (err) {
                         setError('Could not create challenge.');
@@ -2932,16 +2957,20 @@ function ParentDashboardContent() {
                         setChallengeLoading(false);
                       }
                     }} className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                      <select required value={chChild} onChange={(e) => setChChild(e.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <select required value={chChild} onChange={(e) => { setChChild(e.target.value); setChActivityId(''); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">-- Child --</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                       </select>
+                      <select value={chActivityId} onChange={(e) => setChActivityId(e.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                        <option value="">-- Activity (Optional) --</option>
+                        {chPrograms.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                      </select>
                       <input required value={chTitle} onChange={(e) => setChTitle(e.target.value)} placeholder="Challenge title" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <input required value={chTarget as any} onChange={(e) => setChTarget(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Target score" type="number" min="1" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <input value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Description (optional)" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Description (optional)" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <div className="col-span-1 sm:col-span-2 flex gap-2">
                         <button disabled={challengeLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{challengeLoading ? 'Creating...' : '+ New Challenge'}</button>
-                        <button type="button" onClick={() => { setChTitle(''); setChChild(''); setChTarget(''); setChDesc(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                        <button type="button" onClick={() => { setChTitle(''); setChChild(''); setChActivityId(''); setChTarget(''); setChDesc(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
                       </div>
                     </form>
                     {activeChallenges.length > 0 && (

@@ -694,28 +694,21 @@ export default function ChildPlannerV2Page() {
                 {showExamForm && (
                   <form onSubmit={handleCreateExam} className="mb-8 rounded-3xl border border-rose-400/20 bg-rose-400/5 p-6 animate-in zoom-in-95 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      {subjects.filter(s => s.includeInExams).length > 0 ? (
-                        <select 
-                          required
-                          value={newExamSubjectId}
-                          onChange={(e) => {
-                            setNewExamSubjectId(e.target.value);
-                            setNewExamSubject(subjects.find(s => s.id === e.target.value)?.name || '');
-                          }}
-                          className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
-                        >
-                          <option value="" className="bg-slate-900">Select Subject</option>
-                          {subjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
-                        </select>
-                      ) : (
-                        <input 
-                          required
-                          value={newExamSubject}
-                          onChange={(e) => setNewExamSubject(e.target.value)}
-                          placeholder="Exam Subject (Add subjects first)"
-                          className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
-                        />
-                      )}
+                      <select 
+                        required
+                        value={newExamSubjectId}
+                        onChange={(e) => {
+                          setNewExamSubjectId(e.target.value);
+                          setNewExamSubject(subjects.find(s => s.id === e.target.value)?.name || '');
+                        }}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
+                      >
+                        <option value="" className="bg-slate-900">Select Subject</option>
+                        {subjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
+                        {subjects.filter(s => s.includeInExams).length === 0 && (
+                          <option value="" disabled className="bg-slate-900">No subjects with "Exam" enabled</option>
+                        )}
+                      </select>
                       <input 
                         type="datetime-local"
                         value={newExamDate}

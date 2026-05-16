@@ -44,7 +44,8 @@ export function useChallenges(parentId: string) {
     title: string,
     childId: string,
     targetScore: number,
-    description?: string
+    description?: string,
+    linkedProgramId?: string | null
   ) => {
     await addDoc(collection(db, 'challenges'), {
       title,
@@ -55,6 +56,7 @@ export function useChallenges(parentId: string) {
       child_score: 0,
       target_score: targetScore,
       status: 'active',
+      linked_program_id: linkedProgramId || null,
       created_at: new Date().toISOString()
     });
   }, [parentId]);

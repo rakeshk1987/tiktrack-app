@@ -14,23 +14,27 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
       return;
     }
 
-    const q = programId 
-      ? query(
-          collection(db, 'planner_subjects'),
-          where('childId', '==', childId),
-          where('programId', '==', programId)
-        )
-      : query(
-          collection(db, 'planner_subjects'),
-          where('childId', '==', childId)
-        );
+    // Query by childId only to avoid composite index requirements for (childId, programId)
+    const q = query(
+      collection(db, 'planner_subjects'),
+      where('childId', '==', childId)
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items: PlannerSubject[] = snapshot.docs.map((d) => ({
+      const allItems = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data()
       })) as PlannerSubject[];
-      setSubjects(items);
+      
+      // Filter by programId in memory
+      const filtered = programId 
+        ? allItems.filter(s => s.programId === programId)
+        : allItems;
+
+      setSubjects(filtered);
+      setLoading(false);
+    }, (err) => {
+      console.error('Firestore Subject Sync Error:', err);
       setLoading(false);
     });
 
