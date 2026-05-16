@@ -292,6 +292,19 @@ service cloud.firestore {
       allow update, delete: if isParent();
     }
 
+    match /planner_subjects/{subjectId} {
+      allow read: if signedIn() && (
+        (resource.data.familyId is string && sameFamily(resource.data.familyId)) ||
+        (resource.data.childId is string && (isSelf(resource.data.childId) || isParentOf(resource.data.childId))) ||
+        isParent()
+      );
+      allow create, update: if signedIn() && (
+        isParent() || 
+        (request.resource.data.childId is string && isSelf(request.resource.data.childId))
+      );
+      allow delete: if isParent();
+    }
+
     match /messages/{messageId} {
       allow read: if signedIn() && (
         isParent() ||
