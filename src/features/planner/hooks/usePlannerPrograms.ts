@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { MOCK_PLANNER_PROGRAMS } from '../constants/planner.mock';
 import { fetchPlannerPrograms } from '../services/planner.firestore';
 import type { PlannerProgram } from '../types/planner.types';
 
-export function usePlannerPrograms(childId: string, useMockFallback = true) {
+export function usePlannerPrograms(childId: string) {
   const [programs, setPrograms] = useState<PlannerProgram[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!childId) {
-      setPrograms(useMockFallback ? MOCK_PLANNER_PROGRAMS : []);
+      setPrograms([]);
       setLoading(false);
       return;
     }
@@ -17,18 +16,23 @@ export function usePlannerPrograms(childId: string, useMockFallback = true) {
     setLoading(true);
     try {
       const rows = await fetchPlannerPrograms(childId);
-      if (rows.length === 0 && useMockFallback) {
-        setPrograms(MOCK_PLANNER_PROGRAMS.map((program) => ({ ...program, childId })));
-      } else {
-        setPrograms(rows);
-      }
+      const now = new Date();
+      // Filter out programs that have an end date in the past
+      const active = rows.filter(p => {
+        if (!p.endDate) return true;
+        const end = new Date(p.endDate);
+        // Set to end of day
+        end.setHours(23, 59, 59, 999);
+        return end >= now;
+      });
+      setPrograms(active);
     } catch (err) {
       console.error('usePlannerPrograms error:', err);
-      setPrograms(useMockFallback ? MOCK_PLANNER_PROGRAMS.map((program) => ({ ...program, childId })) : []);
+      setPrograms([]);
     } finally {
       setLoading(false);
     }
-  }, [childId, useMockFallback]);
+  }, [childId]);
 
   useEffect(() => {
     void load();

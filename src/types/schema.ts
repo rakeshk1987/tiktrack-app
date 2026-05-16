@@ -66,7 +66,7 @@ export interface Task {
   status?: 'pending' | 'completed';
   created_at?: string;
   completed_at?: string;
-  recurrence_type?: 'none' | 'daily' | 'weekly';
+  recurrence_type?: 'none' | 'daily' | 'weekly' | 'monthly';
   recurrence_days?: number[]; // 0-6 for weekly recurrence
 }
 
@@ -132,6 +132,8 @@ export interface Event {
   title: string;
   date: string;
   reminder_days_before: number;
+  recurrence_type?: 'none' | 'daily' | 'weekly' | 'monthly';
+  linked_program_id?: string | null;
 }
 
 export interface RewardSetting {

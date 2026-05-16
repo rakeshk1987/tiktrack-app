@@ -14,6 +14,7 @@ import { usePlannerPrograms } from '../hooks/usePlannerPrograms';
 import { usePlannerTimetable } from '../hooks/usePlannerTimetable';
 import { usePlannerInsights } from '../hooks/usePlannerInsights';
 import { usePlannerChallenges } from '../hooks/usePlannerChallenges';
+import { usePlannerSubjects } from '../hooks/usePlannerSubjects';
 import { plannerTimetableCellSchema } from '../utils/planner.validation';
 import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
@@ -48,28 +49,43 @@ export default function ChildPlannerV2Page() {
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
 
   const { events, loading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
-  const { programs } = usePlannerPrograms(childId, false);
+  const { programs } = usePlannerPrograms(childId);
   const { timetable, refresh: refreshTimetable } = usePlannerTimetable(childId, false);
   const insights = usePlannerInsights(events);
 
   const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
   const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId);
+  const { subjects, addSubject: addNewSubject } = usePlannerSubjects(childId, activeActivityId);
 
   // New Form States
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDue, setNewTaskDue] = useState('');
+  const [newTaskRecurrence, setNewTaskRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [taskCreating, setTaskCreating] = useState(false);
 
   const [showExamForm, setShowExamForm] = useState(false);
   const [newExamSubject, setNewExamSubject] = useState('');
+  const [newExamSubjectId, setNewExamSubjectId] = useState('');
   const [newExamDate, setNewExamDate] = useState('');
+  const [newExamMarks, setNewExamMarks] = useState<number | ''>('');
+  const [newExamTotalMarks, setNewExamTotalMarks] = useState<number | ''>('');
   const [examCreating, setExamCreating] = useState(false);
 
   const [showChallengeForm, setShowChallengeForm] = useState(false);
   const [newChallengeTitle, setNewChallengeTitle] = useState('');
   const [newChallengeTarget, setNewChallengeTarget] = useState(5);
   const [challengeCreating, setChallengeCreating] = useState(false);
+
+  const [showSubjectForm, setShowSubjectForm] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [subjectCreating, setSubjectCreating] = useState(false);
+
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventDate, setNewEventDate] = useState('');
+  const [newEventRecurrence, setNewEventRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [eventCreating, setEventCreating] = useState(false);
 
   const [taskEvents, setTaskEvents] = useState<PlannerEvent[]>([]);
   const [examEvents, setExamEvents] = useState<PlannerEvent[]>([]);
@@ -231,6 +247,7 @@ export default function ChildPlannerV2Page() {
         parent_id: familyId,
         status: 'pending',
         due_date: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+        recurrence_type: newTaskRecurrence,
         linked_program_id: activeActivityId,
         category: 'homework',
         priority: 'medium',
@@ -239,6 +256,7 @@ export default function ChildPlannerV2Page() {
       });
       setNewTaskTitle('');
       setNewTaskDue('');
+      setNewTaskRecurrence('none');
       setShowTaskForm(false);
       await refreshEvents();
     } catch (err) {
@@ -255,17 +273,23 @@ export default function ChildPlannerV2Page() {
     try {
       await addDoc(collection(db, 'exams'), {
         subject: newExamSubject.trim(),
+        subject_id: newExamSubjectId,
         child_id: childId,
         family_id: familyId,
         parent_id: familyId,
         exam_date: newExamDate ? new Date(newExamDate).toISOString() : new Date().toISOString(),
-        status: 'scheduled',
+        marks_scored: newExamMarks === '' ? null : newExamMarks,
+        total_marks: newExamTotalMarks === '' ? null : newExamTotalMarks,
+        status: newExamMarks !== '' ? 'result_published' : 'scheduled',
         linked_program_id: activeActivityId,
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
       setNewExamSubject('');
+      setNewExamSubjectId('');
       setNewExamDate('');
+      setNewExamMarks('');
+      setNewExamTotalMarks('');
       setShowExamForm(false);
       await refreshEvents();
     } catch (err) {
@@ -288,6 +312,48 @@ export default function ChildPlannerV2Page() {
       console.error('Failed to create challenge:', err);
     } finally {
       setChallengeCreating(false);
+    }
+  }
+
+  async function handleCreateSubject(e: React.FormEvent) {
+    e.preventDefault();
+    if (!childId || !newSubjectName.trim() || !activeActivityId) return;
+    setSubjectCreating(true);
+    try {
+      await addNewSubject(newSubjectName.trim(), familyId);
+      setNewSubjectName('');
+      setShowSubjectForm(false);
+    } catch (err) {
+      console.error('Failed to create subject:', err);
+    } finally {
+      setSubjectCreating(false);
+    }
+  }
+
+  async function handleCreateEvent(e: React.FormEvent) {
+    e.preventDefault();
+    if (!childId || !newEventTitle.trim() || !activeActivityId) return;
+    setEventCreating(true);
+    try {
+      await addDoc(collection(db, 'events'), {
+        title: newEventTitle.trim(),
+        child_id: childId,
+        family_id: familyId,
+        date: newEventDate ? new Date(newEventDate).toISOString() : new Date().toISOString(),
+        reminder_days_before: 1,
+        recurrence_type: newEventRecurrence,
+        linked_program_id: activeActivityId,
+        created_at: new Date().toISOString()
+      });
+      setNewEventTitle('');
+      setNewEventDate('');
+      setNewEventRecurrence('none');
+      setShowEventForm(false);
+      await refreshEvents();
+    } catch (err) {
+      console.error('Failed to create event:', err);
+    } finally {
+      setEventCreating(false);
     }
   }
 
@@ -364,18 +430,18 @@ export default function ChildPlannerV2Page() {
     return (
     <div className="mx-auto mt-4 max-w-7xl space-y-6 pb-24 px-4">
       {/* Header & Top Navigation */}
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900/40 p-1 backdrop-blur-xl shadow-2xl">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-800/40 p-1 backdrop-blur-xl shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-purple-500/10 opacity-50" />
         <div className="relative flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <div className="h-2 w-8 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)]" />
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-400/90">System Node: Planner</p>
+              <div className="h-2.5 w-10 rounded-full bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.8)]" />
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-cyan-400">System Node: Planner</p>
             </div>
             <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
               Child <span className="bg-gradient-to-r from-cyan-300 to-blue-400 bg-clip-text text-transparent text-shadow-glow">Intelligence</span>
             </h1>
-            <p className="mt-1 text-xs font-medium text-white/50 tracking-wide">Syncing parent directives and academic protocols.</p>
+            <p className="mt-1 text-xs font-bold text-white/70 tracking-wide">Syncing parent directives and academic protocols.</p>
           </div>
 
           <nav className="flex flex-wrap gap-1.5 rounded-3xl bg-black/20 p-1.5 backdrop-blur-md border border-white/5">
@@ -416,7 +482,7 @@ export default function ChildPlannerV2Page() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Left Sidebar: Advanced Filters */}
           <aside className="lg:col-span-3 space-y-4">
-            <section className="rounded-[2rem] border border-white/10 bg-slate-900/60 p-6 backdrop-blur-xl shadow-xl">
+            <section className="rounded-[2rem] border border-white/10 bg-slate-800/80 p-6 backdrop-blur-xl shadow-xl">
               <div className="mb-6 flex items-center justify-between">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Filters</h3>
                 <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
@@ -470,10 +536,8 @@ export default function ChildPlannerV2Page() {
           </aside>
 
           {/* Main Content: Calendar */}
-          <section className="lg:col-span-9 rounded-[2.5rem] border border-white/10 bg-slate-900/40 p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
-              <svg width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="0.5"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/><path d="M2 12h20"/></svg>
-            </div>
+          <section className="lg:col-span-9 rounded-[2.5rem] border border-white/10 bg-slate-800/50 p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+            
             
             {loading ? (
               <div className="flex h-[400px] items-center justify-center">
@@ -522,13 +586,13 @@ export default function ChildPlannerV2Page() {
                       : 'text-white/40 hover:bg-white/5 hover:text-white/70'
                   }`}
                 >
-                  {moduleId === 'tasks' ? 'Tasks' : moduleId === 'exams' ? 'Exams' : moduleId === 'timetable' ? 'Timetable' : moduleId === 'challenges' ? 'Challenges' : 'Events'}
+                  {moduleId === 'tasks' ? 'Tasks' : moduleId === 'exams' ? 'Exams' : moduleId === 'timetable' ? 'Timetable' : moduleId === 'challenges' ? 'Challenges' : moduleId === 'subjects' ? 'Subjects' : 'Events'}
                 </button>
               ))}
             </nav>
           </div>
 
-          <div className="relative rounded-[2.5rem] border border-white/10 bg-slate-900/40 p-8 backdrop-blur-xl shadow-2xl overflow-hidden min-h-[400px]">
+          <div className="relative rounded-[2.5rem] border border-white/10 bg-slate-800/50 p-8 backdrop-blur-xl shadow-2xl overflow-hidden min-h-[400px]">
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
             
             {activitySubTab === 'tasks' && (
@@ -548,7 +612,7 @@ export default function ChildPlannerV2Page() {
 
                 {showTaskForm && (
                   <form onSubmit={handleCreateTask} className="mb-8 rounded-3xl border border-cyan-400/20 bg-cyan-400/5 p-6 animate-in zoom-in-95 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <input 
                         required
                         value={newTaskTitle}
@@ -562,6 +626,16 @@ export default function ChildPlannerV2Page() {
                         onChange={(e) => setNewTaskDue(e.target.value)}
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
                       />
+                      <select 
+                        value={newTaskRecurrence}
+                        onChange={(e) => setNewTaskRecurrence(e.target.value as any)}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
+                      >
+                        <option value="none" className="bg-slate-900">One Time</option>
+                        <option value="daily" className="bg-slate-900">Daily</option>
+                        <option value="weekly" className="bg-slate-900">Weekly</option>
+                        <option value="monthly" className="bg-slate-900">Monthly</option>
+                      </select>
                     </div>
                     <button 
                       type="submit" 
@@ -614,20 +688,57 @@ export default function ChildPlannerV2Page() {
 
                 {showExamForm && (
                   <form onSubmit={handleCreateExam} className="mb-8 rounded-3xl border border-rose-400/20 bg-rose-400/5 p-6 animate-in zoom-in-95 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input 
-                        required
-                        value={newExamSubject}
-                        onChange={(e) => setNewExamSubject(e.target.value)}
-                        placeholder="Exam Subject"
-                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      {subjects.length > 0 ? (
+                        <select 
+                          required
+                          value={newExamSubjectId}
+                          onChange={(e) => {
+                            setNewExamSubjectId(e.target.value);
+                            setNewExamSubject(subjects.find(s => s.id === e.target.value)?.name || '');
+                          }}
+                          className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
+                        >
+                          <option value="" className="bg-slate-900">Select Subject</option>
+                          {subjects.map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
+                        </select>
+                      ) : (
+                        <input 
+                          required
+                          value={newExamSubject}
+                          onChange={(e) => setNewExamSubject(e.target.value)}
+                          placeholder="Exam Subject"
+                          className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
+                        />
+                      )}
                       <input 
                         type="date"
                         value={newExamDate}
                         onChange={(e) => setNewExamDate(e.target.value)}
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
                       />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
+                        <span className="text-xs font-bold text-white/40 uppercase">Marks Scored</span>
+                        <input 
+                          type="number"
+                          value={newExamMarks}
+                          onChange={(e) => setNewExamMarks(e.target.value ? Number(e.target.value) : '')}
+                          placeholder="Optional"
+                          className="w-full bg-transparent text-sm font-bold text-white outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
+                        <span className="text-xs font-bold text-white/40 uppercase">Total Marks</span>
+                        <input 
+                          type="number"
+                          value={newExamTotalMarks}
+                          onChange={(e) => setNewExamTotalMarks(e.target.value ? Number(e.target.value) : '')}
+                          placeholder="Optional"
+                          className="w-full bg-transparent text-sm font-bold text-white outline-none"
+                        />
+                      </div>
                     </div>
                     <button 
                       type="submit" 
@@ -679,7 +790,18 @@ export default function ChildPlannerV2Page() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Core Subject" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
+                  {subjects.length > 0 ? (
+                    <select 
+                      value={subject} 
+                      onChange={(e) => setSubject(e.target.value)} 
+                      className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white focus:bg-white/10 transition-all outline-none"
+                    >
+                      <option value="" className="bg-slate-900">Select Subject</option>
+                      {subjects.map(s => <option key={s.id} value={s.name} className="bg-slate-900">{s.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Core Subject" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
+                  )}
                   <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Facility/Room" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
                   <input value={teacher} onChange={(e) => setTeacher(e.target.value)} placeholder="Lead Instructor" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
                 </div>
@@ -725,6 +847,57 @@ export default function ChildPlannerV2Page() {
               </div>
             )}
 
+            {activitySubTab === 'subjects' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Subject Mastery</h3>
+                    <p className="text-xs text-white/40">Define the core subjects for this program.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowSubjectForm(!showSubjectForm)}
+                    className="rounded-full bg-indigo-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 hover:bg-indigo-400/20 transition-all"
+                  >
+                    {showSubjectForm ? 'Cancel' : '+ New Subject'}
+                  </button>
+                </div>
+
+                {showSubjectForm && (
+                  <form onSubmit={handleCreateSubject} className="mb-8 rounded-3xl border border-indigo-400/20 bg-indigo-400/5 p-6 animate-in zoom-in-95 duration-300">
+                    <div className="flex gap-4">
+                      <input 
+                        required
+                        value={newSubjectName}
+                        onChange={(e) => setNewSubjectName(e.target.value)}
+                        placeholder="Subject Name (e.g. Mathematics)"
+                        className="flex-1 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-indigo-500/50"
+                      />
+                      <button 
+                        type="submit" 
+                        disabled={subjectCreating}
+                        className="rounded-2xl bg-indigo-400 px-8 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-indigo-400/20 disabled:opacity-50"
+                      >
+                        {subjectCreating ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {subjects.length ? subjects.map((sub) => (
+                    <div key={sub.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
+                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-lg">📚</div>
+                      <div>
+                        <p className="text-sm font-bold text-white">{sub.name}</p>
+                        <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{new Date(sub.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="col-span-full py-20 text-center text-white/20 font-medium">No subjects registered in this protocol.</div>
+                  )}
+                </div>
+              </div>
+            )}
             {activitySubTab === 'challenges' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6 flex items-center justify-between">
@@ -788,27 +961,32 @@ export default function ChildPlannerV2Page() {
                           <button 
                             onClick={() => void incrementScore(ch.id, 'child')}
                             disabled={ch.status === 'completed'}
-                            className="mt-2 w-full rounded-lg bg-cyan-400/10 py-1 text-[10px] font-black uppercase text-cyan-400 hover:bg-cyan-400/20 transition-all disabled:opacity-20"
+                            className="mt-2 w-full rounded-xl bg-cyan-400/20 py-1.5 text-[10px] font-black uppercase text-cyan-400 hover:bg-cyan-400 hover:text-slate-900 transition-all disabled:opacity-30"
                           >
-                            +1 Point
+                            + Score
                           </button>
                         </div>
                         <div className="rounded-2xl bg-black/20 p-4 text-center border border-white/5">
                           <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Parent Score</p>
                           <p className="text-2xl font-black text-rose-400">{ch.parent_score}</p>
-                          <p className="mt-2 text-[10px] font-bold text-white/20 uppercase">Parent only</p>
+                          <div className="mt-2 h-7" />
                         </div>
                       </div>
 
-                      <div className="relative h-2 w-full rounded-full bg-white/5 overflow-hidden">
+                      <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/5">
                         <div 
-                          className="absolute h-full bg-gradient-to-r from-cyan-400 to-rose-400 transition-all duration-500"
-                          style={{ width: `${Math.min(100, (Math.max(ch.child_score, ch.parent_score) / ch.target_score) * 100)}%` }}
+                          className="absolute left-0 top-0 h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-1000"
+                          style={{ width: `${Math.min(100, (ch.child_score / ch.target_score) * 100)}%` }}
+                        />
+                        <div 
+                          className="absolute right-0 top-0 h-full bg-gradient-to-l from-rose-400 to-pink-500 transition-all duration-1000 opacity-50"
+                          style={{ width: `${Math.min(100, (ch.parent_score / ch.target_score) * 100)}%` }}
                         />
                       </div>
-                      <div className="mt-2 flex justify-between text-[10px] font-black uppercase tracking-widest text-white/30">
-                        <span>Progress</span>
+                      <div className="mt-2 flex justify-between text-[10px] font-bold text-white/20 uppercase tracking-tighter">
+                        <span>Initiated</span>
                         <span>Target: {ch.target_score}</span>
+                        <span>Parent</span>
                       </div>
 
                       {ch.status === 'completed' && (
@@ -829,12 +1007,110 @@ export default function ChildPlannerV2Page() {
               </div>
             )}
 
+            {activitySubTab === 'subjects' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Subject Mastery</h3>
+                    <p className="text-xs text-white/40">Define the core subjects for this program.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowSubjectForm(!showSubjectForm)}
+                    className="rounded-full bg-indigo-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 hover:bg-indigo-400/20 transition-all"
+                  >
+                    {showSubjectForm ? 'Cancel' : '+ New Subject'}
+                  </button>
+                </div>
+
+                {showSubjectForm && (
+                  <form onSubmit={handleCreateSubject} className="mb-8 rounded-3xl border border-indigo-400/20 bg-indigo-400/5 p-6 animate-in zoom-in-95 duration-300">
+                    <div className="flex gap-4">
+                      <input 
+                        required
+                        value={newSubjectName}
+                        onChange={(e) => setNewSubjectName(e.target.value)}
+                        placeholder="Subject Name (e.g. Mathematics)"
+                        className="flex-1 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-indigo-500/50"
+                      />
+                      <button 
+                        type="submit" 
+                        disabled={subjectCreating}
+                        className="rounded-2xl bg-indigo-400 px-8 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-indigo-400/20 disabled:opacity-50"
+                      >
+                        {subjectCreating ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {subjects.length ? subjects.map((sub) => (
+                    <div key={sub.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
+                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-lg">📚</div>
+                      <div>
+                        <p className="text-sm font-bold text-white">{sub.name}</p>
+                        <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{new Date(sub.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="col-span-full py-20 text-center text-white/20 font-medium">No subjects registered in this protocol.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activitySubTab === 'events' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6 flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white">Program Events</h3>
-                  <span className="rounded-full bg-indigo-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Scheduled</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Program Events</h3>
+                    <p className="text-xs text-white/40">Scheduled sessions and specialized protocols.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowEventForm(!showEventForm)}
+                    className="rounded-full bg-purple-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-purple-400 hover:bg-purple-400/20 transition-all"
+                  >
+                    {showEventForm ? 'Cancel' : '+ New Event'}
+                  </button>
                 </div>
+
+                {showEventForm && (
+                  <form onSubmit={handleCreateEvent} className="mb-8 rounded-3xl border border-purple-400/20 bg-purple-400/5 p-6 animate-in zoom-in-95 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <input 
+                        required
+                        value={newEventTitle}
+                        onChange={(e) => setNewEventTitle(e.target.value)}
+                        placeholder="Event Title"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-purple-500/50"
+                      />
+                      <input 
+                        type="datetime-local"
+                        value={newEventDate}
+                        onChange={(e) => setNewEventDate(e.target.value)}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-purple-500/50"
+                      />
+                      <select 
+                        value={newEventRecurrence}
+                        onChange={(e) => setNewEventRecurrence(e.target.value as any)}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-purple-500/50"
+                      >
+                        <option value="none" className="bg-slate-900">One Time</option>
+                        <option value="daily" className="bg-slate-900">Daily</option>
+                        <option value="weekly" className="bg-slate-900">Weekly</option>
+                        <option value="monthly" className="bg-slate-900">Monthly</option>
+                      </select>
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={eventCreating}
+                      className="mt-4 w-full rounded-2xl bg-purple-400 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-purple-400/20 disabled:opacity-50"
+                    >
+                      {eventCreating ? 'Transmitting...' : 'Record Event Protocol'}
+                    </button>
+                  </form>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').length ? 
                     visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').map((event) => (

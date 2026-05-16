@@ -12,7 +12,7 @@ export type PlannerCategory =
   | 'rest_day';
 
 export type PlannerRecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
-export type PlannerActivityModule = 'tasks' | 'exams' | 'timetable' | 'challenges' | 'events';
+export type PlannerActivityModule = 'tasks' | 'exams' | 'timetable' | 'challenges' | 'events' | 'subjects';
 
 export interface PlannerRecurrence {
   type: PlannerRecurrenceType;
@@ -40,8 +40,21 @@ export interface PlannerProgram {
   modules?: PlannerActivityModule[];
   isDefault?: boolean;
   isActive: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PlannerSubject {
+  id: string;
+  familyId: string;
+  childId: string;
+  programId: string;
+  name: string;
+  description?: string;
+  color?: string;
+  createdAt: string;
 }
 
 export interface PlannerEventSync {

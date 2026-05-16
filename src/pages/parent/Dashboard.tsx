@@ -168,7 +168,9 @@ function ParentDashboardContent() {
   const [automationChildId, setAutomationChildId] = useState('');
   const [activityChildId, setActivityChildId] = useState('');
   const [activityName, setActivityName] = useState('');
-  const [activityModules, setActivityModules] = useState<PlannerActivityModule[]>(['tasks']);
+  const [activityStartDate, setActivityStartDate] = useState('');
+  const [activityEndDate, setActivityEndDate] = useState('');
+  const [activityModules, setActivityModules] = useState<PlannerActivityModule[]>(['tasks', 'exams', 'subjects']);
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<PlannerProgram | null>(null);
   const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
@@ -1626,9 +1628,10 @@ function ParentDashboardContent() {
 
   const clearActivityForm = () => {
     setActivityName('');
+    setActivityStartDate('');
+    setActivityEndDate('');
     setActivityModules(['tasks']);
     setEditingActivityId(null);
-    setIsActivityModalOpen(false);
   };
 
   const toggleActivityModule = (moduleId: PlannerActivityModule) => {
@@ -1642,6 +1645,8 @@ function ParentDashboardContent() {
   const startEditActivity = (program: PlannerProgram) => {
     setEditingActivityId(program.id);
     setActivityName(program.name || '');
+    setActivityStartDate(program.startDate ? new Date(program.startDate).toISOString().slice(0, 10) : '');
+    setActivityEndDate(program.endDate ? new Date(program.endDate).toISOString().slice(0, 10) : '');
     setActivityModules(program.modules && program.modules.length ? program.modules : ['tasks']);
     setIsActivityModalOpen(true);
   };
@@ -1657,7 +1662,9 @@ function ParentDashboardContent() {
           name: activityName.trim(),
           category: activityName.trim().toLowerCase() === 'school' ? 'school' : 'custom',
           modules: activityModules,
-          isDefault: activityName.trim().toLowerCase() === 'school'
+          isDefault: activityName.trim().toLowerCase() === 'school',
+          startDate: activityStartDate || null,
+          endDate: activityEndDate || null
         },
         editingActivityId || undefined
       );
@@ -3151,11 +3158,21 @@ function ParentDashboardContent() {
                 <label className="text-sm font-bold ml-1 mb-2 block" style={{ color: 'var(--text-muted)' }}>Activity Name</label>
                 <input required value={activityName} onChange={(e) => setActivityName(e.target.value)} placeholder="e.g. School, Soccer, Piano" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1 mb-2 block" style={{ color: 'var(--text-muted)' }}>Start Date</label>
+                  <input type="date" value={activityStartDate} onChange={(e) => setActivityStartDate(e.target.value)} className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1 mb-2 block" style={{ color: 'var(--text-muted)' }}>End Date (Expiry)</label>
+                  <input type="date" value={activityEndDate} onChange={(e) => setActivityEndDate(e.target.value)} className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
+              </div>
               <div className="kid-glass rounded-2xl p-3">
                 <label className="text-sm font-bold ml-1 mb-2 block" style={{ color: 'var(--text-muted)' }}>Enabled Branches</label>
                 <div className="flex flex-wrap items-center gap-2">
-                  {(['tasks', 'exams', 'timetable', 'challenges', 'events'] as PlannerActivityModule[]).map((moduleId) => (
-                    <button key={moduleId} type="button" onClick={() => toggleActivityModule(moduleId)} className={clsx('rounded-full px-4 py-2 text-sm font-semibold border transition', activityModules.includes(moduleId) ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}>
+                  {(['tasks', 'exams', 'timetable', 'challenges', 'events', 'subjects'] as PlannerActivityModule[]).map((moduleId) => (
+                    <button key={moduleId} type="button" onClick={() => toggleActivityModule(moduleId)} className={clsx('rounded-full px-4 py-2 text-sm font-semibold border transition capitalize', activityModules.includes(moduleId) ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}>
                       {moduleId}
                     </button>
                   ))}

@@ -66,6 +66,8 @@ function mapPlannerProgram(docId: string, raw: Record<string, unknown>): Planner
     modules: modulesRaw.length ? modulesRaw : ['tasks'],
     isDefault: Boolean(raw.is_default || false),
     isActive: raw.is_active !== false,
+    startDate: (raw.start_date as string) || null,
+    endDate: (raw.end_date as string) || null,
     createdAt: String(raw.created_at || new Date().toISOString()),
     updatedAt: String(raw.updated_at || raw.created_at || new Date().toISOString())
   };
@@ -77,6 +79,9 @@ function recurrencePayload(input: PlannerEventInput) {
   }
   if (input.recurrenceType === 'weekly') {
     return { type: 'weekly', interval: 1, by_week_days: input.recurrenceWeekDays, by_month_days: [], until: null, count: null, rrule: null };
+  }
+  if (input.recurrenceType === 'monthly') {
+    return { type: 'monthly', interval: 1, by_week_days: [], by_month_days: [new Date(input.startAt).getDate()], until: null, count: null, rrule: null };
   }
   return { type: 'none', interval: 1, by_week_days: [], by_month_days: [], until: null, count: null, rrule: null };
 }
@@ -111,6 +116,8 @@ export interface PlannerProgramInput {
   category?: PlannerProgram['category'];
   modules: PlannerActivityModule[];
   isDefault?: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export async function upsertPlannerProgram(childId: string, familyId: string, input: PlannerProgramInput, programId?: string): Promise<string> {
@@ -129,6 +136,8 @@ export async function upsertPlannerProgram(childId: string, familyId: string, in
     modules: input.modules,
     is_default: Boolean(input.isDefault),
     is_active: true,
+    start_date: input.startDate || null,
+    end_date: input.endDate || null,
     updated_at: new Date().toISOString(),
     updated_ts: serverTimestamp()
   };
