@@ -18,7 +18,7 @@ import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable'
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 
-type ChildPlannerTab = 'calendar' | `activity_${string}`;
+
 type ActivitySubTab = PlannerActivityModule;
 
 function categoryLabel(category: string) {
