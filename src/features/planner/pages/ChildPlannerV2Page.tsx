@@ -18,7 +18,7 @@ import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable'
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 
-
+type ChildPlannerTab = 'calendar' | `activity_${string}`;
 type ActivitySubTab = PlannerActivityModule;
 
 function categoryLabel(category: string) {
@@ -29,8 +29,7 @@ export default function ChildPlannerV2Page() {
   const { user } = useAuth();
   const childId = user?.id || '';
   const familyId = user?.linked_family_id || user?.id || '';
-  const [activeTab, setActiveTab] = useState<'calendar' | 'activities'>('calendar');
-  const [activeActivityId, setActiveActivityId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<ChildPlannerTab>('calendar');
   const [activitySubTab, setActivitySubTab] = useState<ActivitySubTab>('tasks');
   const [period, setPeriod] = useState('Period 1');
   const [day, setDay] = useState('Mon');
@@ -138,12 +137,7 @@ export default function ChildPlannerV2Page() {
       .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
   }, [programs]);
 
-  useEffect(() => {
-    if (!activeActivityId && programs.length > 0) {
-      setActiveActivityId(programs[0].id);
-    }
-  }, [programs, activeActivityId]);
-
+  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
   const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
   const activeActivityLabel = activeActivity?.label || '';
   const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
@@ -160,7 +154,12 @@ export default function ChildPlannerV2Page() {
 
   const filteredEvents = useMemo(() => {
     if (activeCategoryFilters.includes('all')) return visibleEvents;
-    return visibleEvents.filter((event) => activeCategoryFilters.includes(event.category));
+    return visibleEvents.filter((event) => {
+      if (event.linkedProgramId && activeCategoryFilters.includes(event.linkedProgramId)) {
+        return true;
+      }
+      return false;
+    });
   }, [visibleEvents, activeCategoryFilters]);
 
   const calendarEvents = useMemo<EventInput[]>(
@@ -242,14 +241,14 @@ export default function ChildPlannerV2Page() {
     });
   };
 
-  const filterOptions = [
-    { id: 'all', label: 'All' },
-    { id: 'school', label: 'School' },
-    { id: 'homework', label: 'Homework' },
-    { id: 'exam', label: 'Exams' },
-    { id: 'tuition', label: 'Tuition' },
-    { id: 'extracurricular', label: 'Activities' }
-  ];
+  const filterOptions = useMemo(() => {
+    const defaultOptions = [{ id: 'all', label: 'All' }];
+    const programOptions = programs.map((program) => ({
+      id: program.id,
+      label: program.name?.trim() || 'Activity'
+    }));
+    return [...defaultOptions, ...programOptions];
+  }, [programs]);
 
   function toggleFilter(id: string) {
     if (id === 'all') {
@@ -274,9 +273,11 @@ export default function ChildPlannerV2Page() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setActiveTab('calendar')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'calendar' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Calendar</button>
-            {activityTabs.length > 0 && (
-              <button type="button" onClick={() => setActiveTab('activities')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'activities' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Activities</button>
-            )}
+            {activityTabs.map((activity) => (
+              <button key={activity.id} type="button" onClick={() => setActiveTab(`activity_${activity.id}` as ChildPlannerTab)} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === `activity_${activity.id}` ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>
+                {activity.label}
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -285,25 +286,33 @@ export default function ChildPlannerV2Page() {
 
       {activeTab === 'calendar' ? (
         <section className="rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(20,30,64,0.97),rgba(11,16,35,0.98))] p-3 text-white shadow-[0_20px_70px_rgba(5,7,18,0.45)]">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            {filterOptions.map((option) => {
-              const active = activeCategoryFilters.includes(option.id) || (option.id === 'all' && activeCategoryFilters.includes('all'));
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => toggleFilter(option.id)}
-                  className={`min-h-[34px] rounded-full border px-3 text-xs font-semibold ${
-                    active ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/8 text-white/80'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+          <div className="mb-4 flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+            <span className="flex shrink-0 items-center gap-1 text-xs font-bold uppercase tracking-wider text-white/50">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              Filter
+            </span>
+            <div className="flex shrink-0 gap-2">
+              {filterOptions.map((option) => {
+                const active = activeCategoryFilters.includes(option.id) || (option.id === 'all' && activeCategoryFilters.includes('all'));
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => toggleFilter(option.id)}
+                    className={`min-h-[36px] shrink-0 rounded-full px-4 text-xs font-bold transition-all ${
+                      active 
+                        ? 'border-transparent bg-[linear-gradient(90deg,#22d3ee,#3b82f6)] text-white shadow-lg shadow-cyan-500/25' 
+                        : 'border border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {loading ? <p className="px-2 py-3 text-sm text-white/70">Loading calendar...</p> : null}
-          <div className="[&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/20 [&_.fc-theme-standard_th]:border-white/20 [&_.fc-scrollgrid]:border-white/20 [&_.fc-col-header-cell-cushion]:text-xs [&_.fc-col-header-cell-cushion]:font-semibold [&_.fc-toolbar-title]:text-base [&_.fc-toolbar-title]:font-semibold [&_.fc-toolbar]:flex-nowrap [&_.fc-toolbar]:items-center [&_.fc-toolbar]:gap-2 [&_.fc-button]:min-h-[36px] [&_.fc-button]:rounded-full [&_.fc-button]:border [&_.fc-button]:border-white/20 [&_.fc-button]:bg-white/8 [&_.fc-button]:px-4 [&_.fc-button]:text-xs [&_.fc-button]:font-semibold [&_.fc-button]:text-white [&_.fc-button:hover]:bg-white/16 [&_.fc-button-active]:!border-cyan-300/80 [&_.fc-button-active]:!bg-cyan-400/25 [&_.fc-daygrid-day]:bg-transparent [&_.fc-timegrid-slot]:border-white/15 [&_.fc-timegrid-axis]:text-white/60 [&_.fc-list-day]:bg-white/5 [&_.fc-list-event]:bg-transparent [&_.fc-list-event:hover_td]:bg-white/10 [&_.fc-day-today]:!bg-cyan-400/10 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!px-2 [&_.fc-daygrid-event]:!py-1 [&_.fc-daygrid-event]:!border-0">
+          <div className="[&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/20 [&_.fc-theme-standard_th]:border-white/20 [&_.fc-theme-standard_th]:!bg-transparent [&_.fc-col-header-cell]:!bg-transparent [&_.fc-scrollgrid]:border-white/20 [&_.fc-col-header-cell-cushion]:text-xs [&_.fc-col-header-cell-cushion]:font-semibold [&_.fc-col-header-cell-cushion]:!text-white [&_.fc-toolbar-title]:text-base [&_.fc-toolbar-title]:font-semibold [&_.fc-toolbar]:flex-nowrap [&_.fc-toolbar]:items-center [&_.fc-toolbar]:gap-2 [&_.fc-button]:min-h-[36px] [&_.fc-button]:rounded-full [&_.fc-button]:border [&_.fc-button]:border-white/20 [&_.fc-button]:bg-white/8 [&_.fc-button]:px-4 [&_.fc-button]:text-xs [&_.fc-button]:font-semibold [&_.fc-button]:text-white [&_.fc-button:hover]:bg-white/16 [&_.fc-button-active]:!border-cyan-300/80 [&_.fc-button-active]:!bg-cyan-400/25 [&_.fc-daygrid-day]:bg-transparent [&_.fc-timegrid-slot]:border-white/15 [&_.fc-timegrid-axis]:text-white/60 [&_.fc-list-day]:bg-white/5 [&_.fc-list-event]:bg-transparent [&_.fc-list-event:hover_td]:bg-white/10 [&_.fc-day-today]:!bg-cyan-400/10 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!px-2 [&_.fc-daygrid-event]:!py-1 [&_.fc-daygrid-event]:!border-0">
             <FullCalendar
               plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
               initialView="dayGridMonth"
@@ -319,15 +328,8 @@ export default function ChildPlannerV2Page() {
         </section>
       ) : null}
 
-      {activeTab === 'activities' ? (
+      {activeTab !== 'calendar' ? (
         <section className="space-y-4 rounded-3xl border border-white/10 bg-[linear-gradient(165deg,rgba(17,36,69,0.96),rgba(22,17,50,0.98))] p-4 text-white shadow-[0_20px_70px_rgba(6,10,30,0.45)]">
-          <div className="mb-4 flex flex-wrap gap-2">
-            {activityTabs.map((activity) => (
-              <button key={activity.id} type="button" onClick={() => setActiveActivityId(activity.id)} className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold ${activeActivityId === activity.id ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/8 text-white/80'}`}>
-                {activity.label}
-              </button>
-            ))}
-          </div>
 
           <div>
             <h2 className="text-lg font-semibold">{isSchoolActivity ? 'School' : activeActivityLabel || 'Activity'}</h2>

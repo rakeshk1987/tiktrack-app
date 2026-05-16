@@ -213,8 +213,9 @@ Document id: `eventId`
 
 ## 4) UX Wireframe (Mobile)
 
-- Top Tab Navigation: [Calendar] [Activities]
-- "Activities" Tab: Hosts all parent-created programs/activities as sub-tabs.
+- Top Tab Navigation: [Calendar] [Program 1] [Program 2]...
+- Program Tabs: Each parent-created activity gets its own dedicated top-level tab.
+- Calendar Filter: Modern, horizontally scrollable filter pill row (MS Teams style) to filter events by Program.
 - Floating bottom-right: quick add event/reminder (personal)
 - Bottom nav: Home, Quests, Planner, Diary, Rewards
 
