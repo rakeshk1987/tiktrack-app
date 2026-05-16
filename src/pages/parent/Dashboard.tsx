@@ -48,6 +48,7 @@ import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerProgr
 import { upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
 import type { PlannerActivityModule, PlannerProgram } from '../../features/planner/types/planner.types';
 import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTimetable';
+import { usePlannerChallenges } from '../../features/planner/hooks/usePlannerChallenges';
 
 interface ChildAccount {
   id: string;
@@ -207,6 +208,7 @@ function ParentDashboardContent() {
   const selectedActivityChildId = activityChildId || children[0]?.id || '';
   const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId, false);
   const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, false);
+  const { challenges: activityChallenges, incrementScore: incrementActivityChallengeScore, createChallenge: createActivityChallenge } = usePlannerChallenges(selectedActivityChildId, selectedActivity?.id);
 
   useEffect(() => {
     if (!user) {
@@ -2979,7 +2981,30 @@ function ParentDashboardContent() {
 
             {activityModalTab === 'tasks' ? (
               <div className="space-y-3">
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Mapped Tasks</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Mapped Tasks</p>
+                  <button 
+                    onClick={() => {
+                      const title = window.prompt('Enter task title:');
+                      if (title && user) {
+                        void addDoc(collection(db, 'tasks'), {
+                          title,
+                          child_id: selectedActivity.childId,
+                          family_id: familyId,
+                          parent_id: familyId,
+                          status: 'pending',
+                          linked_program_id: selectedActivity.id,
+                          category: 'homework',
+                          priority: 'medium',
+                          created_at: new Date().toISOString()
+                        });
+                      }
+                    }}
+                    className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    + Quick Add
+                  </button>
+                </div>
                 {selectedActivityTasks.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped tasks yet.</p> : null}
                 {selectedActivityTasks.map((task) => (
                   <div key={task.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
@@ -2998,7 +3023,29 @@ function ParentDashboardContent() {
 
             {activityModalTab === 'exams' ? (
               <div className="space-y-3">
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Mapped Exams</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Mapped Exams</p>
+                  <button 
+                    onClick={() => {
+                      const subject = window.prompt('Enter exam subject:');
+                      if (subject && user) {
+                        void addDoc(collection(db, 'exams'), {
+                          subject,
+                          child_id: selectedActivity.childId,
+                          family_id: familyId,
+                          parent_id: familyId,
+                          exam_date: new Date().toISOString(),
+                          status: 'scheduled',
+                          linked_program_id: selectedActivity.id,
+                          created_at: new Date().toISOString()
+                        });
+                      }
+                    }}
+                    className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    + Quick Add
+                  </button>
+                </div>
                 {selectedActivityExams.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped exams yet.</p> : null}
                 {selectedActivityExams.map((exam) => (
                   <div key={exam.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
@@ -3041,8 +3088,50 @@ function ParentDashboardContent() {
             ) : null}
 
             {activityModalTab === 'challenges' ? (
-              <div className="space-y-2">
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Challenge mapping UI can be plugged here next.</p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Activity Challenges</p>
+                  <button 
+                    onClick={() => {
+                      const title = window.prompt('Enter challenge title:');
+                      const target = window.prompt('Enter target score:', '5');
+                      if (title && target && user) {
+                        void createActivityChallenge(title, familyId, Number(target));
+                      }
+                    }}
+                    className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm"
+                  >
+                    + New Challenge
+                  </button>
+                </div>
+                {activityChallenges.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No challenges for this activity yet.</p> : null}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {activityChallenges.map((ch) => (
+                    <div key={ch.id} className="rounded-2xl border p-4 shadow-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <p className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
+                      <div className="mt-3 flex items-center justify-between gap-4">
+                        <div className="text-center flex-1">
+                          <p className="text-[10px] font-bold text-rose-500 uppercase">You</p>
+                          <p className="text-xl font-black" style={{ color: 'var(--text-main)' }}>{ch.parent_score}</p>
+                          <button 
+                            onClick={() => void incrementActivityChallengeScore(ch.id, 'parent')}
+                            disabled={ch.status === 'completed'}
+                            className="mt-1 w-full rounded bg-rose-500 text-white py-1 text-[10px] font-bold disabled:opacity-30"
+                          >
+                            +1 Point
+                          </button>
+                        </div>
+                        <div className="text-center flex-1">
+                          <p className="text-[10px] font-bold text-cyan-500 uppercase">Child</p>
+                          <p className="text-xl font-black" style={{ color: 'var(--text-main)' }}>{ch.child_score}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-center">
+                        <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>Target: {ch.target_score}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>

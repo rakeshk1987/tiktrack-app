@@ -4,7 +4,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/core';
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../config/firebase';
@@ -13,6 +13,7 @@ import { usePlannerEvents } from '../hooks/usePlannerEvents';
 import { usePlannerPrograms } from '../hooks/usePlannerPrograms';
 import { usePlannerTimetable } from '../hooks/usePlannerTimetable';
 import { usePlannerInsights } from '../hooks/usePlannerInsights';
+import { usePlannerChallenges } from '../hooks/usePlannerChallenges';
 import { plannerTimetableCellSchema } from '../utils/planner.validation';
 import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
@@ -46,10 +47,29 @@ export default function ChildPlannerV2Page() {
   } | null>(null);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
 
-  const { events, loading } = usePlannerEvents(childId, undefined, false);
+  const { events, loading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
   const { programs } = usePlannerPrograms(childId, false);
   const { timetable, loading: timetableLoading, refresh: refreshTimetable } = usePlannerTimetable(childId, false);
   const insights = usePlannerInsights(events);
+
+  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : null;
+  const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId);
+
+  // New Form States
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDue, setNewTaskDue] = useState('');
+  const [taskCreating, setTaskCreating] = useState(false);
+
+  const [showExamForm, setShowExamForm] = useState(false);
+  const [newExamSubject, setNewExamSubject] = useState('');
+  const [newExamDate, setNewExamDate] = useState('');
+  const [examCreating, setExamCreating] = useState(false);
+
+  const [showChallengeForm, setShowChallengeForm] = useState(false);
+  const [newChallengeTitle, setNewChallengeTitle] = useState('');
+  const [newChallengeTarget, setNewChallengeTarget] = useState(5);
+  const [challengeCreating, setChallengeCreating] = useState(false);
 
   const [taskEvents, setTaskEvents] = useState<PlannerEvent[]>([]);
   const [examEvents, setExamEvents] = useState<PlannerEvent[]>([]);
@@ -77,6 +97,7 @@ export default function ChildPlannerV2Page() {
           allDay: true,
           timezone: 'Asia/Kolkata',
           recurrence: { type: 'none', interval: 1 },
+          linkedProgramId: row.linked_program_id as string | undefined,
           linkedTaskIds: [d.id],
           participantIds: [],
           reminderIds: [],
@@ -108,6 +129,7 @@ export default function ChildPlannerV2Page() {
           allDay: false,
           timezone: 'Asia/Kolkata',
           recurrence: { type: 'none', interval: 1 },
+          linkedProgramId: row.linked_program_id as string | undefined,
           linkedTaskIds: [],
           participantIds: [],
           reminderIds: [],
@@ -197,6 +219,78 @@ export default function ChildPlannerV2Page() {
     if (!timetable.periods.includes(period)) setPeriod(timetable.periods[0] || 'Period 1');
     if (!timetable.days.includes(day)) setDay(timetable.days[0] || 'Mon');
   }, [timetable, period, day]);
+
+  async function handleCreateTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!childId || !newTaskTitle.trim() || !activeActivityId) return;
+    setTaskCreating(true);
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        title: newTaskTitle.trim(),
+        child_id: childId,
+        family_id: familyId,
+        parent_id: familyId,
+        status: 'pending',
+        due_date: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+        linked_program_id: activeActivityId,
+        category: 'homework',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        created_ts: serverTimestamp()
+      });
+      setNewTaskTitle('');
+      setNewTaskDue('');
+      setShowTaskForm(false);
+      await refreshEvents();
+    } catch (err) {
+      console.error('Failed to create task:', err);
+    } finally {
+      setTaskCreating(false);
+    }
+  }
+
+  async function handleCreateExam(e: React.FormEvent) {
+    e.preventDefault();
+    if (!childId || !newExamSubject.trim() || !activeActivityId) return;
+    setExamCreating(true);
+    try {
+      await addDoc(collection(db, 'exams'), {
+        subject: newExamSubject.trim(),
+        child_id: childId,
+        family_id: familyId,
+        parent_id: familyId,
+        exam_date: newExamDate ? new Date(newExamDate).toISOString() : new Date().toISOString(),
+        status: 'scheduled',
+        linked_program_id: activeActivityId,
+        created_at: new Date().toISOString(),
+        created_ts: serverTimestamp()
+      });
+      setNewExamSubject('');
+      setNewExamDate('');
+      setShowExamForm(false);
+      await refreshEvents();
+    } catch (err) {
+      console.error('Failed to create exam:', err);
+    } finally {
+      setExamCreating(false);
+    }
+  }
+
+  async function handleCreateChallenge(e: React.FormEvent) {
+    e.preventDefault();
+    if (!childId || !newChallengeTitle.trim() || !activeActivityId) return;
+    setChallengeCreating(true);
+    try {
+      await createChallenge(newChallengeTitle.trim(), familyId, newChallengeTarget);
+      setNewChallengeTitle('');
+      setNewChallengeTarget(5);
+      setShowChallengeForm(false);
+    } catch (err) {
+      console.error('Failed to create challenge:', err);
+    } finally {
+      setChallengeCreating(false);
+    }
+  }
 
   async function saveSchoolCell() {
     setSchoolError('');
@@ -562,10 +656,106 @@ export default function ChildPlannerV2Page() {
             )}
 
             {activitySubTab === 'challenges' && (
-              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center justify-center py-20 text-center">
-                <div className="mb-6 h-20 w-20 rounded-full bg-amber-400/10 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(251,191,36,0.1)]">🏆</div>
-                <h3 className="text-xl font-black text-white">Gamified Objectives</h3>
-                <p className="mt-2 max-w-xs text-sm font-medium text-white/40">No active challenges found for the {activeActivityLabel} program.</p>
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Parent VS Child</h3>
+                    <p className="text-xs text-white/40">Challenge your parent and win stars!</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowChallengeForm(!showChallengeForm)}
+                    className="rounded-full bg-amber-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-amber-400 hover:bg-amber-400/20 transition-all"
+                  >
+                    {showChallengeForm ? 'Cancel' : '+ New Challenge'}
+                  </button>
+                </div>
+
+                {showChallengeForm && (
+                  <form onSubmit={handleCreateChallenge} className="mb-8 rounded-3xl border border-amber-400/20 bg-amber-400/5 p-6 animate-in zoom-in-95 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input 
+                        required
+                        value={newChallengeTitle}
+                        onChange={(e) => setNewChallengeTitle(e.target.value)}
+                        placeholder="Challenge title (e.g. Read 5 books)"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-amber-500/50"
+                      />
+                      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
+                        <span className="text-xs font-bold text-white/40 uppercase">Target Score</span>
+                        <input 
+                          type="number"
+                          value={newChallengeTarget}
+                          onChange={(e) => setNewChallengeTarget(Number(e.target.value))}
+                          className="w-full bg-transparent text-sm font-bold text-white outline-none"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={challengeCreating}
+                      className="mt-4 w-full rounded-2xl bg-amber-400 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-amber-400/20 disabled:opacity-50"
+                    >
+                      {challengeCreating ? 'Transmitting...' : 'Issue Challenge'}
+                    </button>
+                  </form>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {challenges.length ? challenges.map((ch) => (
+                    <div key={ch.id} className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 backdrop-blur-md">
+                      <div className="absolute top-0 right-0 p-4 opacity-5">
+                        <div className="text-4xl">⚔️</div>
+                      </div>
+                      <div className="mb-4">
+                        <h4 className="text-lg font-black text-white">{ch.title}</h4>
+                        <p className="text-xs font-medium text-white/40 uppercase tracking-widest">{ch.status}</p>
+                      </div>
+
+                      <div className="mb-6 grid grid-cols-2 gap-4">
+                        <div className="rounded-2xl bg-black/20 p-4 text-center border border-white/5">
+                          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Your Score</p>
+                          <p className="text-2xl font-black text-cyan-400">{ch.child_score}</p>
+                          <button 
+                            onClick={() => void incrementScore(ch.id, 'child')}
+                            disabled={ch.status === 'completed'}
+                            className="mt-2 w-full rounded-lg bg-cyan-400/10 py-1 text-[10px] font-black uppercase text-cyan-400 hover:bg-cyan-400/20 transition-all disabled:opacity-20"
+                          >
+                            +1 Point
+                          </button>
+                        </div>
+                        <div className="rounded-2xl bg-black/20 p-4 text-center border border-white/5">
+                          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Parent Score</p>
+                          <p className="text-2xl font-black text-rose-400">{ch.parent_score}</p>
+                          <p className="mt-2 text-[10px] font-bold text-white/20 uppercase">Parent only</p>
+                        </div>
+                      </div>
+
+                      <div className="relative h-2 w-full rounded-full bg-white/5 overflow-hidden">
+                        <div 
+                          className="absolute h-full bg-gradient-to-r from-cyan-400 to-rose-400 transition-all duration-500"
+                          style={{ width: `${Math.min(100, (Math.max(ch.child_score, ch.parent_score) / ch.target_score) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-between text-[10px] font-black uppercase tracking-widest text-white/30">
+                        <span>Progress</span>
+                        <span>Target: {ch.target_score}</span>
+                      </div>
+
+                      {ch.status === 'completed' && (
+                        <div className="mt-4 rounded-xl bg-emerald-400/10 p-3 text-center border border-emerald-400/20">
+                          <p className="text-xs font-black text-emerald-400 uppercase tracking-widest">
+                            Winner: {ch.winner === 'child' ? 'YOU! 🎉' : 'Parent 🏠'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )) : (
+                    <div className="col-span-full py-20 text-center flex flex-col items-center">
+                      <div className="mb-4 h-16 w-16 rounded-full bg-white/5 flex items-center justify-center text-3xl">🛡️</div>
+                      <p className="text-lg font-medium text-white/20">No active challenges in this sector.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

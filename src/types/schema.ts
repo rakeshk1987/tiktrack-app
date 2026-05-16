@@ -155,6 +155,7 @@ export interface Challenge {
   created_at: string;
   updated_at?: string;
   completed_at?: string;
+  linked_program_id?: string | null;
 }
 
 export interface Shield {
