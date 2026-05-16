@@ -45,7 +45,7 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   useUnsavedChangesGuard(false, 'You have unsaved timetable changes. Leave anyway?');
 
   const { events: fetchedEvents, loading: eventsLoading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
-  const { programs, loading: programsLoading } = usePlannerPrograms(childId, false);
+  const { programs, loading: programsLoading } = usePlannerPrograms(childId);
 
   const mergedEvents = useMemo(() => {
     const byId = new Map<string, PlannerEvent>();

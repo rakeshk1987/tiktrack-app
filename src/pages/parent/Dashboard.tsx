@@ -208,7 +208,7 @@ function ParentDashboardContent() {
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
   const selectedActivityChildId = activityChildId || children[0]?.id || '';
-  const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId, false);
+  const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId);
   const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, false);
   const { challenges: activityChallenges, incrementScore: incrementActivityChallengeScore, createChallenge: createActivityChallenge } = usePlannerChallenges(selectedActivityChildId, selectedActivity?.id);
 

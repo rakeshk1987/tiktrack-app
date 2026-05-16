@@ -10,7 +10,7 @@ export const plannerEventInputSchema = z.object({
   startAt: isoDateTimeSchema,
   endAt: isoDateTimeSchema,
   linkedProgramId: z.string().nullable().optional(),
-  recurrenceType: z.enum(['none', 'daily', 'weekly']).default('none'),
+  recurrenceType: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
   recurrenceWeekDays: z.array(z.number().int().min(0).max(6)).default([])
 }).superRefine((value, ctx) => {
   if (new Date(value.endAt).getTime() <= new Date(value.startAt).getTime()) {

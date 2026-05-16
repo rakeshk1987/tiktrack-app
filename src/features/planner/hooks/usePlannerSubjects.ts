@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
-import { PlannerSubject } from '../types/planner.types';
+import type { PlannerSubject } from '../types/planner.types';
 
 export function usePlannerSubjects(childId: string, programId?: string | null) {
   const [subjects, setSubjects] = useState<PlannerSubject[]>([]);
