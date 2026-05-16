@@ -221,11 +221,17 @@ export default function ChildPlannerV2Page() {
   }
 
   const eventContent = (arg: EventContentArg) => {
-    const label = categoryLabel(String(arg.event.extendedProps.category || 'event'));
+    const category = String(arg.event.extendedProps.category || 'event');
+    
     return (
-      <div className="rounded-md px-1 py-[2px] text-[10px] font-semibold leading-tight">
-        <div className="truncate">{arg.event.title}</div>
-        <div className="truncate text-[9px] opacity-90">{label}</div>
+      <div className="flex h-full w-full flex-col justify-center overflow-hidden rounded-lg px-2 py-1 transition-all duration-300 hover:brightness-110">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <div className="h-1 w-1 shrink-0 rounded-full bg-white shadow-[0_0_4px_rgba(255,255,255,0.8)]" />
+          <span className="truncate text-[10px] font-black tracking-tight text-white">{arg.event.title}</span>
+        </div>
+        <div className="mt-0.5 truncate text-[7px] font-black uppercase tracking-[0.1em] text-white/50">
+          {categoryLabel(category)}
+        </div>
       </div>
     );
   };
@@ -262,188 +268,373 @@ export default function ChildPlannerV2Page() {
     });
   }
 
-  return (
-    <div className="mx-auto mt-4 max-w-7xl space-y-4 pb-20">
-      <section className="rounded-3xl border border-white/10 bg-[linear-gradient(150deg,rgba(36,25,71,0.85),rgba(18,27,62,0.95)_45%,rgba(8,14,35,0.98))] p-4 text-white shadow-[0_18px_50px_rgba(18,20,50,0.4)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    return (
+    <div className="mx-auto mt-4 max-w-7xl space-y-6 pb-24 px-4">
+      {/* Header & Top Navigation */}
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900/40 p-1 backdrop-blur-xl shadow-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-purple-500/10 opacity-50" />
+        <div className="relative flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.15em] text-cyan-300">Planner</p>
-            <h1 className="mt-1 text-2xl font-bold">Your Calendar</h1>
-            <p className="mt-1 text-sm text-white/70">Monthly, weekly, or daily view with exams, tasks, school, and custom program schedules.</p>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-8 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)]" />
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-400/90">System Node: Planner</p>
+            </div>
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
+              Child <span className="bg-gradient-to-r from-cyan-300 to-blue-400 bg-clip-text text-transparent text-shadow-glow">Intelligence</span>
+            </h1>
+            <p className="mt-1 text-xs font-medium text-white/50 tracking-wide">Syncing parent directives and academic protocols.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setActiveTab('calendar')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'calendar' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Calendar</button>
+
+          <nav className="flex flex-wrap gap-1.5 rounded-3xl bg-black/20 p-1.5 backdrop-blur-md border border-white/5">
+            <button
+              type="button"
+              onClick={() => setActiveTab('calendar')}
+              className={`relative flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold transition-all duration-300 ${
+                activeTab === 'calendar'
+                  ? 'bg-white text-slate-900 shadow-[0_8px_20px_rgba(255,255,255,0.15)] scale-[1.02]'
+                  : 'text-white/60 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              Main Planner
+            </button>
             {activityTabs.map((activity) => (
-              <button key={activity.id} type="button" onClick={() => setActiveTab(`activity_${activity.id}` as ChildPlannerTab)} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === `activity_${activity.id}` ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>
+              <button
+                key={activity.id}
+                type="button"
+                onClick={() => setActiveTab(`activity_${activity.id}` as ChildPlannerTab)}
+                className={`relative flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold transition-all duration-300 ${
+                  activeTab === `activity_${activity.id}`
+                    ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-[0_8px_20px_rgba(34,211,238,0.25)] scale-[1.02]'
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <span className="text-sm opacity-90">{programs.find(p => p.id === activity.id)?.icon || '📅'}</span>
                 {activity.label}
               </button>
             ))}
-          </div>
+          </nav>
         </div>
       </section>
 
       <PlannerConflictBanner conflictCount={insights.conflicts.length} />
 
       {activeTab === 'calendar' ? (
-        <section className="rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(20,30,64,0.97),rgba(11,16,35,0.98))] p-3 text-white shadow-[0_20px_70px_rgba(5,7,18,0.45)]">
-          <div className="mb-4 flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
-            <span className="flex shrink-0 items-center gap-1 text-xs font-bold uppercase tracking-wider text-white/50">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-              Filter
-            </span>
-            <div className="flex shrink-0 gap-2">
-              {filterOptions.map((option) => {
-                const active = activeCategoryFilters.includes(option.id) || (option.id === 'all' && activeCategoryFilters.includes('all'));
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => toggleFilter(option.id)}
-                    className={`min-h-[36px] shrink-0 rounded-full px-4 text-xs font-bold transition-all ${
-                      active 
-                        ? 'border-transparent bg-[linear-gradient(90deg,#22d3ee,#3b82f6)] text-white shadow-lg shadow-cyan-500/25' 
-                        : 'border border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {/* Left Sidebar: Advanced Filters */}
+          <aside className="lg:col-span-3 space-y-4">
+            <section className="rounded-[2rem] border border-white/10 bg-slate-900/60 p-6 backdrop-blur-xl shadow-xl">
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Filters</h3>
+                <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+              </div>
+              
+              <div className="space-y-2.5">
+                {filterOptions.map((option) => {
+                  const active = activeCategoryFilters.includes(option.id) || (option.id === 'all' && activeCategoryFilters.includes('all'));
+                  const program = programs.find(p => p.id === option.id);
+                  const color = program?.color || (option.id === 'all' ? '#22d3ee' : '#94a3b8');
+                  
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => toggleFilter(option.id)}
+                      className={`group relative w-full flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 transition-all duration-300 ${
+                        active 
+                          ? 'border-white/20 bg-white/10 shadow-[0_4px_15px_rgba(0,0,0,0.2)]' 
+                          : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="h-2.5 w-2.5 rounded-full ring-4 transition-all duration-300" 
+                          style={{ 
+                            backgroundColor: color, 
+                            boxShadow: active ? `0 0 12px ${color}` : 'none',
+                            ringColor: active ? `${color}40` : 'transparent'
+                          }} 
+                        />
+                        <span className={`text-sm font-bold transition-colors ${active ? 'text-white' : 'text-white/50 group-hover:text-white/80'}`}>
+                          {option.label}
+                        </span>
+                      </div>
+                      {active && (
+                        <div className="absolute right-0 top-0 h-full w-1 bg-gradient-to-b from-cyan-400 to-blue-500" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2">Protocol Status</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span className="text-xs font-semibold text-emerald-400/80">Active Ingestion</span>
+                </div>
+              </div>
+            </section>
+          </aside>
+
+          {/* Main Content: Calendar */}
+          <section className="lg:col-span-9 rounded-[2.5rem] border border-white/10 bg-slate-900/40 p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
+              <svg width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="0.5"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/><path d="M2 12h20"/></svg>
             </div>
-          </div>
-          {loading ? <p className="px-2 py-3 text-sm text-white/70">Loading calendar...</p> : null}
-          <div className="[&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/20 [&_.fc-theme-standard_th]:border-white/20 [&_.fc-theme-standard_th]:!bg-transparent [&_.fc-col-header-cell]:!bg-transparent [&_.fc-scrollgrid]:border-white/20 [&_.fc-col-header-cell-cushion]:text-xs [&_.fc-col-header-cell-cushion]:font-semibold [&_.fc-col-header-cell-cushion]:!text-white [&_.fc-toolbar-title]:text-base [&_.fc-toolbar-title]:font-semibold [&_.fc-toolbar]:flex-nowrap [&_.fc-toolbar]:items-center [&_.fc-toolbar]:gap-2 [&_.fc-button]:min-h-[36px] [&_.fc-button]:rounded-full [&_.fc-button]:border [&_.fc-button]:border-white/20 [&_.fc-button]:bg-white/8 [&_.fc-button]:px-4 [&_.fc-button]:text-xs [&_.fc-button]:font-semibold [&_.fc-button]:text-white [&_.fc-button:hover]:bg-white/16 [&_.fc-button-active]:!border-cyan-300/80 [&_.fc-button-active]:!bg-cyan-400/25 [&_.fc-daygrid-day]:bg-transparent [&_.fc-timegrid-slot]:border-white/15 [&_.fc-timegrid-axis]:text-white/60 [&_.fc-list-day]:bg-white/5 [&_.fc-list-event]:bg-transparent [&_.fc-list-event:hover_td]:bg-white/10 [&_.fc-day-today]:!bg-cyan-400/10 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!px-2 [&_.fc-daygrid-event]:!py-1 [&_.fc-daygrid-event]:!border-0">
-            <FullCalendar
-              plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-              initialView="dayGridMonth"
-              headerToolbar={{ left: 'prev dayGridMonth,timeGridWeek,timeGridDay,listYear', center: 'title', right: 'next' }}
-              buttonText={{ dayGridMonth: 'Month', timeGridWeek: 'Week', timeGridDay: 'Day', listYear: 'Year', prev: 'Back', next: 'Next' }}
-              events={calendarEvents}
-              height="auto"
-              dayMaxEvents={3}
-              eventContent={eventContent}
-              eventClick={onEventClick}
-            />
-          </div>
-        </section>
+            
+            {loading ? (
+              <div className="flex h-[400px] items-center justify-center">
+                <div className="relative h-12 w-12">
+                  <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+                  <div className="absolute inset-0 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+                </div>
+              </div>
+            ) : null}
+
+            <div className={`transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'} [&_.fc]:font-sans [&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/5 [&_.fc-theme-standard_th]:border-white/5 [&_.fc-theme-standard_th]:!bg-black/20 [&_.fc-col-header-cell]:!py-3 [&_.fc-col-header-cell-cushion]:text-[10px] [&_.fc-col-header-cell-cushion]:font-black [&_.fc-col-header-cell-cushion]:uppercase [&_.fc-col-header-cell-cushion]:tracking-widest [&_.fc-col-header-cell-cushion]:!text-white/40 [&_.fc-toolbar-title]:text-xl [&_.fc-toolbar-title]:font-black [&_.fc-toolbar-title]:tracking-tight [&_.fc-button]:!bg-white/[0.05] [&_.fc-button]:!border-white/10 [&_.fc-button]:!text-white [&_.fc-button]:!px-4 [&_.fc-button]:!py-2 [&_.fc-button]:!text-xs [&_.fc-button]:!font-bold [&_.fc-button]:!rounded-xl [&_.fc-button:hover]:!bg-white/[0.1] [&_.fc-button-active]:!bg-white !important [&_.fc-button-active]:!text-slate-900 !important [&_.fc-day-today]:!bg-cyan-400/[0.03] [&_.fc-daygrid-day-number]:text-xs [&_.fc-daygrid-day-number]:font-bold [&_.fc-daygrid-day-number]:opacity-40 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!p-1 [&_.fc-daygrid-event]:!border-0`}>
+              <FullCalendar
+                plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+                initialView="dayGridMonth"
+                headerToolbar={{ left: 'prev today next', center: 'title', right: 'dayGridMonth,timeGridWeek,listYear' }}
+                buttonText={{ dayGridMonth: 'Month', timeGridWeek: 'Week', listYear: 'Agenda', today: 'Today' }}
+                events={calendarEvents}
+                height="auto"
+                dayMaxEvents={3}
+                eventContent={eventContent}
+                eventClick={onEventClick}
+              />
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {activeTab !== 'calendar' ? (
-        <section className="space-y-4 rounded-3xl border border-white/10 bg-[linear-gradient(165deg,rgba(17,36,69,0.96),rgba(22,17,50,0.98))] p-4 text-white shadow-[0_20px_70px_rgba(6,10,30,0.45)]">
-
-          <div>
-            <h2 className="text-lg font-semibold">{isSchoolActivity ? 'School' : activeActivityLabel || 'Activity'}</h2>
-            <p className="text-sm text-white/70">{isSchoolActivity ? 'School routine with configurable subtabs.' : 'Activity-specific tasks and schedule managed by your parent.'}</p>
+        <section className="space-y-6">
+          {/* Sub-Navigation for Activity Modules */}
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-xl">
+              <h2 className="text-2xl font-black tracking-tight text-white">{activeActivityLabel}</h2>
+              <p className="mt-1 text-sm font-medium text-white/50">Accessing specialized modules for this program.</p>
+            </div>
+            
+            <nav className="flex flex-wrap gap-2 rounded-2xl bg-white/[0.03] p-1.5 border border-white/5 backdrop-blur-md">
+              {activeActivityModules.map((moduleId: PlannerActivityModule) => (
+                <button
+                  key={moduleId}
+                  type="button"
+                  onClick={() => setActivitySubTab(moduleId)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-all duration-300 ${
+                    activitySubTab === moduleId
+                      ? 'bg-white text-slate-900 shadow-xl scale-[1.05]'
+                      : 'text-white/40 hover:bg-white/5 hover:text-white/70'
+                  }`}
+                >
+                  {moduleId === 'tasks' ? 'Tasks' : moduleId === 'exams' ? 'Exams' : moduleId === 'timetable' ? 'Timetable' : moduleId === 'challenges' ? 'Challenges' : 'Events'}
+                </button>
+              ))}
+            </nav>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {activeActivityModules.map((moduleId: PlannerActivityModule) => (
-              <button key={moduleId} type="button" onClick={() => setActivitySubTab(moduleId)} className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold ${activitySubTab === moduleId ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/8 text-white/80'}`}>
-                {moduleId === 'tasks' ? 'Tasks' : moduleId === 'exams' ? 'Exams' : moduleId === 'timetable' ? 'Class Timetable' : moduleId === 'challenges' ? 'Challenges' : 'Events'}
-              </button>
-            ))}
-          </div>
-
-          {activitySubTab === 'tasks' ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-              <h3 className="text-sm font-semibold text-white/85">{isSchoolActivity ? 'School Tasks' : `${activeActivityLabel || 'Activity'} Tasks`}</h3>
-              <div className="mt-2 space-y-2">
-                {visibleEvents.length ? visibleEvents.slice(0, 20).map((event) => (
-                  <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                    <div>
-                      <p className="text-sm font-semibold text-white">{event.title}</p>
-                      <p className="text-xs text-white/65">{new Date(event.startAt).toLocaleString()}</p>
+          <div className="relative rounded-[2.5rem] border border-white/10 bg-slate-900/40 p-8 backdrop-blur-xl shadow-2xl overflow-hidden min-h-[400px]">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+            
+            {activitySubTab === 'tasks' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white">Program Tasks</h3>
+                  <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Queue Active</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category))).length ? 
+                    visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category))).map((event) => (
+                    <div key={event.id} className="group flex items-center justify-between gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/10">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-xl group-hover:scale-110 transition-transform">
+                          {event.category === 'homework' ? '📝' : '⚡'}
+                        </div>
+                        <div>
+                          <p className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors">{event.title}</p>
+                          <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      </div>
+                      <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
                     </div>
-                    <span className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
-                      {categoryLabel(event.category)}
-                    </span>
-                  </div>
-                )) : <p className="text-xs text-white/60">No tasks yet.</p>}
-              </div>
-            </div>
-          ) : null}
-
-          {activitySubTab === 'exams' ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-              <h3 className="text-sm font-semibold text-white/85">Exams & Tests</h3>
-              <div className="mt-2 space-y-2">
-                {(isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).length ? (isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).map((event) => (
-                  <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/20 bg-rose-400/10 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-semibold text-white">{event.title}</p>
-                      <p className="text-xs text-white/65">{new Date(event.startAt).toLocaleString()}</p>
+                  )) : (
+                    <div className="col-span-full py-20 text-center">
+                      <p className="text-lg font-medium text-white/20">No tasks currently assigned to this protocol.</p>
                     </div>
-                    <span className="rounded-full border border-rose-300/35 bg-rose-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-rose-100">Exam</span>
-                  </div>
-                )) : <p className="text-xs text-white/60">No exams scheduled.</p>}
+                  )}
+                </div>
               </div>
-            </div>
-          ) : null}
+            )}
 
-          {activitySubTab === 'timetable' ? (
-            <>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
-            <select value={period} onChange={(e) => setPeriod(e.target.value)} className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3 text-white">
-              {(timetable?.periods || []).map((rowPeriod) => <option key={rowPeriod} value={rowPeriod} className="bg-slate-900">{rowPeriod}</option>)}
-            </select>
-            <select value={day} onChange={(e) => setDay(e.target.value)} className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3 text-white">
-              {(timetable?.days || []).map((rowDay) => <option key={rowDay} value={rowDay} className="bg-slate-900">{rowDay}</option>)}
-            </select>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3" />
-            <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3" />
-            <input value={teacher} onChange={(e) => setTeacher(e.target.value)} placeholder="Teacher" className="min-h-[44px] rounded-xl border border-white/15 bg-white/[0.08] px-3" />
+            {activitySubTab === 'exams' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white">Academic Assessments</h3>
+                  <span className="rounded-full bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-rose-400">High Priority</span>
+                </div>
+                <div className="space-y-3">
+                  {(isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).length ? 
+                    (isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).map((event) => (
+                    <div key={event.id} className="flex items-center justify-between rounded-3xl border border-rose-500/20 bg-rose-500/5 p-6 backdrop-blur-md">
+                      <div className="flex items-center gap-5">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-2xl">🎓</div>
+                        <div>
+                          <p className="text-lg font-black text-white tracking-tight">{event.title}</p>
+                          <p className="text-sm font-semibold text-rose-400/80">{new Date(event.startAt).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <button className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                    </div>
+                  )) : (
+                    <div className="py-20 text-center">
+                      <p className="text-lg font-medium text-white/20">No active examinations detected.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activitySubTab === 'timetable' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Class Matrix</h3>
+                    <p className="text-sm font-medium text-white/40 italic">Editing: {day} // {period}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <select value={period} onChange={(e) => setPeriod(e.target.value)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 ring-cyan-500/50">
+                      {(timetable?.periods || []).map((p) => <option key={p} value={p} className="bg-slate-900">{p}</option>)}
+                    </select>
+                    <select value={day} onChange={(e) => setDay(e.target.value)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 ring-cyan-500/50">
+                      {(timetable?.days || []).map((d) => <option key={d} value={d} className="bg-slate-900">{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Core Subject" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
+                  <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Facility/Room" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
+                  <input value={teacher} onChange={(e) => setTeacher(e.target.value)} placeholder="Lead Instructor" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <button 
+                    type="button" 
+                    onClick={() => void saveSchoolCell()} 
+                    disabled={savingCell} 
+                    className="flex-1 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 py-4 text-sm font-black uppercase tracking-widest text-white shadow-xl shadow-cyan-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {savingCell ? 'Updating Matrix...' : 'Commit Changes to Timetable'}
+                  </button>
+                </div>
+
+                {schoolError && (
+                  <div className="rounded-2xl bg-rose-500/10 border border-rose-500/20 p-4 text-xs font-bold text-rose-400 animate-bounce">
+                    ⚠️ {schoolError}
+                  </div>
+                )}
+
+                <div className="rounded-[2rem] border border-white/5 bg-black/20 p-4 overflow-x-auto custom-scrollbar">
+                  {timetable ? (
+                    <SchoolTimetableTable
+                      periods={timetable.periods}
+                      days={timetable.days}
+                      data={timetable.data}
+                      selectedDay={day}
+                      selectedPeriod={period}
+                      onCellSelect={(nextPeriod, nextDay) => {
+                        setPeriod(nextPeriod);
+                        setDay(nextDay);
+                        const existing = timetable.data[nextPeriod]?.[nextDay];
+                        setSubject(existing?.subject || '');
+                        setRoom(existing?.room || '');
+                        setTeacher(existing?.teacher || '');
+                      }}
+                    />
+                  ) : (
+                    <div className="py-20 text-center text-white/20 font-black uppercase tracking-widest">Timetable Data Null</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activitySubTab === 'challenges' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center justify-center py-20 text-center">
+                <div className="mb-6 h-20 w-20 rounded-full bg-amber-400/10 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(251,191,36,0.1)]">🏆</div>
+                <h3 className="text-xl font-black text-white">Gamified Objectives</h3>
+                <p className="mt-2 max-w-xs text-sm font-medium text-white/40">No active challenges found for the {activeActivityLabel} program.</p>
+              </div>
+            )}
+
+            {activitySubTab === 'events' && (
+              <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white">Program Events</h3>
+                  <span className="rounded-full bg-indigo-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Scheduled</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').length ? 
+                    visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').map((event) => (
+                    <div key={event.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
+                      <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl">📅</div>
+                      <div>
+                        <p className="text-base font-bold text-white">{event.title}</p>
+                        <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="col-span-full py-20 text-center text-white/20 font-medium">No specialized events found.</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="rounded-2xl border border-cyan-300/25 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-100">Editing: {day} • {period}</div>
-          {schoolError ? <p className="text-sm text-rose-300">{schoolError}</p> : null}
-          <button type="button" onClick={() => void saveSchoolCell()} disabled={savingCell} className="min-h-[44px] rounded-xl border border-cyan-300/50 bg-cyan-400/20 px-4 text-sm font-semibold text-cyan-100 shadow-[0_10px_25px_rgba(34,211,238,0.18)] disabled:opacity-60">
-            {savingCell ? 'Saving...' : 'Save timetable entry'}
-          </button>
-          {timetableLoading ? <p className="text-sm text-white/70">Loading timetable...</p> : null}
-          {timetable ? (
-            <SchoolTimetableTable
-              periods={timetable.periods}
-              days={timetable.days}
-              data={timetable.data}
-              selectedDay={day}
-              selectedPeriod={period}
-              onCellSelect={(nextPeriod, nextDay) => {
-                setPeriod(nextPeriod);
-                setDay(nextDay);
-                const existing = timetable.data[nextPeriod]?.[nextDay];
-                setSubject(existing?.subject || '');
-                setRoom(existing?.room || '');
-                setTeacher(existing?.teacher || '');
-              }}
-            />
-          ) : null}
-            </>
-          ) : null}
-          {activitySubTab === 'challenges' ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-              <h3 className="text-sm font-semibold text-white/85">Challenges</h3>
-              <p className="mt-2 text-xs text-white/60">Challenges configured for School will appear here.</p>
-            </div>
-          ) : null}
-          {activitySubTab === 'events' ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-              <h3 className="text-sm font-semibold text-white/85">Events</h3>
-              <p className="mt-2 text-xs text-white/60">Events configured for School will appear here.</p>
-            </div>
-          ) : null}
         </section>
       ) : null}
 
       {selectedEvent ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-cyan-300/35 bg-[linear-gradient(165deg,rgba(16,32,60,0.98),rgba(30,20,56,0.98))] p-5 text-white shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-lg font-semibold">{selectedEvent.title}</h3>
-              <button type="button" onClick={() => setSelectedEvent(null)} className="rounded-lg border border-white/20 px-2 py-1 text-xs text-white/85 hover:bg-white/10">Close</button>
-            </div>
-            <p className="mt-2 inline-block rounded-full border border-cyan-300/40 bg-cyan-400/20 px-2.5 py-1 text-xs font-semibold capitalize text-cyan-100">{selectedEvent.category}</p>
-            <div className="mt-4 space-y-2 text-sm text-white/85">
-              <p><span className="text-white/60">Start:</span> {selectedEvent.start}</p>
-              <p><span className="text-white/60">End:</span> {selectedEvent.end}</p>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-950/40" onClick={() => setSelectedEvent(null)} />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900 p-1 shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="rounded-[2.25rem] bg-gradient-to-br from-slate-800 to-slate-950 p-6">
+              <div className="mb-6 flex items-start justify-between">
+                <div>
+                  <span className="inline-block rounded-full bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Event Decoded</span>
+                  <h3 className="mt-2 text-2xl font-black tracking-tight text-white">{selectedEvent.title}</h3>
+                </div>
+                <button type="button" onClick={() => setSelectedEvent(null)} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all">
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Classification</p>
+                  <p className="text-sm font-black text-cyan-300 uppercase tracking-tight">{selectedEvent.category}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Start Time</p>
+                    <p className="text-xs font-bold text-white/80">{selectedEvent.start}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">End Time</p>
+                    <p className="text-xs font-bold text-white/80">{selectedEvent.end}</p>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                type="button" 
+                onClick={() => setSelectedEvent(null)}
+                className="mt-8 w-full rounded-2xl bg-white py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:scale-[1.02] active:scale-95"
+              >
+                Terminate Signal
+              </button>
             </div>
           </div>
         </div>
