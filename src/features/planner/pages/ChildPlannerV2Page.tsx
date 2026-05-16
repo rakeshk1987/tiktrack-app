@@ -4,7 +4,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
-import { addDoc, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
 import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/core';
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../config/firebase';
@@ -49,10 +49,10 @@ export default function ChildPlannerV2Page() {
 
   const { events, loading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
   const { programs } = usePlannerPrograms(childId, false);
-  const { timetable, loading: timetableLoading, refresh: refreshTimetable } = usePlannerTimetable(childId, false);
+  const { timetable, refresh: refreshTimetable } = usePlannerTimetable(childId, false);
   const insights = usePlannerInsights(events);
 
-  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : null;
+  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
   const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId);
 
   // New Form States
@@ -159,7 +159,6 @@ export default function ChildPlannerV2Page() {
       .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
   }, [programs]);
 
-  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
   const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
   const activeActivityLabel = activeActivity?.label || '';
   const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
@@ -442,11 +441,10 @@ export default function ChildPlannerV2Page() {
                     >
                       <div className="flex items-center gap-3">
                         <div 
-                          className="h-2.5 w-2.5 rounded-full ring-4 transition-all duration-300" 
+                          className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${active ? 'ring-4' : ''}`} 
                           style={{ 
                             backgroundColor: color, 
-                            boxShadow: active ? `0 0 12px ${color}` : 'none',
-                            ringColor: active ? `${color}40` : 'transparent'
+                            boxShadow: active ? `0 0 12px ${color}` : 'none'
                           }} 
                         />
                         <span className={`text-sm font-bold transition-colors ${active ? 'text-white' : 'text-white/50 group-hover:text-white/80'}`}>
@@ -536,9 +534,45 @@ export default function ChildPlannerV2Page() {
             {activitySubTab === 'tasks' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6 flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white">Program Tasks</h3>
-                  <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Queue Active</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Program Tasks</h3>
+                    <p className="text-xs text-white/40">Manage your workload for this activity.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowTaskForm(!showTaskForm)}
+                    className="rounded-full bg-cyan-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 hover:bg-cyan-400/20 transition-all"
+                  >
+                    {showTaskForm ? 'Cancel' : '+ New Task'}
+                  </button>
                 </div>
+
+                {showTaskForm && (
+                  <form onSubmit={handleCreateTask} className="mb-8 rounded-3xl border border-cyan-400/20 bg-cyan-400/5 p-6 animate-in zoom-in-95 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input 
+                        required
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        placeholder="What needs to be done?"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
+                      />
+                      <input 
+                        type="date"
+                        value={newTaskDue}
+                        onChange={(e) => setNewTaskDue(e.target.value)}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={taskCreating}
+                      className="mt-4 w-full rounded-2xl bg-cyan-400 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-cyan-400/20 disabled:opacity-50"
+                    >
+                      {taskCreating ? 'Creating...' : 'Initialize Task Protocol'}
+                    </button>
+                  </form>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category))).length ? 
                     visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category))).map((event) => (
@@ -566,9 +600,45 @@ export default function ChildPlannerV2Page() {
             {activitySubTab === 'exams' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6 flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white">Academic Assessments</h3>
-                  <span className="rounded-full bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-rose-400">High Priority</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Academic Assessments</h3>
+                    <p className="text-xs text-white/40">Track your performance and upcoming tests.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowExamForm(!showExamForm)}
+                    className="rounded-full bg-rose-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 hover:bg-rose-400/20 transition-all"
+                  >
+                    {showExamForm ? 'Cancel' : '+ New Exam'}
+                  </button>
                 </div>
+
+                {showExamForm && (
+                  <form onSubmit={handleCreateExam} className="mb-8 rounded-3xl border border-rose-400/20 bg-rose-400/5 p-6 animate-in zoom-in-95 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input 
+                        required
+                        value={newExamSubject}
+                        onChange={(e) => setNewExamSubject(e.target.value)}
+                        placeholder="Exam Subject"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
+                      />
+                      <input 
+                        type="date"
+                        value={newExamDate}
+                        onChange={(e) => setNewExamDate(e.target.value)}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={examCreating}
+                      className="mt-4 w-full rounded-2xl bg-rose-400 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-rose-400/20 disabled:opacity-50"
+                    >
+                      {examCreating ? 'Scheduling...' : 'Record Exam Protocol'}
+                    </button>
+                  </form>
+                )}
+
                 <div className="space-y-3">
                   {(isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).length ? 
                     (isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).map((event) => (
