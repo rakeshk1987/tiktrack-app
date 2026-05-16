@@ -4,7 +4,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, query, serverTimestamp, where, doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/core';
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../config/firebase';
@@ -55,7 +55,25 @@ export default function ChildPlannerV2Page() {
   const insights = usePlannerInsights(events);
 
   const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
-  const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId);
+
+  const activityTabs = useMemo<Array<{ id: string; label: string; modules: PlannerActivityModule[]; program: typeof programs[0] }>>(() => {
+    return programs
+      .map((program) => ({
+        id: program.id,
+        label: program.name?.trim() || 'Activity',
+        modules: (program.modules && program.modules.length ? program.modules : ['tasks']) as PlannerActivityModule[],
+        program
+      }))
+      .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
+  }, [programs]);
+
+  const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
+  const activeProgram = activeActivity?.program || null;
+  const activityPointsConfig = activeProgram?.pointsConfig || null;
+  const activeActivityLabel = activeActivity?.label || '';
+  const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
+  const isSchoolActivity = activeActivityLabel.toLowerCase() === 'school' || activeActivityId === 'school';
+  const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId, activityPointsConfig?.challengePoints);
   const { subjects, addSubject: addNewSubject, removeSubject, updateSubject } = usePlannerSubjects(childId, activeActivityId);
 
   // New Form States
@@ -71,6 +89,7 @@ export default function ChildPlannerV2Page() {
   const [newExamDate, setNewExamDate] = useState('');
   const [newExamMarks, setNewExamMarks] = useState<number | ''>('');
   const [newExamTotalMarks, setNewExamTotalMarks] = useState<number | ''>('');
+  const [newExamPointsAllocated, setNewExamPointsAllocated] = useState<number | ''>('');
   const [examCreating, setExamCreating] = useState(false);
 
   const [showChallengeForm, setShowChallengeForm] = useState(false);
@@ -95,13 +114,14 @@ export default function ChildPlannerV2Page() {
   const [examEvents, setExamEvents] = useState<PlannerEvent[]>([]);
 
   useEffect(() => {
-    const loadExtra = async () => {
-      if (!childId) return;
-      const now = new Date().toISOString();
-      const taskSnap = await getDocs(query(collection(db, 'tasks'), where('child_id', '==', childId)));
-      const examSnap = await getDocs(query(collection(db, 'exams'), where('child_id', '==', childId)));
+    if (!childId) return;
+    
+    const taskQuery = query(collection(db, 'tasks'), where('child_id', '==', childId));
+    const examQuery = query(collection(db, 'exams'), where('child_id', '==', childId));
 
-      const mappedTasks: PlannerEvent[] = taskSnap.docs.map((d) => {
+    const unsubTasks = onSnapshot(taskQuery, (snap) => {
+      const now = new Date().toISOString();
+      const mappedTasks: PlannerEvent[] = snap.docs.map((d) => {
         const row = d.data() as Record<string, unknown>;
         const baseStart = typeof row.due_date === 'string' ? row.due_date : now;
         return {
@@ -128,11 +148,25 @@ export default function ChildPlannerV2Page() {
           updatedAt: now
         };
       });
+      setTaskEvents(mappedTasks);
+    });
 
-      const mappedExams: PlannerEvent[] = examSnap.docs.map((d) => {
+    const unsubExams = onSnapshot(examQuery, (snap) => {
+      const now = new Date().toISOString();
+      const mappedExams: PlannerEvent[] = snap.docs.map((d) => {
         const row = d.data() as Record<string, unknown>;
-        const startAt = typeof row.exam_date === 'string' ? `${row.exam_date}T09:00:00.000Z` : now;
-        const endAt = typeof row.exam_date === 'string' ? `${row.exam_date}T11:00:00.000Z` : now;
+        let startAt = now;
+        let endAt = now;
+        if (typeof row.exam_date === 'string') {
+          const isIso = row.exam_date.includes('T');
+          startAt = isIso ? row.exam_date : `${row.exam_date}T09:00:00.000Z`;
+          endAt = isIso ? row.exam_date : `${row.exam_date}T11:00:00.000Z`;
+        } else if (typeof row.date === 'string') {
+          const isIso = row.date.includes('T');
+          startAt = isIso ? row.date : `${row.date}T09:00:00.000Z`;
+          endAt = isIso ? row.date : `${row.date}T11:00:00.000Z`;
+        }
+
         const marksScored = typeof row.marks_scored === 'number' ? row.marks_scored : null;
         const totalMarks = typeof row.total_marks === 'number' ? row.total_marks : null;
         const resultSuffix = marksScored !== null && totalMarks !== null ? ` (${marksScored}/${totalMarks})` : '';
@@ -160,29 +194,18 @@ export default function ChildPlannerV2Page() {
           updatedAt: now
         };
       });
-
-      setTaskEvents(mappedTasks);
       setExamEvents(mappedExams);
+    });
+
+    return () => {
+      unsubTasks();
+      unsubExams();
     };
-    void loadExtra();
   }, [childId, familyId]);
 
   const allEvents = useMemo(() => [...events, ...taskEvents, ...examEvents], [events, taskEvents, examEvents]);
 
-  const activityTabs = useMemo<Array<{ id: string; label: string; modules: PlannerActivityModule[] }>>(() => {
-    return programs
-      .map((program) => ({
-        id: program.id,
-        label: program.name?.trim() || 'Activity',
-        modules: (program.modules && program.modules.length ? program.modules : ['tasks']) as PlannerActivityModule[]
-      }))
-      .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
-  }, [programs]);
 
-  const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
-  const activeActivityLabel = activeActivity?.label || '';
-  const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
-  const isSchoolActivity = activeActivityLabel.toLowerCase() === 'school' || activeActivityId === 'school';
 
   const visibleEvents = useMemo(() => {
     if (activeTab === 'calendar') return allEvents;
@@ -255,6 +278,8 @@ export default function ChildPlannerV2Page() {
         linked_program_id: activeActivityId,
         category: 'homework',
         priority: 'medium',
+        star_value: activityPointsConfig?.taskPoints || 0,
+        points: activityPointsConfig?.taskPoints || 0,
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
@@ -275,6 +300,13 @@ export default function ChildPlannerV2Page() {
     if (!childId || !newExamSubject.trim() || !activeActivityId) return;
     setExamCreating(true);
     try {
+      const hasResult = newExamMarks !== '' && newExamTotalMarks !== '';
+      // Use activity-level exam points (parent-set); child cannot override
+      const allocatedPoints = activityPointsConfig?.examPoints || null;
+      const newPointsEarned = hasResult && allocatedPoints
+        ? Math.round(allocatedPoints * (Number(newExamMarks) / Number(newExamTotalMarks)))
+        : null;
+
       await addDoc(collection(db, 'exams'), {
         subject: newExamSubject.trim(),
         subject_id: newExamSubjectId,
@@ -284,11 +316,24 @@ export default function ChildPlannerV2Page() {
         exam_date: newExamDate ? new Date(newExamDate).toISOString() : new Date().toISOString(),
         marks_scored: newExamMarks === '' ? null : newExamMarks,
         total_marks: newExamTotalMarks === '' ? null : newExamTotalMarks,
-        status: newExamMarks !== '' ? 'result_published' : 'scheduled',
+        points_allocated: allocatedPoints,
+        points_earned: newPointsEarned,
+        status: hasResult ? 'result_published' : 'scheduled',
         linked_program_id: activeActivityId,
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
+
+      if (newPointsEarned && newPointsEarned > 0) {
+        const profileRef = doc(db, 'child_profile', childId);
+        const profileSnap = await getDoc(profileRef);
+        if (profileSnap.exists()) {
+          const currentStars = profileSnap.data().total_stars || 0;
+          await updateDoc(profileRef, {
+            total_stars: currentStars + newPointsEarned
+          });
+        }
+      }
       setNewExamSubject('');
       setNewExamSubjectId('');
       setNewExamDate('');
@@ -367,6 +412,8 @@ export default function ChildPlannerV2Page() {
         reminder_days_before: 1,
         recurrence_type: newEventRecurrence,
         linked_program_id: activeActivityId,
+        points_allocated: activityPointsConfig?.eventPoints || null,
+        attendance_approved: false,
         created_at: new Date().toISOString()
       });
       setNewEventTitle('');
@@ -405,16 +452,21 @@ export default function ChildPlannerV2Page() {
 
   const eventContent = (arg: EventContentArg) => {
     const category = String(arg.event.extendedProps.category || 'event');
+    const isPrivate = category === 'personal' || category === 'custom';
+    const isExam = category === 'exam';
     
     return (
-      <div className="flex h-full w-full flex-col justify-center overflow-hidden rounded-lg px-2 py-1 transition-all duration-300 hover:brightness-110">
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          <div className="h-1 w-1 shrink-0 rounded-full bg-white shadow-[0_0_4px_rgba(255,255,255,0.8)]" />
-          <span className="truncate text-[10px] font-black tracking-tight text-white">{arg.event.title}</span>
+      <div className="flex h-full w-full flex-col justify-center overflow-hidden transition-all duration-300">
+        <div className="flex items-center gap-1 overflow-hidden">
+          {isPrivate && <span className="text-[9px]">🔒</span>}
+          {isExam && <span className="text-[9px]">🎓</span>}
+          <span className="truncate text-[11px] font-bold tracking-tight text-white drop-shadow-sm">{arg.event.title}</span>
         </div>
-        <div className="mt-0.5 truncate text-[7px] font-black uppercase tracking-[0.1em] text-white/50">
-          {categoryLabel(category)}
-        </div>
+        {!arg.event.allDay && arg.timeText && (
+           <div className="mt-0.5 truncate text-[9px] font-semibold text-white/90 drop-shadow-sm">
+             {arg.timeText}
+           </div>
+        )}
       </div>
     );
   };
@@ -684,7 +736,15 @@ export default function ChildPlannerV2Page() {
                           <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       </div>
-                      <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                      <div className="flex items-center gap-3">
+                        {activityPointsConfig?.taskPoints ? (
+                          <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                            <span className="text-xs">⭐</span>
+                            <span className="text-xs font-black text-amber-400">{activityPointsConfig.taskPoints}</span>
+                          </div>
+                        ) : null}
+                        <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                      </div>
                     </div>
                   )) : (
                     <div className="col-span-full py-20 text-center">
@@ -735,25 +795,35 @@ export default function ChildPlannerV2Page() {
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
                       />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
-                        <span className="text-xs font-bold text-white/40 uppercase">Marks Scored</span>
+                        <span className="text-xs font-bold text-white/40 uppercase whitespace-nowrap">Max Stars</span>
+                        <input 
+                          type="number"
+                          value={newExamPointsAllocated}
+                          onChange={(e) => setNewExamPointsAllocated(e.target.value ? Number(e.target.value) : '')}
+                          placeholder="Optional"
+                          className="w-full bg-transparent text-sm font-bold text-white outline-none min-w-0"
+                        />
+                      </div>
+                      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
+                        <span className="text-xs font-bold text-white/40 uppercase whitespace-nowrap">Marks Scored</span>
                         <input 
                           type="number"
                           value={newExamMarks}
                           onChange={(e) => setNewExamMarks(e.target.value ? Number(e.target.value) : '')}
                           placeholder="Optional"
-                          className="w-full bg-transparent text-sm font-bold text-white outline-none"
+                          className="w-full bg-transparent text-sm font-bold text-white outline-none min-w-0"
                         />
                       </div>
                       <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
-                        <span className="text-xs font-bold text-white/40 uppercase">Total Marks</span>
+                        <span className="text-xs font-bold text-white/40 uppercase whitespace-nowrap">Total Marks</span>
                         <input 
                           type="number"
                           value={newExamTotalMarks}
                           onChange={(e) => setNewExamTotalMarks(e.target.value ? Number(e.target.value) : '')}
                           placeholder="Optional"
-                          className="w-full bg-transparent text-sm font-bold text-white outline-none"
+                          className="w-full bg-transparent text-sm font-bold text-white outline-none min-w-0"
                         />
                       </div>
                     </div>
@@ -778,7 +848,15 @@ export default function ChildPlannerV2Page() {
                           <p className="text-sm font-semibold text-rose-400/80">{new Date(event.startAt).toLocaleString()}</p>
                         </div>
                       </div>
-                      <button className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                      <div className="flex flex-col items-end gap-2">
+                        {activityPointsConfig?.examPoints ? (
+                          <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                            <span className="text-xs">⭐</span>
+                            <span className="text-xs font-black text-amber-400">Up to {activityPointsConfig.examPoints}</span>
+                          </div>
+                        ) : null}
+                        <button className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                      </div>
                     </div>
                   )) : (
                     <div className="py-20 text-center">
@@ -1132,6 +1210,12 @@ export default function ChildPlannerV2Page() {
                         <p className="text-base font-bold text-white">{event.title}</p>
                         <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleString()}</p>
                       </div>
+                      {activityPointsConfig?.eventPoints ? (
+                        <div className="ml-auto flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                          <span className="text-xs">⭐</span>
+                          <span className="text-xs font-black text-amber-400">{activityPointsConfig.eventPoints}</span>
+                        </div>
+                      ) : null}
                     </div>
                   )) : (
                     <div className="col-span-full py-20 text-center text-white/20 font-medium">No specialized events found.</div>

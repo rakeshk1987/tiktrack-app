@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import type { Challenge } from '../../../types/schema';
 
-export function usePlannerChallenges(childId: string, programId?: string | null) {
+export function usePlannerChallenges(childId: string, programId?: string | null, challengePoints?: number | null) {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -80,7 +80,19 @@ export function usePlannerChallenges(childId: string, programId?: string | null)
     }
 
     await updateDoc(doc(db, 'challenges', challengeId), updates);
-  }, [challenges]);
+
+    // Award stars if challenge is now complete and points are configured
+    if (newScore >= challenge.target_score && challengePoints && challengePoints > 0 && childId) {
+      const profileRef = doc(db, 'child_profile', childId);
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        const currentStars = profileSnap.data().total_stars || 0;
+        await updateDoc(profileRef, {
+          total_stars: currentStars + challengePoints
+        });
+      }
+    }
+  }, [challenges, challengePoints, childId]);
 
   const deleteChallenge = useCallback(async (challengeId: string) => {
     await deleteDoc(doc(db, 'challenges', challengeId));

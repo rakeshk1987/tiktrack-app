@@ -127,6 +127,7 @@ function ParentDashboardContent() {
   const [eDate, setEDate] = useState('');
   const [eActivityId, setEActivityId] = useState('');
   const [eSyllabusScope, setESyllabusScope] = useState('');
+  const [ePoints, setEPoints] = useState<number | ''>('');
   const [editExamId, setEditExamId] = useState<string | null>(null);
   const [filterChild, setFilterChild] = useState<string>('');
   const [growthLogs, setGrowthLogs] = useState<Array<any>>([]);
@@ -176,6 +177,10 @@ function ParentDashboardContent() {
   const [activityStartDate, setActivityStartDate] = useState('');
   const [activityEndDate, setActivityEndDate] = useState('');
   const [activityModules, setActivityModules] = useState<PlannerActivityModule[]>(['tasks', 'exams', 'subjects']);
+  const [activityTaskPoints, setActivityTaskPoints] = useState<number | ''>('');
+  const [activityExamPoints, setActivityExamPoints] = useState<number | ''>('');
+  const [activityChallengePoints, setActivityChallengePoints] = useState<number | ''>('');
+  const [activityEventPoints, setActivityEventPoints] = useState<number | ''>('');
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<PlannerProgram | null>(null);
   const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
@@ -981,12 +986,24 @@ function ParentDashboardContent() {
       };
 
       if (editExamId) {
+        const newPointsEarned = hasResult && ePoints !== '' 
+          ? Math.round(Number(ePoints) * (Number(eMarks) / Number(eTotal))) 
+          : null;
+
+        // Fetch old exam to compute points delta
+        const examSnap = await getDoc(doc(db, 'exams', editExamId));
+        const oldData = examSnap.exists() ? examSnap.data() : null;
+        const oldPointsEarned = oldData?.points_earned || 0;
+        const pointsDelta = (newPointsEarned || 0) - oldPointsEarned;
+
         await updateDoc(doc(db, 'exams', editExamId), {
           child_id: eChild || null,
           subject: eSubject,
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
+          points_allocated: ePoints !== '' ? Number(ePoints) : null,
+          points_earned: newPointsEarned,
           exam_date: examDateIso,
           status: computedStatus,
           syllabus_scope: eSyllabusScope || '',
@@ -996,14 +1013,32 @@ function ParentDashboardContent() {
           updated_at: new Date().toISOString()
         });
         await syncExamCountdownReminders(editExamId, eChild || null, eSubject, examDateIso, computedStatus);
+
+        if (pointsDelta !== 0 && (eChild || oldData?.child_id)) {
+          const profileRef = doc(db, 'child_profile', eChild || oldData?.child_id);
+          const profileSnap = await getDoc(profileRef);
+          if (profileSnap.exists()) {
+            const currentStars = profileSnap.data().total_stars || 0;
+            await updateDoc(profileRef, {
+              total_stars: Math.max(0, currentStars + pointsDelta)
+            });
+          }
+        }
+        
         setSuccess('Exam updated.');
       } else {
+        const newPointsEarned = hasResult && ePoints !== '' 
+          ? Math.round(Number(ePoints) * (Number(eMarks) / Number(eTotal))) 
+          : null;
+
         const createdRef = await addDoc(collection(db, 'exams'), {
           child_id: eChild || null,
           subject: eSubject,
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
+          points_allocated: ePoints !== '' ? Number(ePoints) : null,
+          points_earned: newPointsEarned,
           exam_date: examDateIso,
           status: computedStatus,
           syllabus_scope: eSyllabusScope || '',
@@ -1015,6 +1050,18 @@ function ParentDashboardContent() {
           created_at: new Date().toISOString()
         });
         await syncExamCountdownReminders(createdRef.id, eChild || null, eSubject, examDateIso, computedStatus);
+        
+        if (newPointsEarned && newPointsEarned > 0 && eChild) {
+          const profileRef = doc(db, 'child_profile', eChild);
+          const profileSnap = await getDoc(profileRef);
+          if (profileSnap.exists()) {
+            const currentStars = profileSnap.data().total_stars || 0;
+            await updateDoc(profileRef, {
+              total_stars: currentStars + newPointsEarned
+            });
+          }
+        }
+        
         setSuccess('Exam result recorded.');
       }
 
@@ -1026,6 +1073,7 @@ function ParentDashboardContent() {
       setETotal('');
       setEDate('');
       setESyllabusScope('');
+      setEPoints('');
       setEditExamId(null);
     } catch (err) {
       console.error('Failed to create exam:', err);
@@ -1057,6 +1105,7 @@ function ParentDashboardContent() {
     setETotal(ex.total_marks ?? '');
     setEDate(ex.exam_date ? new Date(ex.exam_date).toISOString().slice(0, 16) : '');
     setESyllabusScope(ex.syllabus_scope || '');
+    setEPoints(ex.points_allocated ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1070,6 +1119,7 @@ function ParentDashboardContent() {
     setETotal('');
     setEDate('');
     setESyllabusScope('');
+    setEPoints('');
   };
 
   const handleCreateGrowth = async (ev: React.FormEvent) => {
@@ -1568,11 +1618,31 @@ function ParentDashboardContent() {
     status: 'approved' | 'rejected'
   ) => {
     try {
-      await updateDoc(doc(db, collectionName, submissionId), {
+      const updates: any = {
         approval_status: status,
         reviewed_at: new Date().toISOString(),
         reviewed_by: user?.id || familyId
-      });
+      };
+
+      if (status === 'approved' && collectionName === 'events') {
+        const itemSnap = await getDoc(doc(db, collectionName, submissionId));
+        if (itemSnap.exists()) {
+          const itemData = itemSnap.data();
+          if (itemData.points_allocated && itemData.points_allocated > 0 && itemData.child_id && !itemData.attendance_approved) {
+            updates.attendance_approved = true;
+            const profileRef = doc(db, 'child_profile', itemData.child_id);
+            const profileSnap = await getDoc(profileRef);
+            if (profileSnap.exists()) {
+              const currentStars = profileSnap.data().total_stars || 0;
+              await updateDoc(profileRef, {
+                total_stars: currentStars + itemData.points_allocated
+              });
+            }
+          }
+        }
+      }
+
+      await updateDoc(doc(db, collectionName, submissionId), updates);
       setSuccess(`Submission ${status}.`);
     } catch (err) {
       console.error('Failed to update child submission:', err);
@@ -1659,6 +1729,10 @@ function ParentDashboardContent() {
     setActivityStartDate('');
     setActivityEndDate('');
     setActivityModules(['tasks']);
+    setActivityTaskPoints('');
+    setActivityExamPoints('');
+    setActivityChallengePoints('');
+    setActivityEventPoints('');
     setEditingActivityId(null);
   };
 
@@ -1676,6 +1750,10 @@ function ParentDashboardContent() {
     setActivityStartDate(program.startDate ? new Date(program.startDate).toISOString().slice(0, 10) : '');
     setActivityEndDate(program.endDate ? new Date(program.endDate).toISOString().slice(0, 10) : '');
     setActivityModules(program.modules && program.modules.length ? program.modules : ['tasks']);
+    setActivityTaskPoints(program.pointsConfig?.taskPoints ?? '');
+    setActivityExamPoints(program.pointsConfig?.examPoints ?? '');
+    setActivityChallengePoints(program.pointsConfig?.challengePoints ?? '');
+    setActivityEventPoints(program.pointsConfig?.eventPoints ?? '');
     setIsActivityModalOpen(true);
   };
 
@@ -1683,6 +1761,8 @@ function ParentDashboardContent() {
     event.preventDefault();
     if (!selectedActivityChildId || !activityName.trim()) return;
     try {
+      const pointsModules: PlannerActivityModule[] = ['tasks', 'exams', 'challenges', 'events'];
+      const hasAnyPoints = activityModules.some(m => pointsModules.includes(m));
       await upsertPlannerProgram(
         selectedActivityChildId,
         familyId,
@@ -1692,7 +1772,13 @@ function ParentDashboardContent() {
           modules: activityModules,
           isDefault: activityName.trim().toLowerCase() === 'school',
           startDate: activityStartDate || null,
-          endDate: activityEndDate || null
+          endDate: activityEndDate || null,
+          pointsConfig: hasAnyPoints ? {
+            taskPoints: activityTaskPoints !== '' ? Number(activityTaskPoints) : null,
+            examPoints: activityExamPoints !== '' ? Number(activityExamPoints) : null,
+            challengePoints: activityChallengePoints !== '' ? Number(activityChallengePoints) : null,
+            eventPoints: activityEventPoints !== '' ? Number(activityEventPoints) : null,
+          } : null
         },
         editingActivityId || undefined
       );
@@ -2561,6 +2647,7 @@ function ParentDashboardContent() {
                           </select>
                           <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="datetime-local" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input value={eSyllabusScope} onChange={(ev) => setESyllabusScope(ev.target.value)} placeholder="Syllabus scope (optional)" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                          <input value={ePoints as any} onChange={(ev) => setEPoints(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Max Stars/Points (optional)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored (add later)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <input value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks (add later)" type="number" className="rounded-xl py-2 px-3 border min-w-0" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                           <div className="md:col-span-2 flex flex-wrap gap-2">
@@ -2568,7 +2655,7 @@ function ParentDashboardContent() {
                             {editExamId ? (
                               <button type="button" onClick={cancelEdit} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
                             ) : (
-                              <button type="button" onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                              <button type="button" onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
                             )}
                           </div>
                         </form>
@@ -3309,6 +3396,39 @@ function ParentDashboardContent() {
                   ))}
                 </div>
               </div>
+              {/* Points Config — only shown for point-bearing modules */}
+              {(['tasks', 'exams', 'challenges', 'events'] as PlannerActivityModule[]).some(m => activityModules.includes(m)) && (
+                <div className="kid-glass rounded-2xl p-3">
+                  <label className="text-sm font-bold ml-1 mb-3 block" style={{ color: 'var(--text-muted)' }}>⭐ Points Config (Stars)</label>
+                  <p className="text-xs ml-1 mb-3" style={{ color: 'var(--text-muted)' }}>Set the default stars a child earns for each module. Leave blank for no points.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {activityModules.includes('tasks') && (
+                      <div>
+                        <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>Per Task</label>
+                        <input type="number" min="0" value={activityTaskPoints as any} onChange={(e) => setActivityTaskPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g. 5" className="w-full rounded-xl py-2 px-3 border focus:outline-none text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      </div>
+                    )}
+                    {activityModules.includes('exams') && (
+                      <div>
+                        <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>Max Exam Stars</label>
+                        <input type="number" min="0" value={activityExamPoints as any} onChange={(e) => setActivityExamPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g. 10" className="w-full rounded-xl py-2 px-3 border focus:outline-none text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      </div>
+                    )}
+                    {activityModules.includes('challenges') && (
+                      <div>
+                        <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>Per Challenge</label>
+                        <input type="number" min="0" value={activityChallengePoints as any} onChange={(e) => setActivityChallengePoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g. 15" className="w-full rounded-xl py-2 px-3 border focus:outline-none text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      </div>
+                    )}
+                    {activityModules.includes('events') && (
+                      <div>
+                        <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>Per Event</label>
+                        <input type="number" min="0" value={activityEventPoints as any} onChange={(e) => setActivityEventPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g. 3" className="w-full rounded-xl py-2 px-3 border focus:outline-none text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="flex-1 text-white font-bold py-3.5 rounded-xl transition shadow-md hover:shadow-lg" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                   {editingActivityId ? 'Save Changes' : 'Create Activity'}

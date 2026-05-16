@@ -101,6 +101,8 @@ export interface ExamResult {
   syllabus_scope?: string;
   reminder_plan?: string[];
   linked_program_id?: string | null;
+  points_allocated?: number | null;
+  points_earned?: number | null;
 }
 
 export interface GrowthLog {

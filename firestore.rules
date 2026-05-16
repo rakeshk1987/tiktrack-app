@@ -129,7 +129,9 @@ service cloud.firestore {
 
     match /exams/{examId} {
       allow read: if signedIn();
-      allow create, update, delete: if isParent();
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
 
     match /growth_logs/{growthId} {
@@ -303,11 +305,19 @@ service cloud.firestore {
         resource.data.familyId == familyIdFor(request.auth.uid) ||
         isParentOf(resource.data.childId)
       );
-      allow create, update: if signedIn() && (
+      allow create: if signedIn() && (
         isParent() || 
         request.resource.data.childId == request.auth.uid
       );
-      allow delete: if isParent();
+      allow update: if signedIn() && (
+        isParent() || 
+        resource.data.childId == request.auth.uid ||
+        request.resource.data.childId == request.auth.uid
+      );
+      allow delete: if signedIn() && (
+        isParent() || 
+        resource.data.childId == request.auth.uid
+      );
     }
 
     match /messages/{messageId} {

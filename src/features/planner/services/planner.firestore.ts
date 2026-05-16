@@ -64,6 +64,7 @@ function mapPlannerProgram(docId: string, raw: Record<string, unknown>): Planner
     },
     recurrenceRule: (raw.recurrence_rule as string) || null,
     modules: modulesRaw.length ? modulesRaw : ['tasks'],
+    pointsConfig: (raw.points_config as PlannerProgram['pointsConfig']) || null,
     isDefault: Boolean(raw.is_default || false),
     isActive: raw.is_active !== false,
     startDate: (raw.start_date as string) || null,
@@ -118,6 +119,12 @@ export interface PlannerProgramInput {
   isDefault?: boolean;
   startDate?: string | null;
   endDate?: string | null;
+  pointsConfig?: {
+    taskPoints?: number | null;
+    examPoints?: number | null;
+    challengePoints?: number | null;
+    eventPoints?: number | null;
+  } | null;
 }
 
 export async function upsertPlannerProgram(childId: string, familyId: string, input: PlannerProgramInput, programId?: string): Promise<string> {
@@ -134,6 +141,7 @@ export async function upsertPlannerProgram(childId: string, familyId: string, in
     },
     recurrence_rule: null,
     modules: input.modules,
+    points_config: input.pointsConfig || null,
     is_default: Boolean(input.isDefault),
     is_active: true,
     start_date: input.startDate || null,

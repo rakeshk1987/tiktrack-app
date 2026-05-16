@@ -38,6 +38,12 @@ export interface PlannerProgram {
   };
   recurrenceRule?: string | null;
   modules?: PlannerActivityModule[];
+  pointsConfig?: {
+    taskPoints?: number | null;
+    examPoints?: number | null;
+    challengePoints?: number | null;
+    eventPoints?: number | null;
+  } | null;
   isDefault?: boolean;
   isActive: boolean;
   startDate?: string | null;
