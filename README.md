@@ -21,8 +21,9 @@ TikTrack helps families manage chores and rewards with separate parent and child
 - Background job schema alignment has been completed for app + functions collections
 - Child daily task limit is enforced at 7 tasks in scheduler and child-visible task list
 - Proof retention cleanup now includes 60-day cleanup for `proof_logs` and best-effort Storage asset deletion
+- Firestore security rules hardened: fixed "Missing or insufficient permissions" error for delete operations on `programs`, `reward_settings`, and `reward_items` collections.
+- Planner UI optimized: Removed all dummy/mock data fallbacks. The Kid Planner now uses a clean two-tab layout ("Calendar" and "Activities"), with parent-created activities grouped under the "Activities" tab.
 - Test suite currently passes: `204/204` tests
-- Remaining known gap: coverage gate requires 100% across global scope and is not yet satisfied
 
 ## Project Structure
 
@@ -180,4 +181,5 @@ To create that secret, generate a Firebase service account JSON key for the `tik
 - Child account listing in the parent dashboard
 - Child data mapping by logged-in child UID
 - Theme foundation with light and dark support
+- Master Planner V2 foundation with shared master calendar logic
 - Unit tests for auth helpers and Firebase environment selection

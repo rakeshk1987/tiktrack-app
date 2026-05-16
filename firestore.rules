@@ -186,10 +186,15 @@ service cloud.firestore {
       // Allow parent to create/update/delete programs for their family.
       // sameFamily() is preferred but falls back to plain isParent() to handle
       // edge-cases where linked_family_id is not yet propagated to the auth token.
-      allow create, update, delete: if isParent() && (
+      allow create, update: if isParent() && (
         !('family_id' in request.resource.data) ||
         sameFamily(request.resource.data.family_id) ||
         request.resource.data.family_id == request.auth.uid
+      );
+      allow delete: if isParent() && (
+        !('family_id' in resource.data) ||
+        sameFamily(resource.data.family_id) ||
+        resource.data.family_id == request.auth.uid
       );
     }
 
@@ -236,9 +241,13 @@ service cloud.firestore {
         resource.data.parent_id == request.auth.uid ||
         isParent()
       );
-      allow create, update, delete: if isParent() && (
+      allow create, update: if isParent() && (
         !('family_id' in request.resource.data) ||
         sameFamily(request.resource.data.family_id)
+      );
+      allow delete: if isParent() && (
+        !('family_id' in resource.data) ||
+        sameFamily(resource.data.family_id)
       );
     }
 
@@ -267,9 +276,13 @@ service cloud.firestore {
         isParent() ||
         (resource.data.child_id is string && isParentOf(resource.data.child_id))
       );
-      allow create, update, delete: if isParent() && (
+      allow create, update: if isParent() && (
         !('family_id' in request.resource.data) ||
         sameFamily(request.resource.data.family_id)
+      );
+      allow delete: if isParent() && (
+        !('family_id' in resource.data) ||
+        sameFamily(resource.data.family_id)
       );
     }
 

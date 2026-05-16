@@ -29,7 +29,8 @@ export default function ChildPlannerV2Page() {
   const { user } = useAuth();
   const childId = user?.id || '';
   const familyId = user?.linked_family_id || user?.id || '';
-  const [activeTab, setActiveTab] = useState<ChildPlannerTab>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'activities'>('calendar');
+  const [activeActivityId, setActiveActivityId] = useState<string>('');
   const [activitySubTab, setActivitySubTab] = useState<ActivitySubTab>('tasks');
   const [period, setPeriod] = useState('Period 1');
   const [day, setDay] = useState('Mon');
@@ -46,9 +47,9 @@ export default function ChildPlannerV2Page() {
   } | null>(null);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
 
-  const { events, loading } = usePlannerEvents(childId, undefined, true);
-  const { programs } = usePlannerPrograms(childId, true);
-  const { timetable, loading: timetableLoading, refresh: refreshTimetable } = usePlannerTimetable(childId, true);
+  const { events, loading } = usePlannerEvents(childId, undefined, false);
+  const { programs } = usePlannerPrograms(childId, false);
+  const { timetable, loading: timetableLoading, refresh: refreshTimetable } = usePlannerTimetable(childId, false);
   const insights = usePlannerInsights(events);
 
   const [taskEvents, setTaskEvents] = useState<PlannerEvent[]>([]);
@@ -128,21 +129,21 @@ export default function ChildPlannerV2Page() {
   const allEvents = useMemo(() => [...events, ...taskEvents, ...examEvents], [events, taskEvents, examEvents]);
 
   const activityTabs = useMemo<Array<{ id: string; label: string; modules: PlannerActivityModule[] }>>(() => {
-    const cleaned = programs
+    return programs
       .map((program) => ({
         id: program.id,
         label: program.name?.trim() || 'Activity',
         modules: (program.modules && program.modules.length ? program.modules : ['tasks']) as PlannerActivityModule[]
       }))
       .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
-    const hasSchool = cleaned.some((program) => program.label.toLowerCase() === 'school');
-    if (!hasSchool) {
-      return [{ id: 'school', label: 'School', modules: ['tasks', 'exams', 'timetable'] as PlannerActivityModule[] }, ...cleaned];
-    }
-    return cleaned;
   }, [programs]);
 
-  const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
+  useEffect(() => {
+    if (!activeActivityId && programs.length > 0) {
+      setActiveActivityId(programs[0].id);
+    }
+  }, [programs, activeActivityId]);
+
   const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
   const activeActivityLabel = activeActivity?.label || '';
   const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
@@ -273,11 +274,9 @@ export default function ChildPlannerV2Page() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setActiveTab('calendar')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'calendar' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Calendar</button>
-            {activityTabs.map((activity) => (
-              <button key={activity.id} type="button" onClick={() => setActiveTab(`activity_${activity.id}`)} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === `activity_${activity.id}` ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>
-                {activity.label}
-              </button>
-            ))}
+            {activityTabs.length > 0 && (
+              <button type="button" onClick={() => setActiveTab('activities')} className={`min-h-[40px] rounded-full border px-4 text-sm ${activeTab === 'activities' ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/10 text-white/85'}`}>Activities</button>
+            )}
           </div>
         </div>
       </section>
@@ -320,8 +319,16 @@ export default function ChildPlannerV2Page() {
         </section>
       ) : null}
 
-      {activeTab !== 'calendar' ? (
+      {activeTab === 'activities' ? (
         <section className="space-y-4 rounded-3xl border border-white/10 bg-[linear-gradient(165deg,rgba(17,36,69,0.96),rgba(22,17,50,0.98))] p-4 text-white shadow-[0_20px_70px_rgba(6,10,30,0.45)]">
+          <div className="mb-4 flex flex-wrap gap-2">
+            {activityTabs.map((activity) => (
+              <button key={activity.id} type="button" onClick={() => setActiveActivityId(activity.id)} className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold ${activeActivityId === activity.id ? 'border-cyan-300/80 bg-cyan-400/25 text-cyan-100' : 'border-white/20 bg-white/8 text-white/80'}`}>
+                {activity.label}
+              </button>
+            ))}
+          </div>
+
           <div>
             <h2 className="text-lg font-semibold">{isSchoolActivity ? 'School' : activeActivityLabel || 'Activity'}</h2>
             <p className="text-sm text-white/70">{isSchoolActivity ? 'School routine with configurable subtabs.' : 'Activity-specific tasks and schedule managed by your parent.'}</p>

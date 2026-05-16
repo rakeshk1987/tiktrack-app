@@ -7,7 +7,7 @@ TikTrack Planner becomes a **single master calendar system** used by both child 
 - Single source of truth: `events` collection
 - Program-driven scheduling: `programs` + `event_templates`
 - Calendar-first UX: month/week/day/list views
-- Child view = guided, agenda-first, motivating
+- Child view: Focused two-tab layout ("Calendar" and "Activities"). Activities created by the parent are grouped under the "Activities" tab for clarity.
 - Parent view = full control, recurring editor, conflict and burnout visibility
 
 Core design principles:
@@ -213,13 +213,9 @@ Document id: `eventId`
 
 ## 4) UX Wireframe (Mobile)
 
-Agenda-first (default view = list/day):
-- Top: greeting + date + quick stats
-- Card 1: Today Agenda timeline
-- Card 2: Upcoming classes rail
-- Card 3: Exam countdown + highlight
-- Card 4: Quest timeline (planner-linked tasks)
-- Floating bottom-right: quick add event/reminder
+- Top Tab Navigation: [Calendar] [Activities]
+- "Activities" Tab: Hosts all parent-created programs/activities as sub-tabs.
+- Floating bottom-right: quick add event/reminder (personal)
 - Bottom nav: Home, Quests, Planner, Diary, Rewards
 
 Interaction:
@@ -348,6 +344,7 @@ Render timetable as table grid (not cards):
   - `usePlannerPrograms()`
   - `usePlannerInsights(events)`
 - No heavy global state library required initially
+- Mock Data Policy: Mock data fallbacks are disabled (`useMockFallback: false`) in production to ensure only real data from Firestore is displayed.
 - Cache strategy:
   - Firestore real-time for active month range
   - local derived memo for agenda and insights

@@ -81,6 +81,7 @@ function ParentDashboardContent() {
   const { theme, toggleTheme } = useTheme();
 
   const [isModaling, setIsModaling] = useState(false);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [cUser, setCUser] = useState('');
   const [cName, setCName] = useState('');
   const [cPass, setCPass] = useState('');
@@ -205,7 +206,7 @@ function ParentDashboardContent() {
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
   const selectedActivityChildId = activityChildId || children[0]?.id || '';
   const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId, false);
-  const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, true);
+  const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, false);
 
   useEffect(() => {
     if (!user) {
@@ -1625,6 +1626,7 @@ function ParentDashboardContent() {
     setActivityName('');
     setActivityModules(['tasks']);
     setEditingActivityId(null);
+    setIsActivityModalOpen(false);
   };
 
   const toggleActivityModule = (moduleId: PlannerActivityModule) => {
@@ -1636,10 +1638,10 @@ function ParentDashboardContent() {
   };
 
   const startEditActivity = (program: PlannerProgram) => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditingActivityId(program.id);
     setActivityName(program.name || '');
     setActivityModules(program.modules && program.modules.length ? program.modules : ['tasks']);
+    setIsActivityModalOpen(true);
   };
 
   const handleSaveActivity = async (event: React.FormEvent) => {
@@ -1660,6 +1662,7 @@ function ParentDashboardContent() {
       await refreshActivityPrograms();
       clearActivityForm();
       setSuccess('Activity saved.');
+      setIsActivityModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save activity:', err);
       setError(err.message || 'Could not save activity.');
@@ -2587,20 +2590,11 @@ function ParentDashboardContent() {
                       </select>
                     </div>
                     <p className="mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>Create root activities (School, Extra Curricular, etc.) and choose which branches appear on the child side.</p>
-                    <form onSubmit={handleSaveActivity} className="grid grid-cols-1 gap-2 rounded-2xl border p-3 sm:grid-cols-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                      <input required value={activityName} onChange={(e) => setActivityName(e.target.value)} placeholder="Activity name" className="rounded-xl py-2 px-3 border sm:col-span-1" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
-                      <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
-                        {(['tasks', 'exams', 'timetable', 'challenges', 'events'] as PlannerActivityModule[]).map((moduleId) => (
-                          <button key={moduleId} type="button" onClick={() => toggleActivityModule(moduleId)} className={clsx('rounded-full px-3 py-1.5 text-xs font-semibold border', activityModules.includes(moduleId) ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}>
-                            {moduleId}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="sm:col-span-3 flex gap-2">
-                        <button type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{editingActivityId ? 'Save Activity' : '+ Add Activity'}</button>
-                        <button type="button" onClick={clearActivityForm} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
-                      </div>
-                    </form>
+                    <div className="mb-4">
+                      <button type="button" onClick={() => { clearActivityForm(); setIsActivityModalOpen(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                        + Create New Activity
+                      </button>
+                    </div>
                     <div className="mt-4 space-y-2">
                       {activityProgramsLoading ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading activities...</p>
@@ -3054,6 +3048,42 @@ function ParentDashboardContent() {
           </div>
         </div>
       ) : null}
+
+      {isActivityModalOpen && (
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="rounded-3xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
+            <button onClick={() => { clearActivityForm(); setIsActivityModalOpen(false); }} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
+            <p className="text-xs font-bold uppercase tracking-wider text-cyan-500 mb-2">Activities Hub</p>
+            <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--text-main)' }}>{editingActivityId ? 'Edit Activity' : 'Create New Activity'}</h2>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Configure the branches that will appear for this activity.</p>
+            
+            <form onSubmit={handleSaveActivity} className="space-y-4">
+              <div className="kid-glass rounded-2xl p-3">
+                <label className="text-sm font-bold ml-1 mb-2 block" style={{ color: 'var(--text-muted)' }}>Activity Name</label>
+                <input required value={activityName} onChange={(e) => setActivityName(e.target.value)} placeholder="e.g. School, Soccer, Piano" className="mt-1 w-full rounded-xl py-3 px-4 border focus:outline-none" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+              </div>
+              <div className="kid-glass rounded-2xl p-3">
+                <label className="text-sm font-bold ml-1 mb-2 block" style={{ color: 'var(--text-muted)' }}>Enabled Branches</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(['tasks', 'exams', 'timetable', 'challenges', 'events'] as PlannerActivityModule[]).map((moduleId) => (
+                    <button key={moduleId} type="button" onClick={() => toggleActivityModule(moduleId)} className={clsx('rounded-full px-4 py-2 text-sm font-semibold border transition', activityModules.includes(moduleId) ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-white text-slate-600 border-slate-200')}>
+                      {moduleId}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 text-white font-bold py-3.5 rounded-xl transition shadow-md hover:shadow-lg" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                  {editingActivityId ? 'Save Changes' : 'Create Activity'}
+                </button>
+                <button type="button" onClick={() => { clearActivityForm(); setIsActivityModalOpen(false); }} className="px-6 rounded-xl text-sm font-bold border hover:bg-slate-50 transition" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)', background: 'var(--surface)' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {isModaling && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">
