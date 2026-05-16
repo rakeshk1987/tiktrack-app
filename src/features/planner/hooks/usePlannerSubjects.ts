@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import type { PlannerSubject } from '../types/planner.types';
 
@@ -59,5 +59,12 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
     await deleteDoc(doc(db, 'planner_subjects', subjectId));
   }
 
-  return { subjects, loading, addSubject, removeSubject };
+  async function updateSubject(subjectId: string, updates: Partial<PlannerSubject>) {
+    await updateDoc(doc(db, 'planner_subjects', subjectId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  return { subjects, loading, addSubject, removeSubject, updateSubject };
 }

@@ -18,6 +18,7 @@ import { usePlannerSubjects } from '../hooks/usePlannerSubjects';
 import { plannerTimetableCellSchema } from '../utils/planner.validation';
 import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
@@ -55,7 +56,7 @@ export default function ChildPlannerV2Page() {
 
   const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
   const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId);
-  const { subjects, addSubject: addNewSubject } = usePlannerSubjects(childId, activeActivityId);
+  const { subjects, addSubject: addNewSubject, removeSubject, updateSubject } = usePlannerSubjects(childId, activeActivityId);
 
   // New Form States
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -81,6 +82,7 @@ export default function ChildPlannerV2Page() {
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectTeacher, setNewSubjectTeacher] = useState('');
   const [newSubjectIncludeInExam, setNewSubjectIncludeInExam] = useState(true);
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [subjectCreating, setSubjectCreating] = useState(false);
 
   const [showEventForm, setShowEventForm] = useState(false);
@@ -322,16 +324,33 @@ export default function ChildPlannerV2Page() {
     if (!newSubjectName.trim()) return;
     setSubjectCreating(true);
     try {
-      await addNewSubject(newSubjectName, familyId, newSubjectTeacher, newSubjectIncludeInExam);
+      if (editingSubjectId) {
+        await updateSubject(editingSubjectId, {
+          name: newSubjectName.trim(),
+          teacherName: newSubjectTeacher,
+          includeInExams: newSubjectIncludeInExam
+        });
+      } else {
+        await addNewSubject(newSubjectName, familyId, newSubjectTeacher, newSubjectIncludeInExam);
+      }
       setNewSubjectName('');
       setNewSubjectTeacher('');
       setNewSubjectIncludeInExam(true);
+      setEditingSubjectId(null);
       setShowSubjectForm(false);
     } catch (err) {
       console.error(err);
     } finally {
       setSubjectCreating(false);
     }
+  };
+
+  const startEditSubject = (sub: any) => {
+    setEditingSubjectId(sub.id);
+    setNewSubjectName(sub.name);
+    setNewSubjectTeacher(sub.teacherName || '');
+    setNewSubjectIncludeInExam(sub.includeInExams ?? true);
+    setShowSubjectForm(true);
   };
 
 
@@ -854,8 +873,8 @@ export default function ChildPlannerV2Page() {
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6 flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-bold text-white">Subject Mastery</h3>
-                    <p className="text-xs text-white/40">Define the core subjects for this program.</p>
+                    <h3 className="text-lg font-bold text-white">{editingSubjectId ? 'Modify Subject' : 'Subject Mastery'}</h3>
+                    <p className="text-xs text-white/40">{editingSubjectId ? 'Refine the subject details below.' : 'Define the core subjects for this program.'}</p>
                   </div>
                   <button 
                     onClick={() => setShowSubjectForm(!showSubjectForm)}
@@ -900,7 +919,7 @@ export default function ChildPlannerV2Page() {
                         disabled={subjectCreating}
                         className="rounded-2xl bg-indigo-400 px-8 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-indigo-400/20 disabled:opacity-50"
                       >
-                        {subjectCreating ? 'Adding Subject...' : 'Record Subject Protocol'}
+                        {subjectCreating ? 'Processing...' : (editingSubjectId ? 'Update Subject Protocol' : 'Record Subject Protocol')}
                       </button>
                     </div>
                   </form>
@@ -920,6 +939,22 @@ export default function ChildPlannerV2Page() {
                         </div>
                         <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
                         <p className="text-[9px] text-white/20 font-black uppercase tracking-[0.15em] mt-1">Matrix Ref: {sub.id.slice(-6)}</p>
+                      </div>
+                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => startEditSubject(sub)}
+                          className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"
+                          title="Edit"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button 
+                          onClick={() => { if(confirm('Delete subject?')) removeSubject(sub.id); }}
+                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all"
+                          title="Delete"
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                     </div>
                   )) : (
