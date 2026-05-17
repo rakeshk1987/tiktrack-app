@@ -95,6 +95,12 @@ export interface PlannerEvent {
   reminderIds: string[];
   source: 'manual' | 'program' | 'automation' | 'import';
   sync: PlannerEventSync;
+  taskStatus?: string;
+  taskApprovalStatus?: string;
+  taskPoints?: number;
+  marksScored?: number | null;
+  totalMarks?: number | null;
+  syllabusScope?: string;
   createdBy: 'parent' | 'child' | 'system';
   createdAt: string;
   updatedAt: string;

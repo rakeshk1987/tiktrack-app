@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -133,6 +133,9 @@ function ParentDashboardContent() {
   const [examsLoading, setExamsLoading] = useState(true);
   const [eChild, setEChild] = useState('');
   const [eSubject, setESubject] = useState('');
+  const [eSubjectId, setESubjectId] = useState('');
+  const [eRecurrenceType, setERecurrenceType] = useState<'none' | 'daily' | 'weekly'>('none');
+  const [eRecurrenceDays, setERecurrenceDays] = useState<number[]>([]);
   const [eType, setEType] = useState<'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other'>('weekly_test');
   const [eMarks, setEMarks] = useState<number | ''>('');
   const [eTotal, setETotal] = useState<number | ''>('');
@@ -228,7 +231,18 @@ function ParentDashboardContent() {
       (row.child_id && children.some((child) => child.id === row.child_id))
     );
   };
-  const { messages: inboxMessages, sendMessage } = useMessages(familyId, 'parent');
+  const { messages: inboxMessages, sendMessage, markAsRead } = useMessages(familyId, 'parent');
+  
+  const unreadMessagesCount = useMemo(() => inboxMessages.filter(m => m.sender_role === 'child' && !m.is_read).length, [inboxMessages]);
+
+  useEffect(() => {
+    if (activeTab === 'communication' && inboxChildId) {
+      const unread = inboxMessages.filter(m => (m.child_id === inboxChildId || m.parent_id === inboxChildId) && m.sender_role === 'child' && !m.is_read);
+      unread.forEach(m => {
+        void markAsRead(m.id);
+      });
+    }
+  }, [activeTab, inboxChildId, inboxMessages, markAsRead]);
   const selectedThread = inboxMessages
     .filter((m) => !inboxChildId || m.child_id === inboxChildId)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -983,6 +997,12 @@ function ParentDashboardContent() {
   const handleCreateExam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    
+    if (eMarks !== '' && Number(eMarks) < 0) { alert('Marks scored cannot be negative.'); return; }
+    if (eTotal !== '' && Number(eTotal) < 0) { alert('Total marks cannot be negative.'); return; }
+    if (eMarks !== '' && eTotal !== '' && Number(eMarks) > Number(eTotal)) { alert('Marks scored cannot be greater than total marks.'); return; }
+    if (ePoints !== '' && Number(ePoints) < 0) { alert('Max points cannot be negative.'); return; }
+
     setError('');
     setExamLoading(true);
 
@@ -1032,7 +1052,8 @@ function ParentDashboardContent() {
 
         await updateDoc(doc(db, 'exams', editExamId), {
           child_id: eChild || null,
-          subject: eSubject,
+          subject: eSubject || 'Placeholder Subject',
+          subject_id: eSubjectId === 'custom' ? '' : eSubjectId,
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
@@ -1044,6 +1065,8 @@ function ParentDashboardContent() {
           result_published_at: hasResult ? new Date().toISOString() : null,
           reminder_plan: reminderPlan,
           linked_program_id: eActivityId || null,
+          recurrence_type: eRecurrenceType,
+          recurrence_days: eRecurrenceType === 'weekly' ? eRecurrenceDays : [],
           updated_at: new Date().toISOString()
         });
         await syncExamCountdownReminders(editExamId, eChild || null, eSubject, examDateIso, computedStatus);
@@ -1067,7 +1090,8 @@ function ParentDashboardContent() {
 
         const createdRef = await addDoc(collection(db, 'exams'), {
           child_id: eChild || null,
-          subject: eSubject,
+          subject: eSubject || 'Placeholder Subject',
+          subject_id: eSubjectId === 'custom' ? '' : eSubjectId,
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
@@ -1079,6 +1103,8 @@ function ParentDashboardContent() {
           result_published_at: hasResult ? new Date().toISOString() : null,
           reminder_plan: ['7d', '3d', '1d', 'same_day'],
           linked_program_id: eActivityId || null,
+          recurrence_type: eRecurrenceType,
+          recurrence_days: eRecurrenceType === 'weekly' ? eRecurrenceDays : [],
           parent_id: familyId,
           family_id: familyId,
           created_at: new Date().toISOString()
@@ -1102,6 +1128,9 @@ function ParentDashboardContent() {
       setEChild('');
       setEActivityId('');
       setESubject('');
+      setESubjectId('');
+      setERecurrenceType('none');
+      setERecurrenceDays([]);
       setEType('weekly_test');
       setEMarks('');
       setETotal('');
@@ -1134,6 +1163,9 @@ function ParentDashboardContent() {
     setEChild(ex.child_id || '');
     setEActivityId(ex.linked_program_id || '');
     setESubject(ex.subject || '');
+    setESubjectId(ex.subject_id || '');
+    setERecurrenceType(ex.recurrence_type || 'none');
+    setERecurrenceDays(ex.recurrence_days || []);
     setEType((ex.exam_type as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other') || 'weekly_test');
     setEMarks(ex.marks_scored ?? '');
     setETotal(ex.total_marks ?? '');
@@ -1148,6 +1180,9 @@ function ParentDashboardContent() {
     setEChild('');
     setEActivityId('');
     setESubject('');
+    setESubjectId('');
+    setERecurrenceType('none');
+    setERecurrenceDays([]);
     setEType('weekly_test');
     setEMarks('');
     setETotal('');
@@ -1864,6 +1899,11 @@ function ParentDashboardContent() {
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition relative" onClick={() => setActiveTab('communication')}>
                   <Mail size={18} />
+                  {unreadMessagesCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white ring-2 ring-rose-300 animate-pulse">
+                      {unreadMessagesCount}
+                    </span>
+                  )}
                 </button>
                 <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('communication')}>
                   <Phone size={18} />
@@ -2765,7 +2805,7 @@ function ParentDashboardContent() {
                             {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                           </select>
                           <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{exams.length}</span>
-                          <button onClick={() => { setEChild(''); setESubject(''); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); setEditExamId(null); setShowExamModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Exam</button>
+                          <button onClick={() => { setEChild(''); setEActivityId(''); setESubject(''); setESubjectId(''); setERecurrenceType('none'); setERecurrenceDays([]); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); setEditExamId(null); setShowExamModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Exam</button>
                         </div>
                       </div>
 
@@ -2785,17 +2825,38 @@ function ParentDashboardContent() {
                                 <option value="">-- Activity / Program --</option>
                                 {examPrograms.filter(p => (p.modules || []).includes('exams')).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                               </select>
-                              <select 
-                                required 
-                                value={eSubject} 
-                                onChange={(ev) => setESubject(ev.target.value)} 
-                                className="rounded-xl py-2 px-3 border" 
-                                style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                                disabled={!eActivityId}
-                              >
-                                <option value="">-- Select Subject --</option>
-                                {examSubjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                              </select>
+                              <div className="col-span-1 md:col-span-2 flex flex-col gap-2">
+                                <select 
+                                  required 
+                                  value={eSubjectId} 
+                                  onChange={(ev) => {
+                                    setESubjectId(ev.target.value);
+                                    if (ev.target.value !== 'custom') {
+                                      setESubject(examSubjects.find(s => s.id === ev.target.value)?.name || '');
+                                    } else {
+                                      setESubject('');
+                                    }
+                                  }} 
+                                  className="rounded-xl py-2 px-3 border" 
+                                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                  disabled={!eActivityId}
+                                >
+                                  <option value="">-- Select Subject --</option>
+                                  {examSubjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                  <option value="custom">-- Custom Subject --</option>
+                                </select>
+
+                                {(eSubjectId === 'custom' || (eActivityId && examSubjects.filter(s => s.includeInExams).length === 0)) && (
+                                  <input 
+                                    required 
+                                    value={eSubject} 
+                                    onChange={(ev) => setESubject(ev.target.value)} 
+                                    placeholder="Subject Name (or Placeholder)" 
+                                    className="rounded-xl py-2 px-3 border" 
+                                    style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} 
+                                  />
+                                )}
+                              </div>
                               <select value={eType} onChange={(ev) => setEType(ev.target.value as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other')} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="weekly_test">Weekly Test</option>
                                 <option value="unit_test">Unit Test</option>
@@ -2805,10 +2866,41 @@ function ParentDashboardContent() {
                                 <option value="other">Other</option>
                               </select>
                               
-                              <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
-                                <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Exam Date</label>
-                                <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="datetime-local" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                              <div className="col-span-1 md:col-span-2 grid grid-cols-2 gap-4">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Exam Date</label>
+                                  <input required value={eDate} onChange={(ev) => setEDate(ev.target.value)} type="datetime-local" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Recurrence</label>
+                                  <select 
+                                    value={eRecurrenceType} 
+                                    onChange={(ev) => setERecurrenceType(ev.target.value as any)} 
+                                    className="rounded-xl py-2 px-3 border h-[38px]" 
+                                    style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                  >
+                                    <option value="none">One Time</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                  </select>
+                                </div>
                               </div>
+
+                              {eRecurrenceType === 'weekly' && (
+                                <div className="col-span-1 md:col-span-2 flex flex-wrap gap-2 p-3 rounded-xl border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIndex) => (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      onClick={() => setERecurrenceDays((prev) => prev.includes(dayIndex) ? prev.filter((x) => x !== dayIndex) : [...prev, dayIndex])}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors`}
+                                      style={eRecurrenceDays.includes(dayIndex) ? { background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))', color: 'white' } : { background: 'var(--surface)', color: 'var(--text-muted)' }}
+                                    >
+                                      {day}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
 
                               <input value={eSyllabusScope} onChange={(ev) => setESyllabusScope(ev.target.value)} placeholder="Syllabus scope (optional)" className="md:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                               

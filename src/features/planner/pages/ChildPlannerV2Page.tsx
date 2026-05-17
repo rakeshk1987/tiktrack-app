@@ -9,6 +9,7 @@ import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/c
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../config/firebase';
 import { upsertSchoolTimetableCell } from '../services/planner.firestore';
+import { useChildProofs, useQuestActions } from '../../../hooks/useData';
 import { usePlannerEvents } from '../hooks/usePlannerEvents';
 import { usePlannerPrograms } from '../hooks/usePlannerPrograms';
 import { usePlannerTimetable } from '../hooks/usePlannerTimetable';
@@ -115,6 +116,16 @@ export default function ChildPlannerV2Page() {
 
   const allEvents = useMemo(() => [...events], [events]);
 
+  const [selectedExamDetail, setSelectedExamDetail] = useState<PlannerEvent | null>(null);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<PlannerEvent | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofNotes, setProofNotes] = useState('');
+  const [newExamRecurrence, setNewExamRecurrence] = useState<'none' | 'daily' | 'weekly'>('none');
+  const [newExamRecurrenceDays, setNewExamRecurrenceDays] = useState<number[]>([]);
+  
+  const { uploadProof, uploading } = useChildProofs(childId);
+  const { completeTask, markTaskPendingProof, saving: questSaving } = useQuestActions(childId);
+
   // 30-Minute approaching task/exam reminders
   const [triggeredReminders, setTriggeredReminders] = useState<Set<string>>(new Set());
 
@@ -191,17 +202,21 @@ export default function ChildPlannerV2Page() {
         endRange.toISOString()
       );
       for (const inst of instances) {
+        const program = programs.find(p => p.id === event.linkedProgramId);
+        const resolvedColor = program?.color || inst.color || '#94a3b8';
+
         expanded.push({
           id: inst.instanceId,
           title: inst.title,
           start: inst.startAt,
           end: inst.endAt,
           allDay: event.allDay,
-          backgroundColor: inst.color,
-          borderColor: inst.color,
+          backgroundColor: resolvedColor,
+          borderColor: resolvedColor,
           extendedProps: {
             category: inst.category,
-            rootEventId: inst.rootEventId
+            rootEventId: inst.rootEventId,
+            eventObj: event
           }
         });
       }
@@ -268,18 +283,22 @@ export default function ChildPlannerV2Page() {
   async function handleCreateExam(e: React.FormEvent) {
     e.preventDefault();
     if (!childId || !newExamSubject.trim() || !activeActivityId) return;
+
+    if (newExamMarks !== '' && Number(newExamMarks) < 0) { alert('Marks scored cannot be negative.'); return; }
+    if (newExamTotalMarks !== '' && Number(newExamTotalMarks) < 0) { alert('Total marks cannot be negative.'); return; }
+    if (newExamMarks !== '' && newExamTotalMarks !== '' && Number(newExamMarks) > Number(newExamTotalMarks)) { alert('Marks scored cannot be greater than total marks.'); return; }
+
     setExamCreating(true);
     try {
       const hasResult = newExamMarks !== '' && newExamTotalMarks !== '';
-      // Use activity-level exam points (parent-set); child cannot override
       const allocatedPoints = activityPointsConfig?.examPoints || null;
       const newPointsEarned = hasResult && allocatedPoints
         ? Math.round(allocatedPoints * (Number(newExamMarks) / Number(newExamTotalMarks)))
         : null;
 
       await addDoc(collection(db, 'exams'), {
-        subject: newExamSubject.trim(),
-        subject_id: newExamSubjectId,
+        subject: newExamSubject.trim() || 'Placeholder Subject',
+        subject_id: newExamSubjectId === 'custom' ? '' : newExamSubjectId,
         child_id: childId,
         family_id: familyId,
         parent_id: familyId,
@@ -290,6 +309,8 @@ export default function ChildPlannerV2Page() {
         points_earned: newPointsEarned,
         status: hasResult ? 'result_published' : 'scheduled',
         linked_program_id: activeActivityId,
+        recurrence_type: newExamRecurrence,
+        recurrence_days: newExamRecurrence === 'weekly' ? newExamRecurrenceDays : [],
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
@@ -309,6 +330,8 @@ export default function ChildPlannerV2Page() {
       setNewExamDate('');
       setNewExamMarks('');
       setNewExamTotalMarks('');
+      setNewExamRecurrence('none');
+      setNewExamRecurrenceDays([]);
       setShowExamForm(false);
       await refreshEvents();
     } catch (err) {
@@ -431,16 +454,24 @@ export default function ChildPlannerV2Page() {
     const category = String(arg.event.extendedProps.category || 'event');
     const isPrivate = category === 'personal' || category === 'custom';
     const isExam = category === 'exam';
+    const resolvedColor = arg.event.backgroundColor || '#94a3b8';
     
     return (
-      <div className="flex h-full w-full flex-col justify-center overflow-hidden transition-all duration-300">
+      <div 
+        className="flex h-full w-full flex-col justify-center overflow-hidden transition-all duration-300 px-2.5 py-1.5 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:scale-[1.03] hover:brightness-110 active:scale-95" 
+        style={{
+          background: `linear-gradient(135deg, ${resolvedColor}ee 0%, ${resolvedColor}99 100%)`,
+          borderTop: '1px solid rgba(255,255,255,0.2)',
+          boxShadow: `0 4px 10px -2px ${resolvedColor}88, inset 0 1px 1px rgba(255,255,255,0.25)`,
+        }}
+      >
         <div className="flex items-center gap-1 overflow-hidden">
           {isPrivate && <span className="text-[9px]">🔒</span>}
           {isExam && <span className="text-[9px]">🎓</span>}
-          <span className="truncate text-[11px] font-bold tracking-tight text-white drop-shadow-sm">{arg.event.title}</span>
+          <span className="truncate text-[11px] font-bold tracking-tight text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">{arg.event.title}</span>
         </div>
         {!arg.event.allDay && arg.timeText && (
-           <div className="mt-0.5 truncate text-[9px] font-semibold text-white/90 drop-shadow-sm">
+           <div className="mt-0.5 truncate text-[9px] font-semibold text-white/90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
              {arg.timeText}
            </div>
         )}
@@ -449,14 +480,23 @@ export default function ChildPlannerV2Page() {
   };
 
   const onEventClick = (arg: EventClickArg) => {
-    const start = arg.event.start;
-    const end = arg.event.end;
-    setSelectedEvent({
-      title: arg.event.title || 'Event',
-      category: categoryLabel(String(arg.event.extendedProps.category || 'event')),
-      start: start ? start.toLocaleString() : '-',
-      end: end ? end.toLocaleString() : '-'
-    });
+    const eventObj = arg.event.extendedProps.eventObj as PlannerEvent | undefined;
+    if (eventObj) {
+      if (eventObj.category === 'exam') {
+        setSelectedExamDetail(eventObj);
+      } else if (eventObj.category === 'homework' || eventObj.linkedTaskIds.length > 0) {
+        setSelectedTaskDetail(eventObj);
+      } else {
+        const start = arg.event.start;
+        const end = arg.event.end;
+        setSelectedEvent({
+          title: arg.event.title || 'Event',
+          category: categoryLabel(String(arg.event.extendedProps.category || 'event')),
+          start: start ? start.toLocaleString() : '-',
+          end: end ? end.toLocaleString() : '-'
+        });
+      }
+    }
   };
 
   const filterOptions = useMemo(() => {
@@ -534,7 +574,7 @@ export default function ChildPlannerV2Page() {
       {activeTab === 'calendar' ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Left Sidebar: Advanced Filters */}
-          <aside className="lg:col-span-3 space-y-4">
+          <aside className="lg:col-span-2 space-y-4">
             <section className="rounded-[2rem] border border-white/10 bg-slate-800/80 p-6 backdrop-blur-xl shadow-xl">
               <div className="mb-6 flex items-center justify-between">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Filters</h3>
@@ -581,15 +621,17 @@ export default function ChildPlannerV2Page() {
               <div className="mt-8 rounded-2xl bg-white/[0.03] p-4 border border-white/5">
                 <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2">Protocol Status</p>
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-xs font-semibold text-emerald-400/80">Active Ingestion</span>
+                  <div className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-400 animate-bounce' : 'bg-emerald-400 animate-pulse'}`} />
+                  <span className={`text-xs font-semibold ${loading ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {loading ? 'Ingesting Data...' : 'Live Sync Active'}
+                  </span>
                 </div>
               </div>
             </section>
           </aside>
 
           {/* Main Content: Calendar */}
-          <section className="lg:col-span-9 rounded-[2.5rem] border border-white/10 bg-slate-800/50 p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+          <section className="lg:col-span-10 rounded-[2.5rem] border border-white/10 bg-slate-800/50 p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
             
             
             {loading ? (
@@ -601,7 +643,7 @@ export default function ChildPlannerV2Page() {
               </div>
             ) : null}
 
-            <div className={`transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'} [&_.fc]:font-sans [&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/5 [&_.fc-theme-standard_th]:border-white/5 [&_.fc-theme-standard_th]:!bg-black/20 [&_.fc-col-header-cell]:!py-3 [&_.fc-col-header-cell-cushion]:text-[10px] [&_.fc-col-header-cell-cushion]:font-black [&_.fc-col-header-cell-cushion]:uppercase [&_.fc-col-header-cell-cushion]:tracking-widest [&_.fc-col-header-cell-cushion]:!text-white/40 [&_.fc-toolbar-title]:text-xl [&_.fc-toolbar-title]:font-black [&_.fc-toolbar-title]:tracking-tight [&_.fc-button]:!bg-white/[0.05] [&_.fc-button]:!border-white/10 [&_.fc-button]:!text-white [&_.fc-button]:!px-4 [&_.fc-button]:!py-2 [&_.fc-button]:!text-xs [&_.fc-button]:!font-bold [&_.fc-button]:!rounded-xl [&_.fc-button:hover]:!bg-white/[0.1] [&_.fc-button-active]:!bg-white !important [&_.fc-button-active]:!text-slate-900 !important [&_.fc-day-today]:!bg-cyan-400/[0.03] [&_.fc-daygrid-day-number]:text-xs [&_.fc-daygrid-day-number]:font-bold [&_.fc-daygrid-day-number]:opacity-40 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!p-1 [&_.fc-daygrid-event]:!border-0`}>
+            <div className={`transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'} [&_.fc]:font-sans [&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/[0.08] [&_.fc-theme-standard_th]:border-white/[0.08] [&_.fc-theme-standard_th]:!bg-black/20 [&_.fc-col-header-cell]:!py-3 [&_.fc-col-header-cell-cushion]:text-[10px] [&_.fc-col-header-cell-cushion]:font-black [&_.fc-col-header-cell-cushion]:uppercase [&_.fc-col-header-cell-cushion]:tracking-widest [&_.fc-col-header-cell-cushion]:!text-white/40 [&_.fc-toolbar-title]:text-2xl [&_.fc-toolbar-title]:font-black [&_.fc-toolbar-title]:tracking-tight [&_.fc-toolbar-title]:bg-gradient-to-r [&_.fc-toolbar-title]:from-cyan-300 [&_.fc-toolbar-title]:to-blue-400 [&_.fc-toolbar-title]:bg-clip-text [&_.fc-toolbar-title]:text-transparent [&_.fc-button]:!bg-white/[0.05] [&_.fc-button]:!border-white/10 [&_.fc-button]:!text-white [&_.fc-button]:!px-4 [&_.fc-button]:!py-2 [&_.fc-button]:!text-xs [&_.fc-button]:!font-bold [&_.fc-button]:!rounded-xl [&_.fc-button:hover]:!bg-white/[0.1] [&_.fc-button-active]:!bg-white !important [&_.fc-button-active]:!text-slate-900 !important [&_.fc-day-today]:!bg-cyan-400/[0.05] [&_.fc-day-today]:border-2 [&_.fc-day-today]:!border-cyan-400/50 [&_.fc-daygrid-day-number]:text-xs [&_.fc-daygrid-day-number]:font-bold [&_.fc-daygrid-day-number]:opacity-60 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!p-0 [&_.fc-daygrid-event]:!border-0 [&_.fc-daygrid-event]:!bg-transparent`}>
               <FullCalendar
                 plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
                 initialView="dayGridMonth"
@@ -775,6 +817,7 @@ export default function ChildPlannerV2Page() {
                               ) : null}
                               <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
                             </div>
+                            <button onClick={() => setSelectedTaskDetail(event)} className="ml-4 rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                           </div>
                         ))}
                       </div>
@@ -810,27 +853,71 @@ export default function ChildPlannerV2Page() {
                 {showExamForm && (
                   <form onSubmit={handleCreateExam} className="mb-8 rounded-3xl border border-rose-400/20 bg-rose-400/5 p-6 animate-in zoom-in-95 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="col-span-1 md:col-span-2">
+                        <select 
+                          required
+                          value={newExamSubjectId}
+                          onChange={(e) => {
+                            setNewExamSubjectId(e.target.value);
+                            if (e.target.value !== 'custom') {
+                              setNewExamSubject(subjects.find(s => s.id === e.target.value)?.name || '');
+                            } else {
+                              setNewExamSubject('');
+                            }
+                          }}
+                          className="w-full rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50 mb-3"
+                        >
+                          <option value="" className="bg-slate-900">Select Subject</option>
+                          {subjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
+                          <option value="custom" className="bg-slate-900">-- Custom Subject --</option>
+                        </select>
+                        
+                        {(newExamSubjectId === 'custom' || subjects.filter(s => s.includeInExams).length === 0) && (
+                          <input 
+                            required
+                            value={newExamSubject}
+                            onChange={(e) => setNewExamSubject(e.target.value)}
+                            placeholder="Type Subject Name (or Placeholder)"
+                            className="w-full rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50 mb-3"
+                          />
+                        )}
+                      </div>
+
                       <select 
-                        required
-                        value={newExamSubjectId}
-                        onChange={(e) => {
-                          setNewExamSubjectId(e.target.value);
-                          setNewExamSubject(subjects.find(s => s.id === e.target.value)?.name || '');
-                        }}
+                        value={newExamRecurrence}
+                        onChange={(e) => setNewExamRecurrence(e.target.value as any)}
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
                       >
-                        <option value="" className="bg-slate-900">Select Subject</option>
-                        {subjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
-                        {subjects.filter(s => s.includeInExams).length === 0 && (
-                          <option value="" disabled className="bg-slate-900">No subjects with "Exam" enabled</option>
-                        )}
+                        <option value="none" className="bg-slate-900">One Time</option>
+                        <option value="daily" className="bg-slate-900">Daily</option>
+                        <option value="weekly" className="bg-slate-900">Weekly</option>
                       </select>
+
                       <input 
                         type="datetime-local"
                         value={newExamDate}
                         onChange={(e) => setNewExamDate(e.target.value)}
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50"
                       />
+
+                      {newExamRecurrence === 'weekly' && (
+                        <div className="col-span-full flex flex-wrap gap-2 rounded-2xl bg-black/20 p-3 border border-white/10">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIndex) => (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => setNewExamRecurrenceDays((prev) => prev.includes(dayIndex) ? prev.filter((x) => x !== dayIndex) : [...prev, dayIndex])}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                                newExamRecurrenceDays.includes(dayIndex)
+                                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
+                                  : 'bg-white/5 text-white/60 hover:bg-white/10'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3">
@@ -941,7 +1028,12 @@ export default function ChildPlannerV2Page() {
                                     <span className="text-xs font-black text-amber-400">Up to {activityPointsConfig.examPoints}</span>
                                   </div>
                                 ) : null}
-                                <button className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                                {event.marksScored != null && event.totalMarks ? (
+                                  <div className="flex items-center gap-1 rounded-xl bg-cyan-400/10 px-3 py-1.5 border border-cyan-400/20">
+                                    <span className="text-xs font-black text-cyan-400">{Math.round((event.marksScored / event.totalMarks) * 100)}%</span>
+                                  </div>
+                                ) : null}
+                                <button onClick={() => setSelectedExamDetail(event)} className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                               </div>
                             </div>
                           );
@@ -950,8 +1042,36 @@ export default function ChildPlannerV2Page() {
                     </div>
                   );
 
+                  const thisMonthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1).getTime();
+                  const gradedExams = activityExams.filter(e => e.marksScored != null && e.totalMarks != null);
+                  const gradedThisMonth = gradedExams.filter(e => new Date(e.startAt).getTime() >= thisMonthStart);
+                  
+                  const avgPercentOverall = gradedExams.length ? Math.round(gradedExams.reduce((acc, e) => acc + (e.marksScored! / e.totalMarks!), 0) / gradedExams.length * 100) : 0;
+                  const avgPercentThisMonth = gradedThisMonth.length ? Math.round(gradedThisMonth.reduce((acc, e) => acc + (e.marksScored! / e.totalMarks!), 0) / gradedThisMonth.length * 100) : 0;
+
                   return (
                     <div className="space-y-4 mt-8">
+                      {activityExams.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Total Exams</p>
+                            <p className="text-3xl font-black text-white">{activityExams.length}</p>
+                          </div>
+                          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">This Month</p>
+                            <p className="text-3xl font-black text-cyan-400">{activityExams.filter(e => new Date(e.startAt).getTime() >= thisMonthStart).length}</p>
+                          </div>
+                          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Avg Score (Overall)</p>
+                            <p className="text-3xl font-black text-emerald-400">{avgPercentOverall}%</p>
+                          </div>
+                          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Avg Score (This Month)</p>
+                            <p className="text-3xl font-black text-rose-400">{avgPercentThisMonth}%</p>
+                          </div>
+                        </div>
+                      )}
+                      
                       {renderExamList('Today / Active', eToday)}
                       {renderExamList('Upcoming / Future', eFuture)}
                       {renderExamList('Past / Completed', ePast)}
@@ -1415,6 +1535,105 @@ export default function ChildPlannerV2Page() {
           </div>
         </div>
       ) : null}
+
+      {/* EXAM DETAIL MODAL */}
+      {selectedExamDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/40">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl relative">
+            <button onClick={() => setSelectedExamDetail(null)} className="absolute top-4 right-4 text-white/40 hover:text-white">✕</button>
+            <h3 className="text-xl font-black text-white mb-1">Exam Details</h3>
+            <p className="text-sm font-bold text-white/60 mb-6">{selectedExamDetail.title}</p>
+            
+            <div className="space-y-4">
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Date & Time</span>
+                <span className="text-sm font-bold text-white">{new Date(selectedExamDetail.startAt).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Status</span>
+                <span className="text-sm font-bold text-rose-400 capitalize">{selectedExamDetail.taskStatus || 'Scheduled'}</span>
+              </div>
+              {selectedExamDetail.marksScored != null && selectedExamDetail.totalMarks && (
+                <div className="flex justify-between items-center py-2 border-b border-white/5">
+                  <span className="text-xs font-bold text-white/40 uppercase">Score</span>
+                  <span className="text-sm font-black text-cyan-400">
+                    {selectedExamDetail.marksScored} / {selectedExamDetail.totalMarks} 
+                    <span className="ml-2 text-emerald-400">({Math.round((selectedExamDetail.marksScored / selectedExamDetail.totalMarks) * 100)}%)</span>
+                  </span>
+                </div>
+              )}
+              {selectedExamDetail.syllabusScope && (
+                <div className="py-2 border-b border-white/5">
+                  <span className="text-xs font-bold text-white/40 uppercase block mb-1">Syllabus / Notes</span>
+                  <span className="text-sm text-white/80">{selectedExamDetail.syllabusScope}</span>
+                </div>
+              )}
+            </div>
+            
+            <button onClick={() => setSelectedExamDetail(null)} className="mt-8 w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white hover:bg-white/20 transition-all">Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* TASK DETAIL & PROOF MODAL */}
+      {selectedTaskDetail && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm bg-black/40">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl relative">
+            <button onClick={() => { setSelectedTaskDetail(null); setProofFile(null); setProofNotes(''); }} className="absolute top-4 right-4 text-white/40 hover:text-white">✕</button>
+            <h3 className="text-xl font-black text-white mb-1">Task Details</h3>
+            <p className="text-sm font-bold text-white/60 mb-6">{selectedTaskDetail.title}</p>
+            
+            <div className="space-y-4 mb-6">
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Due Date</span>
+                <span className="text-sm font-bold text-white">{new Date(selectedTaskDetail.startAt).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Status</span>
+                <span className="text-sm font-bold text-cyan-400 capitalize">{selectedTaskDetail.taskStatus || 'Pending'}</span>
+              </div>
+              {selectedTaskDetail.taskApprovalStatus !== 'none' && (
+                <div className="flex justify-between items-center py-2 border-b border-white/5">
+                  <span className="text-xs font-bold text-white/40 uppercase">Approval</span>
+                  <span className={`text-sm font-bold capitalize ${selectedTaskDetail.taskApprovalStatus === 'approved' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {selectedTaskDetail.taskApprovalStatus}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {selectedTaskDetail.taskStatus !== 'completed' && selectedTaskDetail.taskStatus !== 'pending_proof' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-white/40 uppercase block mb-2">Upload Proof (Screenshot / Photo)</label>
+                  <input type="file" accept="image/*" onChange={(e) => setProofFile(e.target.files?.[0] || null)} className="w-full text-sm text-white/80 file:mr-4 file:rounded-full file:border-0 file:bg-cyan-400/10 file:px-4 file:py-2 file:text-xs file:font-black file:text-cyan-400 hover:file:bg-cyan-400/20" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-white/40 uppercase block mb-2">Notes for Parent</label>
+                  <textarea value={proofNotes} onChange={(e) => setProofNotes(e.target.value)} placeholder="Optional notes..." className="w-full rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50 min-h-[80px]" />
+                </div>
+                
+                <button 
+                  disabled={uploading || questSaving || !proofFile}
+                  onClick={async () => {
+                    const taskId = selectedTaskDetail.linkedTaskIds[0];
+                    if (!taskId || !proofFile) return;
+                    await uploadProof({ id: taskId, title: selectedTaskDetail.title } as any, proofFile, proofNotes);
+                    await markTaskPendingProof({ id: taskId, title: selectedTaskDetail.title } as any);
+                    setSelectedTaskDetail(null);
+                    setProofFile(null);
+                    setProofNotes('');
+                    refreshEvents();
+                  }}
+                  className="w-full rounded-2xl bg-cyan-400 py-3 text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-cyan-400/20 disabled:opacity-50"
+                >
+                  {uploading || questSaving ? 'Uploading...' : 'Submit Proof & Complete'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

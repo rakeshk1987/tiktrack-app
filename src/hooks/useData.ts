@@ -364,7 +364,7 @@ export function useChildProofs(childId: string) {
     return () => unsubscribe();
   }, [childId]);
 
-  const uploadProof = useCallback(async (task: Task, file: File) => {
+  const uploadProof = useCallback(async (task: Task, file: File, notes?: string) => {
     if (!childId) throw new Error('Missing child id');
 
     setUploading(true);
@@ -398,7 +398,8 @@ export function useChildProofs(childId: string) {
         image_url: imageUrl,
         image_path: fileRef.fullPath,
         timestamp: new Date().toISOString(),
-        approval_status: 'pending'
+        approval_status: 'pending',
+        notes: notes || ''
       });
 
       return proofDoc.id;

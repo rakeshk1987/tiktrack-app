@@ -37,7 +37,7 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
     // 1. Real-time events query by range
     const eventsQuery = query(
       collection(db, 'events'),
-      where('child_id', '==', childId),
+      where('family_id', '==', familyId),
       where('start_at', '>=', effectiveRange.startAt),
       where('start_at', '<=', effectiveRange.endAt)
     );
@@ -48,10 +48,11 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
         const rows = snap.docs.map((docRow) =>
           mapPlannerEvent(docRow.id, docRow.data() as Record<string, unknown>)
         );
-        if (rows.length === 0 && useMockFallback) {
+        const filteredRows = rows.filter(e => !e.childId || e.childId === childId);
+        if (filteredRows.length === 0 && useMockFallback) {
           setEvents(MOCK_PLANNER_EVENTS.map((event) => ({ ...event, childId })));
         } else {
-          setEvents(rows);
+          setEvents(filteredRows);
         }
         setLoading(false);
       },
@@ -101,6 +102,9 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
               count: null,
               rrule: null
             },
+            taskStatus: (row.status as string) || 'pending',
+            taskApprovalStatus: (row.approval_status as string) || 'none',
+            taskPoints: typeof row.star_value === 'number' ? row.star_value : (typeof row.points === 'number' ? row.points : 0),
             linkedProgramId: (row.linked_program_id as string) || null,
             subjectId: (row.subject_id as string) || null,
             linkedTaskIds: [d.id],
@@ -169,7 +173,18 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
             endAt,
             allDay: false,
             timezone: 'Asia/Kolkata',
-            recurrence: { type: 'none', interval: 1, byWeekDays: [], byMonthDays: [], until: null, count: null, rrule: null },
+            recurrence: {
+              type: ((row.recurrence_type || 'none') as any),
+              interval: 1,
+              byWeekDays: (Array.isArray(row.recurrence_days) ? row.recurrence_days : []),
+              byMonthDays: [],
+              until: null,
+              count: null,
+              rrule: null
+            },
+            marksScored: marksScored,
+            totalMarks: totalMarks,
+            syllabusScope: (row.syllabus_scope as string) || '',
             linkedProgramId: (row.linked_program_id as string) || null,
             subjectId: (row.subject_id as string) || null,
             subject: (row.subject as string) || null,
