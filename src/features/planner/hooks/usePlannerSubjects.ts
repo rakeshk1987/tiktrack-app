@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   collection,
-  getDocs,
+  onSnapshot,
   query,
   where,
   addDoc,
@@ -16,50 +16,50 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
   const [subjects, setSubjects] = useState<PlannerSubject[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchSubjects = useCallback(async () => {
+  useEffect(() => {
     if (!childId) {
       setSubjects([]);
       setLoading(false);
       return;
     }
-    try {
-      // Query all subjects for this child to avoid composite index requirements
-      const q = query(
-        collection(db, 'planner_subjects'),
-        where('childId', '==', childId)
-      );
-      const snapshot = await getDocs(q);
-      const allItems = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data()
-      })) as PlannerSubject[];
 
-      // Filter by programId in memory
-      const filtered = programId
-        ? allItems.filter((s) => s.programId === programId)
-        : allItems;
+    setLoading(true);
+    const q = query(
+      collection(db, 'planner_subjects'),
+      where('childId', '==', childId)
+    );
 
-      setSubjects(filtered);
-    } catch (err) {
-      console.error('Firestore Subject Fetch Error:', err);
-      // Don't clear existing subjects on error — keep optimistic state
-    } finally {
-      setLoading(false);
-    }
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const allItems = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data()
+        })) as PlannerSubject[];
+
+        const filtered = programId
+          ? allItems.filter((s) => s.programId === programId)
+          : allItems;
+
+        setSubjects(filtered);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Firestore Subject Fetch Error:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [childId, programId]);
 
-  useEffect(() => {
-    setLoading(true);
-    void fetchSubjects();
-  }, [fetchSubjects]);
-
-  async function addSubject(
+  const addSubject = useCallback(async (
     name: string,
     familyId: string,
     teacherName?: string,
     includeInExams?: boolean,
     description?: string
-  ) {
+  ) => {
     if (!childId || !programId || !name.trim()) return;
 
     const newSubjectData = {
@@ -73,51 +73,20 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
       createdAt: new Date().toISOString()
     };
 
-    // Optimistic update — show immediately in UI
-    const tempId = `temp_${Date.now()}`;
-    const optimisticSubject: PlannerSubject = { id: tempId, ...newSubjectData } as PlannerSubject;
-    setSubjects((prev) => [...prev, optimisticSubject]);
+    await addDoc(collection(db, 'planner_subjects'), newSubjectData);
+  }, [childId, programId]);
 
-    try {
-      const docRef = await addDoc(collection(db, 'planner_subjects'), newSubjectData);
-      // Replace temp item with real Firestore id
-      setSubjects((prev) =>
-        prev.map((s) => (s.id === tempId ? { ...optimisticSubject, id: docRef.id } : s))
-      );
-    } catch (err) {
-      // Roll back optimistic update on failure
-      setSubjects((prev) => prev.filter((s) => s.id !== tempId));
-      throw err;
-    }
-  }
+  const removeSubject = useCallback(async (subjectId: string) => {
+    await deleteDoc(doc(db, 'planner_subjects', subjectId));
+  }, []);
 
-  async function removeSubject(subjectId: string) {
-    // Optimistic removal
-    setSubjects((prev) => prev.filter((s) => s.id !== subjectId));
-    try {
-      await deleteDoc(doc(db, 'planner_subjects', subjectId));
-    } catch (err) {
-      // Re-fetch to restore state on failure
-      void fetchSubjects();
-      throw err;
-    }
-  }
+  const updateSubject = useCallback(async (subjectId: string, updates: Partial<PlannerSubject>) => {
+    await updateDoc(doc(db, 'planner_subjects', subjectId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+  }, []);
 
-  async function updateSubject(subjectId: string, updates: Partial<PlannerSubject>) {
-    // Optimistic update
-    setSubjects((prev) =>
-      prev.map((s) => (s.id === subjectId ? { ...s, ...updates } : s))
-    );
-    try {
-      await updateDoc(doc(db, 'planner_subjects', subjectId), {
-        ...updates,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (err) {
-      void fetchSubjects();
-      throw err;
-    }
-  }
-
-  return { subjects, loading, addSubject, removeSubject, updateSubject, refresh: fetchSubjects };
+  return { subjects, loading, addSubject, removeSubject, updateSubject, refresh: () => {} };
 }
+

@@ -29,7 +29,7 @@ const RealTimeNotifications: React.FC<RealTimeNotificationsProps> = ({
         // Play notification sound (if supported)
         if ('Notification' in window && Notification.permission === 'granted') {
           // Browser notification for important messages
-          if (trulyNew.some(m => m.type === 'achievement' || m.type === 'task_completed')) {
+          if (trulyNew.some(m => ['achievement', 'task_completed', 'reminder', 'inbox_message'].includes(m.type))) {
             new Notification('TikTrack Update', {
               body: trulyNew[0].message,
               icon: '/favicon.ico',

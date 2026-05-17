@@ -4,7 +4,7 @@ import { PLANNER_CATEGORY_COLORS } from '../constants/planner.constants';
 import type { PlannerActivityModule, PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable } from '../types/planner.types';
 import type { PlannerEventInput, PlannerQuickAddInput, PlannerTimetableCellInput } from '../utils/planner.validation';
 
-function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEvent {
+export function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEvent {
   return {
     id: docId,
     familyId: String(raw.family_id || ''),
@@ -46,7 +46,7 @@ function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEv
   };
 }
 
-function mapPlannerProgram(docId: string, raw: Record<string, unknown>): PlannerProgram {
+export function mapPlannerProgram(docId: string, raw: Record<string, unknown>): PlannerProgram {
   const modulesRaw = Array.isArray(raw.modules) ? (raw.modules as PlannerActivityModule[]) : [];
   return {
     id: docId,

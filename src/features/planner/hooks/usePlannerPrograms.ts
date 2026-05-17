@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import { fetchPlannerPrograms } from '../services/planner.firestore';
+import { useEffect, useState } from 'react';
+import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { mapPlannerProgram } from '../services/planner.firestore';
 import type { PlannerProgram } from '../types/planner.types';
 
 export function usePlannerPrograms(childId: string) {
   const [programs, setPrograms] = useState<PlannerProgram[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     if (!childId) {
       setPrograms([]);
       setLoading(false);
@@ -14,29 +16,40 @@ export function usePlannerPrograms(childId: string) {
     }
 
     setLoading(true);
-    try {
-      const rows = await fetchPlannerPrograms(childId);
-      const now = new Date();
-      // Filter out programs that have an end date in the past
-      const active = rows.filter(p => {
-        if (!p.endDate) return true;
-        const end = new Date(p.endDate);
-        // Set to end of day
-        end.setHours(23, 59, 59, 999);
-        return end >= now;
-      });
-      setPrograms(active);
-    } catch (err) {
-      console.error('usePlannerPrograms error:', err);
-      setPrograms([]);
-    } finally {
-      setLoading(false);
-    }
+    const q = query(
+      collection(db, 'programs'),
+      where('child_id', '==', childId),
+      limit(500)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const rows = snap.docs
+          .map((docRow) => mapPlannerProgram(docRow.id, docRow.data() as Record<string, unknown>))
+          .filter((p) => p.isActive)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        const now = new Date();
+        const active = rows.filter((p) => {
+          if (!p.endDate) return true;
+          const end = new Date(p.endDate);
+          end.setHours(23, 59, 59, 999);
+          return end >= now;
+        });
+
+        setPrograms(active);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('usePlannerPrograms error:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [childId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return { programs, loading, refresh: load };
+  return { programs, loading, refresh: () => {} };
 }
+

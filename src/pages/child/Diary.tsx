@@ -3,7 +3,12 @@ import clsx from 'clsx';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useChildLayout } from './ChildLayout';
 
-const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
+const toDateKey = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 function buildMonthGrid(baseDate: Date) {
   const year = baseDate.getFullYear();

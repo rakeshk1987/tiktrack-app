@@ -114,6 +114,46 @@ export default function ChildPlannerV2Page() {
 
   const allEvents = useMemo(() => [...events], [events]);
 
+  // 30-Minute approaching task/exam reminders
+  const [triggeredReminders, setTriggeredReminders] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!events || events.length === 0) return;
+
+    // Ask notification permission if default
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      
+      events.forEach((event) => {
+        if (triggeredReminders.has(event.id)) return;
+
+        const eventTime = new Date(event.startAt).getTime();
+        const diffMinutes = (eventTime - now) / (1000 * 60);
+
+        // Check if starting in the next 30 minutes (between 1 and 30 mins)
+        if (diffMinutes > 0 && diffMinutes <= 30) {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('TikTrack Approaching Alert ⏰', {
+              body: `Your ${event.category === 'exam' ? 'exam' : 'task'} "${event.title}" is starting in 30 minutes!`,
+              icon: '/favicon.ico',
+            });
+            setTriggeredReminders((prev) => {
+              const next = new Set(prev);
+              next.add(event.id);
+              return next;
+            });
+          }
+        }
+      });
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [events, triggeredReminders]);
+
 
 
 

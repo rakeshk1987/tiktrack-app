@@ -234,6 +234,7 @@ function ParentDashboardContent() {
   const { programs: eventPrograms } = usePlannerPrograms(evChild);
   const { programs: chPrograms } = usePlannerPrograms(chChild);
   const { subjects: examSubjects } = usePlannerSubjects(eChild, eActivityId);
+  const { subjects: taskSubjects } = usePlannerSubjects(tChild, tActivityId);
   const [newSubName, setNewSubName] = useState('');
   const [newSubTeacher, setNewSubTeacher] = useState('');
   const [newSubInExam, setNewSubInExam] = useState(true);
@@ -2322,10 +2323,10 @@ function ParentDashboardContent() {
                             {tActivityId && (
                               <select required value={tSubjectId} onChange={(e) => setTSubjectId(e.target.value)} className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="">-- Select Subject (Required) --</option>
-                                {/* We will map subjects here. To ensure subject options, we should fetch them based on tChild and tActivityId. */}
-                                {/* But this requires the hook to be available. Since we don't have taskSubjects hook at the top, let's use the activitySubjects if possible or fetch them inline. */}
+                                {taskSubjects.map((s) => (
+                                  <option key={s.id} value={s.name}>{s.name}</option>
+                                ))}
                                 <option value="general">General Activity</option>
-                                {/* Note: Subject fetching logic should be refined. For now we just use a simple input or assume it will be handled by the parent component. */}
                               </select>
                             )}
 
@@ -2606,6 +2607,7 @@ function ParentDashboardContent() {
                     </div>
                   </div>
                 </div>
+              </div>
 
               <section className={clsx(
                 'space-y-4',
@@ -3305,7 +3307,6 @@ function ParentDashboardContent() {
                   </div>
                 )}
               </section>
-            </div>
           </main>
         </div>
       </div>
