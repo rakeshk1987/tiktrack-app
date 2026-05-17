@@ -20,6 +20,7 @@ import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable'
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
+import { expandRecurringEventForRange } from '../utils/planner.recurrence';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
 type ActivitySubTab = PlannerActivityModule;
@@ -176,21 +177,37 @@ export default function ChildPlannerV2Page() {
     });
   }, [visibleEvents, activeCategoryFilters]);
 
-  const calendarEvents = useMemo<EventInput[]>(
-    () => filteredEvents.map((event) => ({
-      id: event.id,
-      title: event.title,
-      start: event.startAt,
-      end: event.endAt,
-      allDay: event.allDay,
-      backgroundColor: event.color,
-      borderColor: event.color,
-      extendedProps: {
-        category: event.category
+  const calendarEvents = useMemo<EventInput[]>(() => {
+    const startRange = new Date();
+    startRange.setDate(startRange.getDate() - 30);
+    const endRange = new Date();
+    endRange.setDate(endRange.getDate() + 90);
+
+    const expanded: EventInput[] = [];
+    for (const event of filteredEvents) {
+      const instances = expandRecurringEventForRange(
+        event,
+        startRange.toISOString(),
+        endRange.toISOString()
+      );
+      for (const inst of instances) {
+        expanded.push({
+          id: inst.instanceId,
+          title: inst.title,
+          start: inst.startAt,
+          end: inst.endAt,
+          allDay: event.allDay,
+          backgroundColor: inst.color,
+          borderColor: inst.color,
+          extendedProps: {
+            category: inst.category,
+            rootEventId: inst.rootEventId
+          }
+        });
       }
-    })),
-    [filteredEvents]
-  );
+    }
+    return expanded;
+  }, [filteredEvents]);
 
   const schoolRoutineItems = useMemo(() => {
     return allEvents
@@ -357,11 +374,18 @@ export default function ChildPlannerV2Page() {
     if (!childId || !newEventTitle.trim() || !activeActivityId) return;
     setEventCreating(true);
     try {
+      const eventDateIso = newEventDate ? new Date(newEventDate).toISOString() : new Date().toISOString();
+      const eventEndDateIso = newEventDate 
+        ? new Date(new Date(newEventDate).getTime() + 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
       await addDoc(collection(db, 'events'), {
         title: newEventTitle.trim(),
         child_id: childId,
         family_id: familyId,
-        date: newEventDate ? new Date(newEventDate).toISOString() : new Date().toISOString(),
+        date: eventDateIso,
+        start_at: eventDateIso,
+        end_at: eventEndDateIso,
         reminder_days_before: 1,
         recurrence_type: newEventRecurrence,
         linked_program_id: activeActivityId,

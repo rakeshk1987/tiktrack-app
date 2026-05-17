@@ -78,6 +78,15 @@ interface ChildSubmission {
   created_at?: string;
 }
 
+const toInputDateTimeLocal = (value: string | null | undefined): string => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
 function ParentDashboardContent() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -377,8 +386,8 @@ function ParentDashboardContent() {
     setTTitle(task.title || '');
     setTDesc(task.description || '');
     setTPoints(task.points ?? task.star_value ?? '');
-    setTDue(task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '');
-    setTEndDate(task.end_date ? new Date(task.end_date).toISOString().slice(0, 16) : '');
+    setTDue(task.due_date ? toInputDateTimeLocal(task.due_date) : '');
+    setTEndDate(task.end_date ? toInputDateTimeLocal(task.end_date) : '');
     setTRecurrenceType((task.recurrence_type as 'none' | 'daily' | 'weekly') || 'none');
     setTRecurrenceDays(Array.isArray(task.recurrence_days) ? task.recurrence_days : []);
     setShowTaskModal(true);
@@ -1128,7 +1137,7 @@ function ParentDashboardContent() {
     setEType((ex.exam_type as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other') || 'weekly_test');
     setEMarks(ex.marks_scored ?? '');
     setETotal(ex.total_marks ?? '');
-    setEDate(ex.exam_date ? new Date(ex.exam_date).toISOString().slice(0, 16) : '');
+    setEDate(ex.exam_date ? toInputDateTimeLocal(ex.exam_date) : '');
     setESyllabusScope(ex.syllabus_scope || '');
     setEPoints(ex.points_allocated ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1227,13 +1236,20 @@ function ParentDashboardContent() {
     setEventLoading(true);
 
     try {
+      const eventDateIso = evDate ? new Date(evDate).toISOString() : new Date().toISOString();
+      const eventEndDateIso = evDate 
+        ? new Date(new Date(evDate).getTime() + 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
       if (editEventId) {
         await withOperationTimeout(
           updateDoc(doc(db, 'events', editEventId), {
             child_id: evChild || null,
             title: evTitle,
             type: evType,
-            date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
+            date: eventDateIso,
+            start_at: eventDateIso,
+            end_at: eventEndDateIso,
             reminder_days_before: evReminderDays || 0,
             linked_program_id: evActivityId || null,
             updated_at: new Date().toISOString()
@@ -1247,7 +1263,9 @@ function ParentDashboardContent() {
             child_id: evChild || null,
             title: evTitle,
             type: evType,
-            date: evDate ? new Date(evDate).toISOString() : new Date().toISOString(),
+            date: eventDateIso,
+            start_at: eventDateIso,
+            end_at: eventEndDateIso,
             reminder_days_before: evReminderDays || 0,
             linked_program_id: evActivityId || null,
             parent_id: familyId,
@@ -1293,7 +1311,7 @@ function ParentDashboardContent() {
     setEvTitle(ev.title || '');
     setEvType(ev.type || 'event');
     const rawDate = ev.start_at || ev.date || ev.created_at;
-    setEvDate(rawDate ? new Date(rawDate).toISOString().slice(0,10) : '');
+    setEvDate(rawDate ? toInputDateTimeLocal(rawDate) : '');
     setEvReminderDays(ev.reminder_days_before ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -3496,13 +3514,15 @@ function ParentDashboardContent() {
                       value={newSubName} 
                       onChange={(e) => setNewSubName(e.target.value)} 
                       placeholder="Subject Name" 
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" 
+                      className="rounded-xl border px-3 py-2 text-sm outline-none" 
+                      style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                     />
                     <input 
                       value={newSubTeacher} 
                       onChange={(e) => setNewSubTeacher(e.target.value)} 
                       placeholder="Teacher Name" 
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" 
+                      className="rounded-xl border px-3 py-2 text-sm outline-none" 
+                      style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -3513,7 +3533,7 @@ function ParentDashboardContent() {
                         onChange={(e) => setNewSubInExam(e.target.checked)} 
                         className="rounded border-slate-300 text-indigo-500 focus:ring-indigo-500" 
                       />
-                      <span className="text-xs font-semibold text-slate-600 uppercase">Include in Exams</span>
+                      <span className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Include in Exams</span>
                     </label>
                     <button 
                       onClick={async () => {

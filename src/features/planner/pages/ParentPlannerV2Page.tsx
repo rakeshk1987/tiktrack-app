@@ -14,6 +14,7 @@ import { usePlannerToast, PlannerToastProvider } from '../hooks/usePlannerToast'
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { type PlannerEventInput } from '../utils/planner.validation';
+import { expandRecurringEventForRange } from '../utils/planner.recurrence';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import { PlannerFilterBar } from '../components/shared/PlannerFilterBar';
 import { PlannerLegend } from '../components/shared/PlannerLegend';
@@ -76,10 +77,35 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
     return filteredEvents;
   }, [filteredEvents, insightFocus, insights.conflicts]);
 
-  const calendarEvents = useMemo<EventInput[]>(
-    () => focusedEvents.map((event) => ({ id: event.id, title: event.title, start: event.startAt, end: event.endAt, color: event.color })),
-    [focusedEvents]
-  );
+  const calendarEvents = useMemo<EventInput[]>(() => {
+    const startRange = new Date();
+    startRange.setDate(startRange.getDate() - 30);
+    const endRange = new Date();
+    endRange.setDate(endRange.getDate() + 90);
+
+    const expanded: EventInput[] = [];
+    for (const event of focusedEvents) {
+      const instances = expandRecurringEventForRange(
+        event,
+        startRange.toISOString(),
+        endRange.toISOString()
+      );
+      for (const inst of instances) {
+        expanded.push({
+          id: inst.instanceId,
+          title: inst.title,
+          start: inst.startAt,
+          end: inst.endAt,
+          color: inst.color,
+          extendedProps: {
+            category: inst.category,
+            rootEventId: inst.rootEventId
+          }
+        });
+      }
+    }
+    return expanded;
+  }, [focusedEvents]);
 
   const upcomingExamCount = filteredEvents.filter((event) => event.category === 'exam' && new Date(event.startAt).getTime() >= Date.now()).length;
 
@@ -137,7 +163,8 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   }
 
   function onClickEvent(arg: EventClickArg) {
-    const target = mergedEvents.find((event) => event.id === arg.event.id);
+    const rootId = arg.event.extendedProps.rootEventId || arg.event.id.split('::')[0];
+    const target = mergedEvents.find((event) => event.id === rootId);
     if (!target) return;
     setModalMode('edit');
     setEditingEvent(target);
@@ -224,7 +251,8 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   }
 
   async function handleEventMoveOrResize(arg: EventDropArg | { event: { id: string; start: Date | null; end: Date | null }; revert: () => void }) {
-    const target = mergedEvents.find((event) => event.id === arg.event.id);
+    const rootId = arg.event.id.split('::')[0];
+    const target = mergedEvents.find((event) => event.id === rootId);
     if (!target || !arg.event.start || !arg.event.end) return;
 
     const payload: PlannerEventInput = {

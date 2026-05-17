@@ -92,7 +92,15 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
             endAt: endAt,
             allDay: true,
             timezone: 'Asia/Kolkata',
-            recurrence: { type: 'none', interval: 1, byWeekDays: [], byMonthDays: [], until: null, count: null, rrule: null },
+            recurrence: {
+              type: ((row.recurrence_type || 'none') as any),
+              interval: 1,
+              byWeekDays: (Array.isArray(row.recurrence_days) ? row.recurrence_days : []),
+              byMonthDays: [],
+              until: null,
+              count: null,
+              rrule: null
+            },
             linkedProgramId: (row.linked_program_id as string) || null,
             subjectId: (row.subject_id as string) || null,
             linkedTaskIds: [d.id],
