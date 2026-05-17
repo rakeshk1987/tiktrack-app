@@ -291,6 +291,10 @@ export function getExamPlannerStats(events: Event[], _tasksVisible: { task: Task
     
     virtualTasks.push({
       id: `virtual_exam_study_${nearest.id}`,
+      family_id: (nearest as any).family_id || '',
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       title: daysRemaining === 0 ? `Final Review: ${nearest.title}` : `Focus Quest: Study for ${nearest.title}`,
       category: 'Academic',
       priority: 'high',

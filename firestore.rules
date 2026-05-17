@@ -148,6 +148,41 @@ service cloud.firestore {
       allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
 
+    match /sick_periods/{sickPeriodId} {
+      allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /routines/{routineId} {
+      allow read: if isParent() || resource == null || resource.data.child_id == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent();
+      allow update: if isParent() || (isChild() && (resource.data.child_id == null || resource.data.child_id == request.auth.uid));
+      allow delete: if isParent();
+    }
+
+    match /routine_logs/{logId} {
+      allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /approvals/{approvalId} {
+      allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
+      allow delete: if isParent();
+    }
+
+    match /settlements/{settlementId} {
+      allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent();
+      allow update: if isParent();
+      allow delete: if isParent();
+    }
+
     match /money_pot_entries/{entryId} {
       allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
       allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);

@@ -458,20 +458,20 @@ export default function ChildPlannerV2Page() {
     
     return (
       <div 
-        className="flex h-full w-full flex-col justify-center overflow-hidden transition-all duration-300 px-2.5 py-1.5 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:scale-[1.03] hover:brightness-110 active:scale-95" 
+        className="flex h-full w-full flex-col justify-center overflow-hidden transition-all duration-200 px-2.5 py-1.5 rounded-lg border border-white/10 hover:brightness-110 active:scale-95" 
         style={{
-          background: `linear-gradient(135deg, ${resolvedColor}ee 0%, ${resolvedColor}99 100%)`,
-          borderTop: '1px solid rgba(255,255,255,0.2)',
-          boxShadow: `0 4px 10px -2px ${resolvedColor}88, inset 0 1px 1px rgba(255,255,255,0.25)`,
+          backgroundColor: resolvedColor,
         }}
       >
         <div className="flex items-center gap-1 overflow-hidden">
-          {isPrivate && <span className="text-[9px]">🔒</span>}
-          {isExam && <span className="text-[9px]">🎓</span>}
-          <span className="truncate text-[11px] font-bold tracking-tight text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">{arg.event.title}</span>
+          {category === 'task' && <span className="text-[10px]">📝</span>}
+          {isPrivate && <span className="text-[10px]">🔒</span>}
+          {isExam && <span className="text-[10px]">🎓</span>}
+          {category === 'event' && <span className="text-[10px]">📅</span>}
+          <span className="truncate text-[11px] font-semibold text-white drop-shadow-sm">{arg.event.title}</span>
         </div>
         {!arg.event.allDay && arg.timeText && (
-           <div className="mt-0.5 truncate text-[9px] font-semibold text-white/90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
+           <div className="mt-0.5 truncate text-[9.5px] font-medium text-white/90 drop-shadow-sm">
              {arg.timeText}
            </div>
         )}

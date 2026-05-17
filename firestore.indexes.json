@@ -175,6 +175,92 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "sick_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "family_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "routines",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "family_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "routines",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "family_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "routine_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "routine_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "routine_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "family_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "child_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

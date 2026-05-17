@@ -24,7 +24,13 @@ export interface TaskTemplate {
   description?: string;
 }
 
-export interface GeneratedTask extends Omit<Task, 'id' | 'child_id'> {
+export interface GeneratedTask extends Partial<Omit<Task, 'id' | 'child_id'>> {
+  title: string;
+  category: string;
+  priority: 'low' | 'medium' | 'high';
+  energy_level: 'low' | 'medium' | 'high' | number | string;
+  star_value: number;
+  requires_proof: boolean;
   generated_at: string;
   generation_reason: string;
   expires_at?: string; // For temporary/exam-specific tasks

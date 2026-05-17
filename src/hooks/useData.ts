@@ -402,6 +402,19 @@ export function useChildProofs(childId: string) {
         notes: notes || ''
       });
 
+      // Create a unified approval request for the parent
+      await addDoc(collection(db, 'approvals'), {
+        family_id: task.family_id || '',
+        child_id: childId,
+        type: 'task',
+        reference_id: task.id,
+        title: task.title,
+        points: Number(task.star_value || 0),
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        proof_image_url: imageUrl
+      });
+
       return proofDoc.id;
     } catch (error) {
       setPendingRetry({ task, file });

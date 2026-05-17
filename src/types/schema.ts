@@ -50,24 +50,53 @@ export interface ChildProfile {
 
 export interface Task {
   id: string;
+  family_id: string;
+  parent_id?: string;
+  child_id?: string | null;
+  subject_id?: string;
   title: string;
   description?: string;
-  category: string;
-  child_id?: string;
-  parent_id?: string;
-  family_id?: string;
-  priority: 'low' | 'medium' | 'high';
-  energy_level: 'low' | 'medium' | 'high';
-  difficulty_level: number;
-  star_value: number;
+  category?: 'chore' | 'homework' | 'personal' | 'custom' | string;
+  priority?: 'low' | 'medium' | 'high';
+  status: 'pending' | 'completed' | 'expired' | 'failed' | 'paused';
   points?: number;
-  requires_proof: boolean;
-  due_date?: string | null;
-  status?: 'pending' | 'completed';
-  created_at?: string;
+  star_value: number;
+  energy_level?: 'low' | 'medium' | 'high' | number | string;
+  due_date?: string;
+  expires_at?: string;
+  recurrence_type?: 'none' | 'daily' | 'weekly';
+  recurrence_days?: number[];
+  requires_proof?: boolean;
+  difficulty_level?: number;
+  linked_program_id?: string | null;
+  created_by?: string;
   completed_at?: string;
-  recurrence_type?: 'none' | 'daily' | 'weekly' | 'monthly';
-  recurrence_days?: number[]; // 0-6 for weekly recurrence
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Routine {
+  id: string;
+  family_id: string;
+  child_id?: string | null;
+  title: string;
+  schedule_time: string;
+  points: number;
+  streak: number;
+  icon?: string;
+  status: 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutineLog {
+  id: string;
+  routine_id: string;
+  family_id: string;
+  child_id: string;
+  date: string;
+  status: 'completed' | 'missed' | 'sick';
+  completed_at?: string;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'failed' | 'skipped';
@@ -256,6 +285,34 @@ export interface Achievement {
   date: string; // YYYY-MM-DD
   category?: 'academic' | 'habit' | 'sports' | 'creative' | 'other';
   created_at?: string;
+}
+
+export interface Approval {
+  id: string;
+  family_id: string;
+  child_id: string;
+  type: 'task' | 'routine' | 'reward' | 'custom';
+  reference_id?: string;
+  title: string;
+  points: number;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+  proof_image_url?: string;
+}
+
+export interface Settlement {
+  id: string;
+  family_id: string;
+  child_id: string;
+  period_start: string;
+  period_end: string;
+  total_points: number;
+  total_money: number;
+  status: 'draft' | 'paid';
+  created_at: string;
+  paid_at?: string;
 }
 
 export interface SpecialDate {

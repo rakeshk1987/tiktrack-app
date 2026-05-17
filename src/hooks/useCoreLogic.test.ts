@@ -46,7 +46,7 @@ const baseTasks: Task[] = [
     star_value: 1,
     requires_proof: false
   }
-];
+] as unknown as Task[];
 
 describe('useEnergySync', () => {
   beforeEach(() => {

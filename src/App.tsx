@@ -5,9 +5,11 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ErrorBoundary } from './ErrorBoundary';
 import { activeFirebaseEnv, firebaseInitError, isUsingFirebaseEmulators } from './config/firebase';
 import { AppChromeSignals } from './components/AppChromeSignals';
+import { ToastProvider } from './contexts/ToastContext';
 
 const ChildHome = lazy(() => import('./pages/child/Dashboard'));
 const ChildLayout = lazy(() => import('./pages/child/ChildLayout'));
+const ChildRoutines = lazy(() => import('./pages/child/RoutinePage'));
 const ChildQuests = lazy(() => import('./pages/child/Quests'));
 const ChildPlanner = lazy(() => import('./pages/child/Planner'));
 const ChildDiary = lazy(() => import('./pages/child/Diary'));
@@ -88,6 +90,7 @@ function AppRoutes() {
           }
         >
           <Route index element={<ChildHome />} />
+          <Route path="routines" element={<ChildRoutines />} />
           <Route path="quests" element={<ChildQuests />} />
           <Route path="planner" element={<ChildPlanner />} />
           <Route path="diary" element={<ChildDiary />} />
@@ -145,10 +148,12 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <Router>
-            <AppRoutes />
-            <AppChromeSignals />
-          </Router>
+          <ToastProvider>
+            <Router>
+              <AppRoutes />
+              <AppChromeSignals />
+            </Router>
+          </ToastProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

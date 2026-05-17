@@ -6,7 +6,7 @@ export const GAMIFICATION_RULES = {
   STAR_TO_CURRENCY_CONVERSION_RATE: 5, // 1 star = ₹5
 };
 
-export function calculateTaskReward(task: Task): number {
+export function calculateTaskReward(task: Partial<Task>): number {
   if (task.energy_level === 'high') {
     return GAMIFICATION_RULES.STARS_PER_HIGH_FOCUS_TASK;
   }

@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -46,6 +47,9 @@ import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem 
 import { ParentPlannerV2Page } from '../../features/planner';
 import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerPrograms';
 import { upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
+import { useSickMode } from '../../hooks/useSickMode';
+import { RoutineManagement } from '../../components/parent/RoutineManagement';
+import { ApprovalsManagement } from '../../components/parent/ApprovalsManagement';
 import type { PlannerActivityModule, PlannerProgram } from '../../features/planner/types/planner.types';
 import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTimetable';
 import { usePlannerSubjects } from '../../features/planner/hooks/usePlannerSubjects';
@@ -90,6 +94,9 @@ const toInputDateTimeLocal = (value: string | null | undefined): string => {
 function ParentDashboardContent() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { addToast } = useToast();
+  const setSuccess = useCallback((msg: string) => addToast(msg, 'success'), [addToast]);
+  const setInfo = useCallback((msg: string) => addToast(msg, 'info'), [addToast]);
 
   const [isModaling, setIsModaling] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
@@ -105,9 +112,7 @@ function ParentDashboardContent() {
   const [growthLoading2, setGrowthLoading2] = useState(false);
   const [eventLoading, setEventLoading] = useState(false);
   const [rewardLoading, setRewardLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [info, setInfo] = useState('');
+  const [error, setError] = useState(''); // keep for inline form field errors only
   const [children, setChildren] = useState<ChildAccount[]>([]);
   const [childrenLoading, setChildrenLoading] = useState(true);
   const [pendingProofs, setPendingProofs] = useState<PendingProof[]>([]);
@@ -170,10 +175,17 @@ function ParentDashboardContent() {
   const [rWeeklyBonus, setRWeeklyBonus] = useState(false);
   const [editRewardId, setEditRewardId] = useState<string | null>(null);
 
+  const { initiateSickPeriod, getActiveSickPeriod } = useSickMode(user?.id || '');
+  const [isSickModalOpen, setIsSickModalOpen] = useState(false);
+  const [sickTargetChild, setSickTargetChild] = useState('');
+  const [sickStartDate, setSickStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sickEndDate, setSickEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sickReason, setSickReason] = useState('');
+
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'family' | 'tasks' | 'proofs' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner'
+    'dashboard' | 'family' | 'tasks' | 'approvals' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner' | 'routines'
   >('dashboard');
-  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'proofs', 'rewards'] as const;
+  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'approvals', 'rewards', 'routines'] as const;
   const topLevelActiveTab: 'dashboard' | 'planner' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
     ? 'planner'
     : (activeTab as 'dashboard' | 'communication' | 'settings');
@@ -214,11 +226,13 @@ function ParentDashboardContent() {
   const plannerWorkspaceTabs = [
     { id: 'planner', label: 'Main Planner' },
     { id: 'family', label: 'Kid Activities' },
+    { id: 'routines', label: 'Routines' },
     { id: 'tasks', label: 'Tasks / Duties' },
     { id: 'exams', label: 'Exams / Tests' },
     { id: 'challenges', label: 'Challenges' },
     { id: 'events', label: 'Events' },
-    { id: 'automation', label: 'Automation' }
+    { id: 'automation', label: 'Automation' },
+    { id: 'approvals', label: 'Approvals & Settlements' }
   ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
@@ -1992,13 +2006,7 @@ function ParentDashboardContent() {
               </div>
             ) : null}
 
-            {(error || success || info) && (
-              <div className="space-y-2 mb-4">
-                {error && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-red-100 text-red-700">{error}</div>}
-                {success && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-emerald-100 text-emerald-700">{success}</div>}
-                {info && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-cyan-100 text-cyan-700">{info}</div>}
-              </div>
-            )}
+            {error && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-red-100 text-red-700 mb-4">{error}</div>}
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5">
               <div className={activeTab === 'dashboard' ? 'xl:col-span-7 2xl:col-span-8 space-y-4' : 'hidden'}>
@@ -2508,6 +2516,12 @@ function ParentDashboardContent() {
                   </div>
                 </div>
 
+                <div className={activeTab === 'routines' ? 'xl:col-span-12 space-y-4' : 'hidden'}>
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <RoutineManagement familyId={familyId} childrenProfiles={childProfiles} />
+                  </div>
+                </div>
+
                 <div className={activeTab === 'automation' ? 'xl:col-span-12 space-y-4' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2564,108 +2578,11 @@ function ParentDashboardContent() {
                   />
                 </div>
 
-                <div className={activeTab === 'proofs' ? 'xl:col-span-12' : 'hidden'}>
+                <div className={activeTab === 'approvals' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Pending Proof Approval</h2>
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
-                      {visiblePendingProofs.length > 0 ? `${visiblePendingProofs.length} waiting` : 'none'}
-                    </span>
-                  </div>
-                  {featuredProof ? (
-                    <div className="rounded-2xl p-3 border flex items-center gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                      {featuredProof.image_url ? (
-                        <img src={featuredProof.image_url} alt="Child proof" className="h-16 w-16 rounded-xl object-cover" />
-                      ) : (
-                        <div className="h-12 w-12 rounded-xl bg-slate-300 grid place-items-center text-xs text-slate-600">Image</div>
-                      )}
-                      <div className="flex-1">
-                        <p className="font-bold" style={{ color: 'var(--text-main)' }}>{featuredProof.task_title || 'Quest proof'}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {children.find((child) => child.id === featuredProof.child_id)?.name || 'Child'} submitted this for review
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleProofDecision(featuredProof.id, 'approved')}>
-                          Approve
-                        </button>
-                        <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleProofDecision(featuredProof.id, 'rejected')}>
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl p-4 border text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-muted)' }}>
-                      No proof submissions yet. Add a child account first, then submitted task proofs will show up here.
-                    </div>
-                  )}
-                  <div className="mt-3">
-                    <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Review comment (optional)</label>
-                    <input
-                      value={proofReviewComment}
-                      onChange={(event) => setProofReviewComment(event.target.value)}
-                      placeholder="Share a quick note for the child..."
-                      className="mt-1 w-full rounded-xl py-2 px-3 border text-sm"
-                      style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
-                    />
-                  </div>
-
-                  <div className="mt-5 rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                    <div className="mb-3 flex items-center justify-between">
-                      <h3 className="text-base font-bold" style={{ color: 'var(--text-main)' }}>Child Submission Approvals</h3>
-                      <span className="px-2 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">
-                        {pendingChildTasks.length + pendingChildEvents.length + pendingAchievements.length} pending
-                      </span>
-                    </div>
-
-                    <div className="space-y-3">
-                      {pendingChildTasks.map((item) => (
-                        <div key={`task-${item.id}`} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                          <div>
-                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Task: {item.title}</p>
-                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === item.child_id)?.name || 'Child'} • {item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleChildSubmissionDecision('tasks', item.id, 'approved')}>Approve</button>
-                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleChildSubmissionDecision('tasks', item.id, 'rejected')}>Reject</button>
-                          </div>
-                        </div>
-                      ))}
-
-                      {pendingChildEvents.map((item) => (
-                        <div key={`event-${item.id}`} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                          <div>
-                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Timetable: {item.title}</p>
-                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{item.type || 'event'} • {children.find((child) => child.id === item.child_id)?.name || 'Child'} • {item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleChildSubmissionDecision('events', item.id, 'approved')}>Approve</button>
-                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleChildSubmissionDecision('events', item.id, 'rejected')}>Reject</button>
-                          </div>
-                        </div>
-                      ))}
-
-                      {pendingAchievements.map((item) => (
-                        <div key={`achievement-${item.id}`} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                          <div>
-                            <p className="font-semibold" style={{ color: 'var(--text-main)' }}>Achievement: {item.title}</p>
-                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === item.child_id)?.name || 'Child'} • {item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</p>
-                            {item.description ? <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{item.description}</p> : null}
-                          </div>
-                          <div className="flex gap-2">
-                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700" onClick={() => void handleChildSubmissionDecision('achievements', item.id, 'approved')}>Approve</button>
-                            <button className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700" onClick={() => void handleChildSubmissionDecision('achievements', item.id, 'rejected')}>Reject</button>
-                          </div>
-                        </div>
-                      ))}
-
-                      {pendingChildTasks.length === 0 && pendingChildEvents.length === 0 && pendingAchievements.length === 0 ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No child-created submissions waiting for review.</p>
-                      ) : null}
-                    </div>
+                    <ApprovalsManagement familyId={familyId} childrenProfiles={childProfiles} />
                   </div>
                 </div>
-              </div>
 
               <section className={clsx(
                 'space-y-4',
@@ -3154,11 +3071,24 @@ function ParentDashboardContent() {
                               return (
                                 <div key={child.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                                   <div>
-                                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{child.name || 'Child'}</p>
+                                    <p className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                                      {child.name || 'Child'}
+                                      {getActiveSickPeriod(child.id) && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full uppercase font-bold">Sick 🤒</span>}
+                                    </p>
                                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
                                     {meta ? <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★</p> : null}
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSickTargetChild(child.id);
+                                        setIsSickModalOpen(true);
+                                      }}
+                                      className="rounded-lg bg-yellow-500 px-3 py-1.5 text-xs font-bold text-white"
+                                    >
+                                      Mark Sick
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => void handleParentResetChildPassword(child)}
@@ -3840,6 +3770,71 @@ function ParentDashboardContent() {
                 {childRegistering ? 'Registering...' : 'Create Child Account'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isSickModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[var(--surface)] w-full max-w-md rounded-2xl shadow-2xl p-6 border" style={{ borderColor: 'var(--border-main)' }}>
+            <h3 className="text-xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Mark Child Sick 🤒</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Start Date</label>
+                <input
+                  type="date"
+                  value={sickStartDate}
+                  onChange={(e) => setSickStartDate(e.target.value)}
+                  className="w-full rounded-xl border px-4 py-2 text-sm"
+                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>End Date</label>
+                <input
+                  type="date"
+                  value={sickEndDate}
+                  onChange={(e) => setSickEndDate(e.target.value)}
+                  className="w-full rounded-xl border px-4 py-2 text-sm"
+                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Reason (Optional)</label>
+                <input
+                  type="text"
+                  value={sickReason}
+                  onChange={(e) => setSickReason(e.target.value)}
+                  placeholder="e.g. Fever, Cold"
+                  className="w-full rounded-xl border px-4 py-2 text-sm"
+                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={async () => {
+                    try {
+                      await initiateSickPeriod(sickTargetChild, 'parent', user?.id || '', sickStartDate, sickEndDate, sickReason);
+                      setSuccess('Child marked sick successfully.');
+                      setIsSickModalOpen(false);
+                    } catch (error) {
+                      setError('Failed to mark child sick.');
+                    }
+                  }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition-all"
+                  style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}
+                >
+                  Confirm Sick Leave
+                </button>
+                <button
+                  onClick={() => setIsSickModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

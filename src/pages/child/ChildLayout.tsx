@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import {
@@ -17,7 +17,8 @@ import {
   Sun,
   Upload,
   UserRound,
-  Mail
+  Mail,
+  Clock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -41,8 +42,10 @@ import type { MoodLog, Task } from '../../types/schema';
 import InboxPanel from '../../components/child/InboxPanel';
 import { useChallenges } from '../../hooks/useChallenges';
 import { useRewards } from '../../hooks/useRedemptions';
+import { useToast } from '../../contexts/ToastContext';
+import { useSickMode } from '../../hooks/useSickMode';
 
-export type ChildTab = 'home' | 'quests' | 'planner' | 'diary' | 'rewards' | 'money-pot' | 'profile';
+export type ChildTab = 'home' | 'routines' | 'quests' | 'planner' | 'diary' | 'rewards' | 'money-pot' | 'profile';
 
 export const moodOptions: Array<{
   icon: string;
@@ -91,10 +94,11 @@ export interface ChildLayoutContextValue {
   moodLog: ReturnType<typeof useChildMood>['moodLog'];
   moodSaving: boolean;
   mutedTextClass: string;
-  notice: string;
   openProofPicker: (task: Task) => void;
   panelClass: string;
   profile: NonNullable<ReturnType<typeof useChildProfile>['profile']>;
+  childId?: string;
+  familyId?: string;
   proofQueueCount: number;
   questSaving: boolean;
   remainingTasks: number;
@@ -153,6 +157,8 @@ function MissingProfileScreen() {
 export default function ChildLayout() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { addToast } = useToast();
+  const setNotice = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'info') => addToast(msg, type), [addToast]);
   const navigate = useNavigate();
   const location = useLocation();
   const childId = user?.id || '';
@@ -168,9 +174,13 @@ export default function ChildLayout() {
   const parentId = profile?.family_id || profile?.parent_id || '';
   const { activeChallenges, incrementScore: incrementChallengeScore } = useChallenges(parentId);
   const { rewards } = useRewards(parentId);
+  const { getActiveSickPeriod, initiateSickPeriod } = useSickMode(parentId, childId);
 
-  const [notice, setNotice] = useState('');
   const [diaryDraft, setDiaryDraft] = useState('');
+  const [isSickModalOpen, setIsSickModalOpen] = useState(false);
+  const [sickStartDate, setSickStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sickEndDate, setSickEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sickReason, setSickReason] = useState('');
   const [pendingProofTask, setPendingProofTask] = useState<Task | null>(null);
   const [questCelebration, setQuestCelebration] = useState<{ title: string; stars: number } | null>(null);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
@@ -361,6 +371,10 @@ export default function ChildLayout() {
     adaptiveTasks = [...adaptiveTasks, {
       task: {
         id: 'bonus_quest_happy',
+        family_id: parentId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         title: 'Happy Bonus: Dance for 1 minute!',
         category: 'Creative',
         priority: 'low',
@@ -498,6 +512,7 @@ export default function ChildLayout() {
   const accentCaptionClass = activeSkin.accentCaptionClass;
   const childTabs = [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'routines', label: 'Routines', icon: Clock },
     { id: 'quests', label: 'Quests', icon: MessageSquare },
     { id: 'planner', label: 'Planner', icon: CalendarDays },
     { id: 'diary', label: 'Diary', icon: ScrollText },
@@ -519,7 +534,7 @@ export default function ChildLayout() {
       await signOut(auth);
     } catch (error) {
       console.error('Child logout failed:', error);
-      setNotice('Could not logout right now. Please retry.');
+      setNotice('Could not logout right now. Please retry.', 'error');
     }
   };
 
@@ -536,10 +551,10 @@ export default function ChildLayout() {
           childId
         );
       }
-      setNotice('Mood saved for today.');
+      setNotice('Mood saved for today.', 'success');
     } catch (error) {
       console.error('Mood save failed:', error);
-      setNotice('Mood could not be saved right now.');
+      setNotice('Mood could not be saved right now.', 'error');
     }
   };
 
@@ -550,32 +565,32 @@ export default function ChildLayout() {
       try {
         localStorage.removeItem(`tiktrack_child_${childId}_diary_draft`);
       } catch {}
-      setNotice('Diary note saved.');
+      setNotice('Diary note saved.', 'success');
     } catch (error) {
       console.error('Diary save failed:', error);
-      setNotice('Diary note could not be saved right now.');
+      setNotice('Diary note could not be saved right now.', 'error');
     }
   };
 
   const handleDiarySubmitForDate = async (dateKey: string, content: string) => {
     try {
       await addEntry(content, dateKey);
-      setNotice(`Diary saved for ${new Date(dateKey).toLocaleDateString()}.`);
+      setNotice(`Diary saved for ${new Date(dateKey).toLocaleDateString()}.`, 'success');
     } catch (error) {
       console.error('Diary save failed:', error);
-      setNotice('Diary note could not be saved right now.');
+      setNotice('Diary note could not be saved right now.', 'error');
     }
   };
 
   const handleQuestComplete = async (task: Task) => {
     try {
       await completeTask(task);
-      setNotice(`Quest complete. ${task.star_value} stars added.`);
+      setNotice(`Quest complete. ${task.star_value} stars added.`, 'success');
       setQuestCelebration({ title: task.title, stars: Number(task.star_value || 0) });
       setTimeout(() => setQuestCelebration(null), 1600);
     } catch (error) {
       console.error('Quest completion failed:', error);
-      setNotice('Quest could not be completed right now.');
+      setNotice('Quest could not be completed right now.', 'error');
     }
   };
 
@@ -590,10 +605,10 @@ export default function ChildLayout() {
     try {
       await uploadProof(pendingProofTask, file);
       await markTaskPendingProof(pendingProofTask);
-      setNotice(`Proof uploaded for ${pendingProofTask.title}. Waiting for parent approval.`);
+      setNotice(`Proof uploaded for ${pendingProofTask.title}. Waiting for parent approval.`, 'success');
     } catch (error) {
       console.error('Proof upload failed:', error);
-      setNotice('Proof upload failed. You can retry from the upload banner.');
+      setNotice('Proof upload failed. You can retry from the upload banner.', 'error');
     } finally {
       event.target.value = '';
       setPendingProofTask(null);
@@ -685,10 +700,11 @@ export default function ChildLayout() {
     moodLog,
     moodSaving,
     mutedTextClass,
-    notice,
     openProofPicker,
     panelClass,
     profile,
+    childId,
+    familyId: parentId,
     progressPercent,
     proofQueueCount,
     questSaving,
@@ -762,9 +778,17 @@ export default function ChildLayout() {
 
         {activeTab === 'home' && (
         <div className={clsx('rounded-[1.75rem] border p-4 shadow-[0_22px_70px_rgba(6,8,30,0.32)] backdrop-blur-xl sm:p-5 lg:p-6', heroClass)}>
+          {getActiveSickPeriod(childId) && (
+            <div className="mb-6 rounded-2xl border border-yellow-400/30 bg-yellow-500/10 p-4 text-sm font-bold text-yellow-500">
+              🤒 Sick leave active until {new Date(getActiveSickPeriod(childId)!.end_date).toLocaleDateString()}. Routines and tasks are paused.
+            </div>
+          )}
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
-              <p className={clsx('text-[11px] uppercase tracking-[0.14em] font-black', accentCaptionClass)}>Today is your quest day</p>
+              <div className="flex items-center gap-3">
+                <p className={clsx('text-[11px] uppercase tracking-[0.14em] font-black', accentCaptionClass)}>Today is your quest day</p>
+                <button onClick={() => setIsSickModalOpen(true)} className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-white/20 transition">I'm Sick 🤒</button>
+              </div>
               <h1 className="mt-2 text-[2rem] sm:text-[2.3rem] xl:text-[2.75rem] font-display font-extrabold leading-[1.08]">{greetingMessage} <span className="inline-block align-middle">😊</span></h1>
               {remainingTasks === 0 && adaptiveTasks.length > 0 ? (
                 <div className="mt-4 inline-flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm font-bold text-emerald-600 shadow-lg shadow-emerald-500/20 dark:text-emerald-400">
@@ -900,7 +924,6 @@ export default function ChildLayout() {
           </div>
         ) : null}
 
-        {notice && <div className={clsx('mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-[0_10px_25px_rgba(14,165,233,0.12)]', isDark ? 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100' : 'border-cyan-200 bg-cyan-50 text-cyan-700')}>{notice}</div>}
 
         <Outlet context={contextValue} />
 
@@ -931,6 +954,72 @@ export default function ChildLayout() {
             </button>
           </div>
         </div>
+
+        {/* Sick Modal */}
+        {isSickModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className={clsx('w-full max-w-md overflow-hidden rounded-3xl border shadow-2xl', isDark ? 'bg-[#1a1f3c] border-white/10' : 'bg-white border-slate-200')}>
+              <div className={clsx('px-6 py-5 border-b', isDark ? 'border-white/10' : 'border-slate-100')}>
+                <h2 className={clsx('text-xl font-bold', isDark ? 'text-white' : 'text-slate-900')}>I'm Sick 🤒</h2>
+                <p className={clsx('mt-1 text-sm', isDark ? 'text-white/60' : 'text-slate-500')}>Request sick leave to pause your routines and tasks.</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className={clsx('mb-1.5 block text-xs font-bold uppercase tracking-wider', isDark ? 'text-white/70' : 'text-slate-600')}>Start Date</label>
+                  <input
+                    type="date"
+                    value={sickStartDate}
+                    onChange={(e) => setSickStartDate(e.target.value)}
+                    className={clsx('w-full rounded-xl border px-4 py-3 text-sm transition focus:ring-2 focus:ring-cyan-500/50 outline-none', isDark ? 'border-white/10 bg-black/20 text-white placeholder-white/30' : 'border-slate-300 bg-white text-slate-900')}
+                  />
+                </div>
+                <div>
+                  <label className={clsx('mb-1.5 block text-xs font-bold uppercase tracking-wider', isDark ? 'text-white/70' : 'text-slate-600')}>End Date</label>
+                  <input
+                    type="date"
+                    value={sickEndDate}
+                    onChange={(e) => setSickEndDate(e.target.value)}
+                    className={clsx('w-full rounded-xl border px-4 py-3 text-sm transition focus:ring-2 focus:ring-cyan-500/50 outline-none', isDark ? 'border-white/10 bg-black/20 text-white placeholder-white/30' : 'border-slate-300 bg-white text-slate-900')}
+                  />
+                </div>
+                <div>
+                  <label className={clsx('mb-1.5 block text-xs font-bold uppercase tracking-wider', isDark ? 'text-white/70' : 'text-slate-600')}>Reason (Optional)</label>
+                  <input
+                    type="text"
+                    value={sickReason}
+                    onChange={(e) => setSickReason(e.target.value)}
+                    placeholder="e.g. Fever, Cold"
+                    className={clsx('w-full rounded-xl border px-4 py-3 text-sm transition focus:ring-2 focus:ring-cyan-500/50 outline-none', isDark ? 'border-white/10 bg-black/20 text-white placeholder-white/30' : 'border-slate-300 bg-white text-slate-900')}
+                  />
+                </div>
+              </div>
+              <div className={clsx('flex items-center justify-end gap-3 px-6 py-4 bg-black/20 border-t', isDark ? 'border-white/5' : 'border-slate-50')}>
+                <button
+                  onClick={() => setIsSickModalOpen(false)}
+                  className={clsx('rounded-xl px-4 py-2 text-sm font-bold transition hover:bg-white/10', isDark ? 'text-white/70' : 'text-slate-600')}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await initiateSickPeriod(childId, 'child', childId, sickStartDate, sickEndDate, sickReason);
+                      addToast('Sick leave requested! Waiting for parent approval.', 'success');
+                      await sendMessage(childId, parentId, `I've requested sick leave from ${sickStartDate} to ${sickEndDate}.`, 'child');
+                      setIsSickModalOpen(false);
+                    } catch (error) {
+                      addToast('Failed to request sick leave.', 'error');
+                    }
+                  }}
+                  className="rounded-xl bg-cyan-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-500/30 transition hover:bg-cyan-400"
+                >
+                  Submit Request
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
