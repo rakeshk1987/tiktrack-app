@@ -87,8 +87,8 @@ service cloud.firestore {
       allow update: if isParent() || (
         isChild() &&
         resource.data.child_id == request.auth.uid &&
-        resource.data.approval_status != 'approved' &&
-        request.resource.data.approval_status == resource.data.approval_status
+        resource.data.get('approval_status', '') != 'approved' &&
+        request.resource.data.get('approval_status', '') == resource.data.get('approval_status', '')
       );
       allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
@@ -225,8 +225,8 @@ service cloud.firestore {
       allow update: if isParent() || (
         isChild() &&
         resource.data.child_id == request.auth.uid &&
-        resource.data.approval_status != 'approved' &&
-        request.resource.data.approval_status == resource.data.approval_status
+        resource.data.get('approval_status', '') != 'approved' &&
+        request.resource.data.get('approval_status', '') == resource.data.get('approval_status', '')
       );
       allow delete: if isParent() || (isChild() && resource.data.child_id == request.auth.uid);
     }
@@ -332,7 +332,12 @@ service cloud.firestore {
         request.resource.data.child_id == request.auth.uid ||
         request.resource.data.parent_id == request.auth.uid
       );
-      allow update, delete: if isParent();
+      allow update: if isParent() || (
+        isChild() &&
+        resource.data.child_id == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read'])
+      );
+      allow delete: if isParent();
     }
 
     match /{document=**} {

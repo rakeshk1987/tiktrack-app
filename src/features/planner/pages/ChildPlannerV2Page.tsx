@@ -81,6 +81,7 @@ export default function ChildPlannerV2Page() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDue, setNewTaskDue] = useState('');
   const [newTaskRecurrence, setNewTaskRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [newTaskSubjectId, setNewTaskSubjectId] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
 
   const [showExamForm, setShowExamForm] = useState(false);
@@ -103,6 +104,7 @@ export default function ChildPlannerV2Page() {
   const [newSubjectIncludeInExam, setNewSubjectIncludeInExam] = useState(true);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [subjectCreating, setSubjectCreating] = useState(false);
+  const [expandedSubjectId, setExpandedSubjectId] = useState<string | null>(null);
 
   const [showEventForm, setShowEventForm] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState('');
@@ -110,100 +112,8 @@ export default function ChildPlannerV2Page() {
   const [newEventRecurrence, setNewEventRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [eventCreating, setEventCreating] = useState(false);
 
-  const [taskEvents, setTaskEvents] = useState<PlannerEvent[]>([]);
-  const [examEvents, setExamEvents] = useState<PlannerEvent[]>([]);
+  const allEvents = useMemo(() => [...events], [events]);
 
-  useEffect(() => {
-    if (!childId) return;
-    
-    const taskQuery = query(collection(db, 'tasks'), where('child_id', '==', childId));
-    const examQuery = query(collection(db, 'exams'), where('child_id', '==', childId));
-
-    const unsubTasks = onSnapshot(taskQuery, (snap) => {
-      const now = new Date().toISOString();
-      const mappedTasks: PlannerEvent[] = snap.docs.map((d) => {
-        const row = d.data() as Record<string, unknown>;
-        const baseStart = typeof row.due_date === 'string' ? row.due_date : now;
-        return {
-          id: `task_${d.id}`,
-          familyId,
-          childId,
-          parentId: familyId,
-          title: String(row.title || 'Task'),
-          category: 'homework',
-          color: '#eab308',
-          startAt: baseStart,
-          endAt: baseStart,
-          allDay: true,
-          timezone: 'Asia/Kolkata',
-          recurrence: { type: 'none', interval: 1 },
-          linkedProgramId: row.linked_program_id as string | undefined,
-          linkedTaskIds: [d.id],
-          participantIds: [],
-          reminderIds: [],
-          source: 'manual',
-          sync: { googleEnabled: false, syncStatus: 'not_configured' },
-          createdBy: 'child',
-          createdAt: now,
-          updatedAt: now
-        };
-      });
-      setTaskEvents(mappedTasks);
-    });
-
-    const unsubExams = onSnapshot(examQuery, (snap) => {
-      const now = new Date().toISOString();
-      const mappedExams: PlannerEvent[] = snap.docs.map((d) => {
-        const row = d.data() as Record<string, unknown>;
-        let startAt = now;
-        let endAt = now;
-        if (typeof row.exam_date === 'string') {
-          const isIso = row.exam_date.includes('T');
-          startAt = isIso ? row.exam_date : `${row.exam_date}T09:00:00.000Z`;
-          endAt = isIso ? row.exam_date : `${row.exam_date}T11:00:00.000Z`;
-        } else if (typeof row.date === 'string') {
-          const isIso = row.date.includes('T');
-          startAt = isIso ? row.date : `${row.date}T09:00:00.000Z`;
-          endAt = isIso ? row.date : `${row.date}T11:00:00.000Z`;
-        }
-
-        const marksScored = typeof row.marks_scored === 'number' ? row.marks_scored : null;
-        const totalMarks = typeof row.total_marks === 'number' ? row.total_marks : null;
-        const resultSuffix = marksScored !== null && totalMarks !== null ? ` (${marksScored}/${totalMarks})` : '';
-        return {
-          id: `exam_${d.id}`,
-          familyId,
-          childId,
-          parentId: familyId,
-          title: `${String(row.subject || 'Exam')} Exam${resultSuffix}`,
-          category: 'exam',
-          color: '#ef4444',
-          startAt,
-          endAt,
-          allDay: false,
-          timezone: 'Asia/Kolkata',
-          recurrence: { type: 'none', interval: 1 },
-          linkedProgramId: row.linked_program_id as string | undefined,
-          linkedTaskIds: [],
-          participantIds: [],
-          reminderIds: [],
-          source: 'manual',
-          sync: { googleEnabled: false, syncStatus: 'not_configured' },
-          createdBy: 'parent',
-          createdAt: now,
-          updatedAt: now
-        };
-      });
-      setExamEvents(mappedExams);
-    });
-
-    return () => {
-      unsubTasks();
-      unsubExams();
-    };
-  }, [childId, familyId]);
-
-  const allEvents = useMemo(() => [...events, ...taskEvents, ...examEvents], [events, taskEvents, examEvents]);
 
 
 
@@ -264,7 +174,7 @@ export default function ChildPlannerV2Page() {
 
   async function handleCreateTask(e: React.FormEvent) {
     e.preventDefault();
-    if (!childId || !newTaskTitle.trim() || !activeActivityId) return;
+    if (!childId || !newTaskTitle.trim() || !activeActivityId || !newTaskSubjectId) return;
     setTaskCreating(true);
     try {
       await addDoc(collection(db, 'tasks'), {
@@ -274,8 +184,10 @@ export default function ChildPlannerV2Page() {
         parent_id: familyId,
         status: 'pending',
         due_date: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+        end_date: newTaskDue ? new Date(newTaskDue).toISOString() : null,
         recurrence_type: newTaskRecurrence,
         linked_program_id: activeActivityId,
+        subject_id: newTaskSubjectId,
         category: 'homework',
         priority: 'medium',
         star_value: activityPointsConfig?.taskPoints || 0,
@@ -286,6 +198,7 @@ export default function ChildPlannerV2Page() {
       setNewTaskTitle('');
       setNewTaskDue('');
       setNewTaskRecurrence('none');
+      setNewTaskSubjectId('');
       setShowTaskForm(false);
       await refreshEvents();
     } catch (err) {
@@ -688,15 +601,26 @@ export default function ChildPlannerV2Page() {
 
                 {showTaskForm && (
                   <form onSubmit={handleCreateTask} className="mb-8 rounded-3xl border border-cyan-400/20 bg-cyan-400/5 p-6 animate-in zoom-in-95 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <input 
                         required
                         value={newTaskTitle}
                         onChange={(e) => setNewTaskTitle(e.target.value)}
                         placeholder="What needs to be done?"
-                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
+                        className="lg:col-span-2 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
                       />
+                      <select
+                        required
+                        value={newTaskSubjectId}
+                        onChange={(e) => setNewTaskSubjectId(e.target.value)}
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
+                      >
+                        <option value="" className="bg-slate-900">Select Subject</option>
+                        {subjects.map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
+                        <option value="general" className="bg-slate-900">General Activity</option>
+                      </select>
                       <input 
+                        required
                         type="datetime-local"
                         value={newTaskDue}
                         onChange={(e) => setNewTaskDue(e.target.value)}
@@ -723,35 +647,84 @@ export default function ChildPlannerV2Page() {
                   </form>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category))).length ? 
-                    visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category))).map((event) => (
-                    <div key={event.id} className="group flex items-center justify-between gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/10">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-xl group-hover:scale-110 transition-transform">
-                          {event.category === 'homework' ? '📝' : '⚡'}
-                        </div>
-                        <div>
-                          <p className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors">{event.title}</p>
-                          <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                        </div>
+                {(() => {
+                  const activityTasks = visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category)));
+                  
+                  if (activityTasks.length === 0) {
+                    return (
+                      <div className="col-span-full py-20 text-center border border-white/5 bg-white/[0.02] rounded-3xl">
+                        <p className="text-lg font-medium text-white/20">No tasks currently assigned to this protocol.</p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {activityPointsConfig?.taskPoints ? (
-                          <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
-                            <span className="text-xs">⭐</span>
-                            <span className="text-xs font-black text-amber-400">{activityPointsConfig.taskPoints}</span>
+                    );
+                  }
+
+                  const todayStart = new Date();
+                  todayStart.setHours(0, 0, 0, 0);
+                  const todayEnd = new Date(todayStart.getTime() + 86400000);
+
+                  const tToday: any[] = [];
+                  const tFuture: any[] = [];
+                  const tPast: any[] = [];
+
+                  activityTasks.forEach(event => {
+                    const dTime = event.startAt ? new Date(event.startAt).getTime() : 0;
+                    if (!event.startAt) {
+                      tToday.push(event);
+                    } else if (dTime < todayStart.getTime()) {
+                      tPast.push(event);
+                    } else if (dTime >= todayEnd.getTime()) {
+                      tFuture.push(event);
+                    } else {
+                      tToday.push(event);
+                    }
+                  });
+
+                  const renderTaskList = (title: string, list: any[]) => (
+                    <div className="mb-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-white/50">{title}</h4>
+                        <div className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+                        <span className="text-xs font-black text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-full">{list.length}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {list.length === 0 ? (
+                          <div className="col-span-full py-8 text-center bg-white/[0.02] border border-white/5 rounded-2xl">
+                            <p className="text-xs font-medium text-white/20 italic">No tasks in this category.</p>
                           </div>
-                        ) : null}
-                        <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                        ) : list.map((event) => (
+                          <div key={event.id} className="group flex items-center justify-between gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/10">
+                            <div className="flex items-center gap-4">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-xl group-hover:scale-110 transition-transform">
+                                {event.category === 'homework' ? '📝' : '⚡'}
+                              </div>
+                              <div>
+                                <p className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors">{event.title}</p>
+                                <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {activityPointsConfig?.taskPoints ? (
+                                <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                                  <span className="text-xs">⭐</span>
+                                  <span className="text-xs font-black text-amber-400">{activityPointsConfig.taskPoints}</span>
+                                </div>
+                              ) : null}
+                              <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  )) : (
-                    <div className="col-span-full py-20 text-center">
-                      <p className="text-lg font-medium text-white/20">No tasks currently assigned to this protocol.</p>
+                  );
+
+                  return (
+                    <div className="space-y-4 mt-8">
+                      {renderTaskList('Today / Active', tToday)}
+                      {renderTaskList('Upcoming / Future', tFuture)}
+                      {renderTaskList('Past / Overdue', tPast)}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -837,33 +810,90 @@ export default function ChildPlannerV2Page() {
                   </form>
                 )}
 
-                <div className="space-y-3">
-                  {(isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).length ? 
-                    (isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam')).map((event) => (
-                    <div key={event.id} className="flex items-center justify-between rounded-3xl border border-rose-500/20 bg-rose-500/5 p-6 backdrop-blur-md">
-                      <div className="flex items-center gap-5">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-2xl">🎓</div>
-                        <div>
-                          <p className="text-lg font-black text-white tracking-tight">{event.title}</p>
-                          <p className="text-sm font-semibold text-rose-400/80">{new Date(event.startAt).toLocaleString()}</p>
-                        </div>
+                {(() => {
+                  const activityExams = isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam');
+                  
+                  if (activityExams.length === 0) {
+                    return (
+                      <div className="py-20 text-center border border-white/5 bg-white/[0.02] rounded-3xl mt-8">
+                        <p className="text-lg font-medium text-white/20">No active examinations detected.</p>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        {activityPointsConfig?.examPoints ? (
-                          <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
-                            <span className="text-xs">⭐</span>
-                            <span className="text-xs font-black text-amber-400">Up to {activityPointsConfig.examPoints}</span>
+                    );
+                  }
+
+                  const todayStart = new Date();
+                  todayStart.setHours(0, 0, 0, 0);
+                  const todayEnd = new Date(todayStart.getTime() + 86400000);
+
+                  const eToday: any[] = [];
+                  const eFuture: any[] = [];
+                  const ePast: any[] = [];
+
+                  activityExams.forEach(event => {
+                    const dTime = event.startAt ? new Date(event.startAt).getTime() : 0;
+                    if (!event.startAt) {
+                      eToday.push(event);
+                    } else if (dTime < todayStart.getTime()) {
+                      ePast.push(event);
+                    } else if (dTime >= todayEnd.getTime()) {
+                      eFuture.push(event);
+                    } else {
+                      eToday.push(event);
+                    }
+                  });
+
+                  const renderExamList = (title: string, list: any[]) => (
+                    <div className="mb-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-white/50">{title}</h4>
+                        <div className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+                        <span className="text-xs font-black text-rose-400 bg-rose-400/10 px-2 py-0.5 rounded-full">{list.length}</span>
+                      </div>
+                      <div className="space-y-3">
+                        {list.length === 0 ? (
+                          <div className="col-span-full py-8 text-center bg-white/[0.02] border border-white/5 rounded-2xl">
+                            <p className="text-xs font-medium text-white/20 italic">No exams in this category.</p>
                           </div>
-                        ) : null}
-                        <button className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                        ) : list.map((event) => {
+                          const isGreen = event.color === '#10b981';
+                          const isAmber = event.color === '#f59e0b';
+                          const bgBorderClass = isGreen ? 'border-emerald-500/20 bg-emerald-500/5' : isAmber ? 'border-amber-500/20 bg-amber-500/5' : 'border-rose-500/20 bg-rose-500/5';
+                          const iconBgClass = isGreen ? 'bg-emerald-500/10' : isAmber ? 'bg-amber-500/10' : 'bg-rose-500/10';
+                          const timeTextClass = isGreen ? 'text-emerald-400/80' : isAmber ? 'text-amber-400/80' : 'text-rose-400/80';
+                          
+                          return (
+                            <div key={event.id} className={`flex items-center justify-between rounded-3xl border ${bgBorderClass} p-6 backdrop-blur-md`}>
+                              <div className="flex items-center gap-5">
+                                <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${iconBgClass} text-2xl`}>🎓</div>
+                                <div>
+                                  <p className="text-lg font-black text-white tracking-tight">{event.title}</p>
+                                  <p className={`text-sm font-semibold ${timeTextClass}`}>{new Date(event.startAt).toLocaleString()}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                {activityPointsConfig?.examPoints ? (
+                                  <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                                    <span className="text-xs">⭐</span>
+                                    <span className="text-xs font-black text-amber-400">Up to {activityPointsConfig.examPoints}</span>
+                                  </div>
+                                ) : null}
+                                <button className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  )) : (
-                    <div className="py-20 text-center">
-                      <p className="text-lg font-medium text-white/20">No active examinations detected.</p>
+                  );
+
+                  return (
+                    <div className="space-y-4 mt-8">
+                      {renderExamList('Today / Active', eToday)}
+                      {renderExamList('Upcoming / Future', eFuture)}
+                      {renderExamList('Past / Completed', ePast)}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1004,38 +1034,88 @@ export default function ChildPlannerV2Page() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {subjects.length ? subjects.map((sub) => (
-                    <div key={sub.id} className="relative group overflow-hidden flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:bg-white/[0.05]">
+                  {subjects.length ? subjects.map((sub) => {
+                    const subjectTasks = allEvents.filter(t => t.category === 'homework' && t.linkedProgramId === activeActivityId && t.subjectId === sub.id);
+                    const subjectExams = allEvents.filter(e => e.category === 'exam' && e.linkedProgramId === activeActivityId && (e.subjectId === sub.id || e.subject === sub.name));
+
+                    return (
+                    <div 
+                      key={sub.id} 
+                      onClick={() => setExpandedSubjectId(expandedSubjectId === sub.id ? null : sub.id)}
+                      className={`relative group overflow-hidden flex flex-col justify-between rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:bg-white/[0.05] cursor-pointer ${expandedSubjectId === sub.id ? 'ring-2 ring-indigo-500/50' : ''}`}
+                    >
                       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="relative z-10 h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl shadow-inner">📚</div>
-                      <div className="relative z-10 flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-base font-bold text-white truncate">{sub.name}</p>
+                      
+                      <div className="flex items-center gap-4 w-full">
+                        <div className="relative z-10 h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl shadow-inner">📚</div>
+                        <div className="relative z-10 flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-base font-bold text-white truncate">{sub.name}</p>
+                            {sub.includeInExams && (
+                              <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" title="Included in Exams" />
+                            )}
+                          </div>
+                          <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
+                        </div>
+                        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); startEditSubject(sub); }}
+                            className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"
+                            title="Edit"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); if(confirm('Delete subject?')) removeSubject(sub.id); }}
+                            className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {expandedSubjectId === sub.id && (
+                        <div className="mt-4 pt-4 border-t border-white/10 space-y-3 z-10 relative w-full">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-wider text-cyan-400 mb-1.5">Tasks ({subjectTasks.length})</p>
+                            {subjectTasks.length > 0 ? (
+                              <div className="space-y-1 max-h-[120px] overflow-y-auto pr-1 custom-scrollbar">
+                                {subjectTasks.map(t => (
+                                  <div key={t.id} className="flex justify-between items-center text-xs bg-black/40 p-2 rounded-xl border border-white/5 shadow-sm">
+                                    <span className="text-white font-semibold truncate mr-2" title={t.title}>{t.title}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-black shrink-0 ${t.color === '#10b981' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>PENDING</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[10px] text-white/30 italic">No tasks assigned.</p>
+                            )}
+                          </div>
+
                           {sub.includeInExams && (
-                            <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" title="Included in Exams" />
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-wider text-rose-400 mb-1.5">Exams ({subjectExams.length})</p>
+                              {subjectExams.length > 0 ? (
+                                <div className="space-y-1 max-h-[120px] overflow-y-auto pr-1 custom-scrollbar">
+                                  {subjectExams.map(ex => (
+                                    <div key={ex.id} className="flex justify-between items-center text-xs bg-black/40 p-2 rounded-xl border border-white/5 shadow-sm">
+                                      <span className="text-white font-semibold truncate mr-2" title={ex.title}>{ex.title.replace(' Exam', '')}</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black shrink-0 ${ex.color === '#10b981' ? 'bg-emerald-500/20 text-emerald-400' : ex.color === '#f59e0b' ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                                        {ex.title.includes('(') ? ex.title.split('(')[1].replace(')', '') : 'Upcoming'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-white/30 italic">No exams recorded.</p>
+                              )}
+                            </div>
                           )}
                         </div>
-                        <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
-                        <p className="text-[9px] text-white/20 font-black uppercase tracking-[0.15em] mt-1">Matrix Ref: {sub.id.slice(-6)}</p>
-                      </div>
-                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => startEditSubject(sub)}
-                          className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"
-                          title="Edit"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button 
-                          onClick={() => { if(confirm('Delete subject?')) removeSubject(sub.id); }}
-                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all"
-                          title="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  )) : (
+                  )}) : (
                     <div className="col-span-full py-20 text-center text-white/20 font-medium">No subjects registered in this protocol.</div>
                   )}
                 </div>

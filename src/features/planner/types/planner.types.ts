@@ -88,6 +88,8 @@ export interface PlannerEvent {
   timezone: string;
   recurrence: PlannerRecurrence;
   linkedProgramId?: string | null;
+  subjectId?: string | null;
+  subject?: string | null;
   linkedTaskIds: string[];
   participantIds: string[];
   reminderIds: string[];
