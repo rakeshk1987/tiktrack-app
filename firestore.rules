@@ -156,9 +156,29 @@ service cloud.firestore {
     }
 
     match /routines/{routineId} {
-      allow read: if isParent() || resource == null || resource.data.child_id == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
-      allow create: if isParent();
-      allow update: if isParent() || (isChild() && (resource.data.child_id == null || resource.data.child_id == request.auth.uid));
+      // Child can read routines assigned to them or to all children
+      allow read: if signedIn() && (
+        isParent() ||
+        resource == null ||
+        resource.data.family_id == familyIdFor(request.auth.uid) ||
+        resource.data.child_id == request.auth.uid ||
+        resource.data.child_id == null ||
+        resource.data.child_id == ''
+      );
+      // Parent can create any; child can create their own (goes to approval)
+      allow create: if isParent() || (
+        isChild() &&
+        request.resource.data.child_id == request.auth.uid &&
+        request.resource.data.created_by == 'child' &&
+        request.resource.data.family_id is string
+      );
+      allow update: if isParent() || (
+        isChild() && (
+          resource.data.child_id == request.auth.uid ||
+          resource.data.child_id == null ||
+          resource.data.child_id == ''
+        )
+      );
       allow delete: if isParent();
     }
 

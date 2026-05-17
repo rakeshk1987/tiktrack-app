@@ -80,10 +80,16 @@ export interface Routine {
   family_id: string;
   child_id?: string | null;
   title: string;
-  schedule_time: string;
+  start_time: string;       // HH:MM
+  end_time: string;         // HH:MM
+  /** @deprecated use start_time instead */
+  schedule_time?: string;
+  day_range: 'weekday' | 'weekend' | 'everyday';
   points: number;
   streak: number;
   icon?: string;
+  requires_approval: boolean;
+  created_by: 'parent' | 'child';
   status: 'active' | 'archived';
   created_at: string;
   updated_at: string;

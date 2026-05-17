@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDocs, orderBy, limit } from 'firebase/firestore';
+import {
+  collection, query, where, onSnapshot, addDoc,
+  updateDoc, doc, getDocs, orderBy, limit
+} from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { Routine, RoutineLog } from '../types/schema';
 import { useSickMode } from './useSickMode';
+
+/** Returns the effective day range key for today */
+export function getTodayDayRange(): 'weekday' | 'weekend' {
+  const day = new Date().getDay(); // 0=Sun, 6=Sat
+  return (day === 0 || day === 6) ? 'weekend' : 'weekday';
+}
 
 export function useRoutines(familyId: string, childId?: string) {
   const [routines, setRoutines] = useState<Routine[]>([]);
@@ -11,7 +20,6 @@ export function useRoutines(familyId: string, childId?: string) {
 
   const { getActiveSickPeriod } = useSickMode(familyId, childId || '');
 
-  // Fetch routines
   useEffect(() => {
     if (!familyId) {
       setRoutines([]);
@@ -19,27 +27,36 @@ export function useRoutines(familyId: string, childId?: string) {
       return;
     }
 
-    let q = query(
+    // Query by family_id only to avoid composite index requirements;
+    // filter child_id client-side to handle null/''/childId cases.
+    const q = query(
       collection(db, 'routines'),
       where('family_id', '==', familyId),
       where('status', '==', 'active')
     );
 
-    if (childId) {
-      q = query(
-        collection(db, 'routines'),
-        where('family_id', '==', familyId),
-        where('child_id', 'in', [childId, null, '']),
-        where('status', '==', 'active')
-      );
-    }
-
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Routine));
-        // Sort by schedule_time
-        results.sort((a, b) => a.schedule_time.localeCompare(b.schedule_time));
+        let results = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Routine));
+
+        // Client-side filter: include routines assigned to this child OR to all children
+        if (childId) {
+          results = results.filter(r => !r.child_id || r.child_id === '' || r.child_id === childId);
+        }
+
+        // Normalize: support old schedule_time field on existing docs
+        results = results.map(r => ({
+          ...r,
+          start_time: r.start_time || r.schedule_time || '07:00',
+          end_time: r.end_time || r.schedule_time || '08:00',
+          day_range: r.day_range || 'everyday',
+          requires_approval: r.requires_approval ?? false,
+          created_by: r.created_by || 'parent',
+        }));
+
+        // Sort by start_time ascending
+        results.sort((a, b) => a.start_time.localeCompare(b.start_time));
         setRoutines(results);
         setLoading(false);
       },
@@ -53,15 +70,20 @@ export function useRoutines(familyId: string, childId?: string) {
     return () => unsubscribe();
   }, [familyId, childId]);
 
-  const createRoutine = async (routine: Omit<Routine, 'id' | 'created_at' | 'updated_at' | 'streak'>) => {
+  const createRoutine = async (
+    routine: Omit<Routine, 'id' | 'created_at' | 'updated_at' | 'streak'>
+  ) => {
     try {
       const now = new Date().toISOString();
-      const docRef = await addDoc(collection(db, 'routines'), {
+      const payload = {
         ...routine,
+        // keep backward-compat field
+        schedule_time: routine.start_time,
         streak: 0,
         created_at: now,
         updated_at: now,
-      });
+      };
+      const docRef = await addDoc(collection(db, 'routines'), payload);
       return docRef.id;
     } catch (err: any) {
       setError(err.message);
@@ -72,10 +94,9 @@ export function useRoutines(familyId: string, childId?: string) {
   const updateRoutine = async (id: string, updates: Partial<Routine>) => {
     try {
       const ref = doc(db, 'routines', id);
-      await updateDoc(ref, {
-        ...updates,
-        updated_at: new Date().toISOString(),
-      });
+      const payload: any = { ...updates, updated_at: new Date().toISOString() };
+      if (updates.start_time) payload.schedule_time = updates.start_time;
+      await updateDoc(ref, payload);
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -86,17 +107,21 @@ export function useRoutines(familyId: string, childId?: string) {
     return updateRoutine(id, { status: 'archived' });
   };
 
-  const logRoutine = async (routine: Routine, targetChildId: string, status: 'completed' | 'missed' | 'sick') => {
+  const logRoutine = async (
+    routine: Routine,
+    targetChildId: string,
+    status: 'completed' | 'missed' | 'sick'
+  ) => {
     try {
       const today = new Date();
-      // Format as YYYY-MM-DD in local time
-      const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      const dateStr =
+        today.getFullYear() +
+        '-' + String(today.getMonth() + 1).padStart(2, '0') +
+        '-' + String(today.getDate()).padStart(2, '0');
 
-      // Check if sick mode is active for the child
+      // Sick mode override
       const sickPeriod = getActiveSickPeriod(targetChildId);
-      if (sickPeriod) {
-        status = 'sick';
-      }
+      if (sickPeriod) status = 'sick';
 
       const logData: Omit<RoutineLog, 'id'> = {
         routine_id: routine.id,
@@ -110,56 +135,45 @@ export function useRoutines(familyId: string, childId?: string) {
       await addDoc(collection(db, 'routine_logs'), logData);
 
       if (status === 'completed') {
-        // Create an approval request for the parent
-        await addDoc(collection(db, 'approvals'), {
-          family_id: familyId,
-          child_id: targetChildId,
-          type: 'routine',
-          reference_id: routine.id,
-          title: routine.title,
-          points: Number(routine.points || 0),
-          status: 'pending',
-          created_at: new Date().toISOString(),
-        });
-      }
+        // If approval required, create pending approval; otherwise grant stars directly
+        if (routine.requires_approval) {
+          await addDoc(collection(db, 'approvals'), {
+            family_id: familyId,
+            child_id: targetChildId,
+            type: 'routine',
+            reference_id: routine.id,
+            title: routine.title,
+            points: Number(routine.points || 0),
+            status: 'pending',
+            created_at: new Date().toISOString(),
+          });
+        }
 
-      if (status === 'completed') {
-        // Evaluate streak
-        const logsRef = collection(db, 'routine_logs');
+        // Evaluate and update streak
         const qLogs = query(
-          logsRef,
+          collection(db, 'routine_logs'),
           where('routine_id', '==', routine.id),
           where('child_id', '==', targetChildId),
           where('status', '==', 'completed'),
           orderBy('date', 'desc'),
-          limit(2) // Get today's (just added) and the previous one
+          limit(2)
         );
         const snapshot = await getDocs(qLogs);
         const completedLogs = snapshot.docs.map(d => d.data() as RoutineLog);
-        
+
         let newStreak = routine.streak || 0;
-        
         if (completedLogs.length > 1) {
           const previousDate = new Date(completedLogs[1].date);
-          const diffDays = Math.floor((today.getTime() - previousDate.getTime()) / (1000 * 3600 * 24));
-          
-          if (diffDays === 1) {
-            newStreak += 1;
-          } else if (diffDays > 1) {
-            // Check if there was a sick period in between
-            // For now, if there is a gap > 1 day, we reset, but we could check sick logs.
-            // Simplified: if they completed it today but missed yesterday, streak resets to 1
-            newStreak = 1;
-          }
+          const diffDays = Math.floor(
+            (today.getTime() - previousDate.getTime()) / (1000 * 3600 * 24)
+          );
+          newStreak = diffDays === 1 ? newStreak + 1 : 1;
         } else {
-          // First completion
           newStreak = 1;
         }
 
-        // Update routine streak
         await updateRoutine(routine.id, { streak: newStreak });
       }
-
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -168,7 +182,10 @@ export function useRoutines(familyId: string, childId?: string) {
 
   const getTodayLogs = async (targetChildId: string) => {
     const today = new Date();
-    const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const dateStr =
+      today.getFullYear() +
+      '-' + String(today.getMonth() + 1).padStart(2, '0') +
+      '-' + String(today.getDate()).padStart(2, '0');
 
     const qLogs = query(
       collection(db, 'routine_logs'),
@@ -188,6 +205,6 @@ export function useRoutines(familyId: string, childId?: string) {
     updateRoutine,
     archiveRoutine,
     logRoutine,
-    getTodayLogs
+    getTodayLogs,
   };
 }
