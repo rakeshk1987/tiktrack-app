@@ -172,24 +172,24 @@ export default function ChildProfile() {
           <h3 className="mt-6 text-xl font-display font-bold">Profile Settings</h3>
           <p className={clsx('mt-1 text-sm', descriptionClass)}>Choose how TikTrack sees you and talks with you.</p>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className={clsx('rounded-[1.1rem] border px-4 py-3', profileCardClass)}>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
               <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Avatar</p>
               <p className="mt-1 text-2xl font-bold">{avatarEmoji}</p>
             </div>
-            <div className={clsx('rounded-[1.1rem] border px-4 py-3', profileCardClass)}>
+            <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
               <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Age</p>
               <p className="mt-1 text-base font-bold">{age} years</p>
             </div>
-            <div className={clsx('rounded-[1.1rem] border px-4 py-3', profileCardClass)}>
+            <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
               <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Full Name</p>
-              <p className="mt-1 text-base font-bold">{profile.name}</p>
+              <p className="mt-1 truncate text-base font-bold">{profile.name}</p>
             </div>
-            <div className={clsx('rounded-[1.1rem] border px-4 py-3', profileCardClass)}>
+            <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
               <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Level</p>
-              <p className="mt-1 text-base font-bold">{level.levelName}</p>
+              <p className="mt-1 truncate text-base font-bold">{level.levelName}</p>
             </div>
-            <div className={clsx('rounded-[1.1rem] border px-4 py-3', profileCardClass)}>
+            <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
               <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Stars to Next</p>
               <p className="mt-1 text-base font-bold">{level.starsToNext}</p>
             </div>

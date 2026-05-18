@@ -137,16 +137,36 @@ export function useRoutines(familyId: string, childId?: string) {
       if (status === 'completed') {
         // If approval required, create pending approval; otherwise grant stars directly
         if (routine.requires_approval) {
-          await addDoc(collection(db, 'approvals'), {
-            family_id: familyId,
-            child_id: targetChildId,
-            type: 'routine',
-            reference_id: routine.id,
-            title: routine.title,
-            points: Number(routine.points || 0),
-            status: 'pending',
-            created_at: new Date().toISOString(),
+          const pendingApprovalsQuery = query(
+            collection(db, 'approvals'),
+            where('family_id', '==', familyId)
+          );
+          const pendingApprovalsSnapshot = await getDocs(pendingApprovalsQuery);
+          const hasPendingApprovalToday = pendingApprovalsSnapshot.docs.some((approvalDoc) => {
+            const approval = approvalDoc.data();
+            const submittedDate = approval.created_at
+              ? new Date(approval.created_at).toISOString().slice(0, 10)
+              : '';
+
+            return approval.child_id === targetChildId
+              && approval.type === 'routine'
+              && approval.reference_id === routine.id
+              && approval.status === 'pending'
+              && submittedDate === dateStr;
           });
+
+          if (!hasPendingApprovalToday) {
+            await addDoc(collection(db, 'approvals'), {
+              family_id: familyId,
+              child_id: targetChildId,
+              type: 'routine',
+              reference_id: routine.id,
+              title: routine.title,
+              points: Number(routine.points || 0),
+              status: 'pending',
+              created_at: new Date().toISOString(),
+            });
+          }
         }
 
         // Evaluate and update streak

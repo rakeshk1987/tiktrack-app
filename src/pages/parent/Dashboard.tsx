@@ -368,7 +368,22 @@ function ParentDashboardContent() {
   const { approvals: topLevelApprovals } = useApprovals(familyId);
   
   const unreadMessagesCount = useMemo(() => inboxMessages.filter(m => m.sender_role === 'child' && !m.is_read).length, [inboxMessages]);
-  const pendingApprovalCount = useMemo(() => topLevelApprovals.filter((approval) => approval.status === 'pending').length, [topLevelApprovals]);
+  const pendingApprovalCount = useMemo(() => {
+    const groupedPending = new Set<string>();
+    topLevelApprovals
+      .filter((approval) => approval.status === 'pending')
+      .forEach((approval) => {
+        const submittedDate = new Date(approval.created_at).toISOString().slice(0, 10);
+        groupedPending.add([
+          approval.child_id,
+          approval.type,
+          approval.reference_id || approval.title,
+          submittedDate,
+        ].join('|'));
+      });
+
+    return groupedPending.size;
+  }, [topLevelApprovals]);
 
   const openParentChat = useCallback(() => {
     const latestUnread = inboxMessages

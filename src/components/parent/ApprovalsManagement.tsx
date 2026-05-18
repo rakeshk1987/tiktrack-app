@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { useApprovals } from '../../hooks/useApprovals';
 import { useToast } from '../../contexts/ToastContext';
 import type { ChildProfile } from '../../types/schema';
-import { CheckCircle2, XCircle, Clock, ShieldCheck, DollarSign, Calendar, Plus, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, ShieldCheck, DollarSign, Calendar, Plus, Hash } from 'lucide-react';
 
 interface ApprovalsManagementProps {
   familyId: string;
@@ -15,7 +15,6 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
   const { addToast } = useToast();
 
   const [activeSubTab, setActiveSubTab] = useState<'pending' | 'history' | 'settlements'>('pending');
-  const [comment, setComment] = useState('');
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   // Settlement Form State
@@ -28,13 +27,39 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
 
   const pendingApprovals = useMemo(() => approvals.filter(a => a.status === 'pending'), [approvals]);
   const historyApprovals = useMemo(() => approvals.filter(a => a.status !== 'pending'), [approvals]);
+  const groupedPendingApprovals = useMemo(() => {
+    const groups = new Map<string, typeof pendingApprovals>();
 
-  const handleResolve = async (id: string, status: 'approved' | 'rejected') => {
-    setResolvingId(id);
+    pendingApprovals.forEach((approval) => {
+      const submittedDate = new Date(approval.created_at).toISOString().slice(0, 10);
+      const groupKey = [
+        approval.child_id,
+        approval.type,
+        approval.reference_id || approval.title,
+        submittedDate,
+      ].join('|');
+
+      groups.set(groupKey, [...(groups.get(groupKey) || []), approval]);
+    });
+
+    return Array.from(groups.values()).map((items) => ({
+      primary: items[0],
+      items,
+    }));
+  }, [pendingApprovals]);
+
+  const handleResolveGroup = async (ids: string[], status: 'approved' | 'rejected') => {
+    setResolvingId(ids[0]);
     try {
-      await resolveApproval(id, status, familyId);
-      addToast(`Submission successfully ${status}!`, 'success');
-      setComment('');
+      if (status === 'approved' && ids.length > 1) {
+        const [primaryId, ...duplicateIds] = ids;
+        await resolveApproval(primaryId, 'approved', familyId);
+        await Promise.all(duplicateIds.map((id) => resolveApproval(id, 'rejected', familyId, { notifyChild: false, awardPoints: false })));
+        addToast(`Approved once and cleared ${duplicateIds.length} duplicate submission${duplicateIds.length === 1 ? '' : 's'}.`, 'success');
+      } else {
+        await Promise.all(ids.map((id) => resolveApproval(id, status, familyId)));
+        addToast(`${ids.length > 1 ? `${ids.length} submissions` : 'Submission'} successfully ${status}!`, 'success');
+      }
     } catch (error) {
       addToast('Failed to resolve approval.', 'error');
     } finally {
@@ -112,7 +137,7 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10'
               )}
             >
-              {tab} {tab === 'pending' && pendingApprovals.length > 0 && `(${pendingApprovals.length})`}
+              {tab} {tab === 'pending' && groupedPendingApprovals.length > 0 && `(${groupedPendingApprovals.length})`}
             </button>
           ))}
         </div>
@@ -126,47 +151,59 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
             <p className="text-slate-500 dark:text-white/60">All caught up! No pending approvals at the moment.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {pendingApprovals.map(approval => {
+          <div className="space-y-3">
+            {groupedPendingApprovals.map(({ primary: approval, items }) => {
               const child = childrenProfiles.find(c => c.id === approval.child_id);
+              const submittedAt = new Date(approval.created_at);
+              const duplicateCount = items.length;
               return (
-                <div key={approval.id} className="rounded-2xl border p-5 bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4">
+                <div key={items.map(item => item.id).join('-')} className="rounded-xl border px-4 py-3 bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
                     {approval.proof_image_url ? (
-                      <img src={approval.proof_image_url} alt="Proof" className="h-16 w-16 rounded-xl object-cover border border-slate-200 dark:border-white/10" />
+                      <img src={approval.proof_image_url} alt="Proof" className="h-12 w-12 shrink-0 rounded-lg object-cover border border-slate-200 dark:border-white/10" />
                     ) : (
-                      <div className="h-16 w-16 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center text-2xl">
+                      <div className="h-12 w-12 shrink-0 rounded-lg bg-slate-100 dark:bg-white/10 flex items-center justify-center text-xl">
                         {approval.type === 'routine' ? '⏰' : approval.type === 'reward' ? '🎁' : '📝'}
                       </div>
                     )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 px-2 py-0.5 rounded">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 px-2 py-0.5 rounded">
                           {approval.type}
                         </span>
-                        <span className="text-xs text-slate-400">
-                          {new Date(approval.created_at).toLocaleDateString()}
+                        {duplicateCount > 1 && (
+                          <span className="text-[10px] font-bold uppercase bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300 px-2 py-0.5 rounded">
+                            {duplicateCount} submissions
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-400 flex items-center gap-1">
+                          <Calendar size={12} /> {submittedAt.toLocaleDateString()} at {submittedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <h3 className="font-bold text-lg text-slate-900 dark:text-white mt-1">{approval.title}</h3>
-                      <p className="text-sm text-slate-500 dark:text-white/60">
-                        Submitted by: <span className="font-semibold text-slate-700 dark:text-white">{child?.name || 'Unknown Child'}</span>
-                      </p>
-                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">Value: +{approval.points} Stars</p>
+                      <h3 className="font-bold text-base text-slate-900 dark:text-white mt-1 truncate">{approval.title}</h3>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-white/60">
+                        <span>Child: <span className="font-semibold text-slate-700 dark:text-white">{child?.name || 'Unknown Child'}</span></span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">+{approval.points} Stars</span>
+                        {approval.reference_id && (
+                          <span className="flex items-center gap-1">
+                            <Hash size={12} /> {approval.reference_id.slice(0, 8)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
-                      disabled={resolvingId === approval.id}
-                      onClick={() => handleResolve(approval.id, 'rejected')}
-                      className="px-4 py-2 rounded-xl text-sm font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 transition-colors flex items-center gap-1.5"
+                      disabled={items.some(item => resolvingId === item.id)}
+                      onClick={() => handleResolveGroup(items.map(item => item.id), 'rejected')}
+                      className="px-3 py-2 rounded-lg text-sm font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 transition-colors flex items-center gap-1.5"
                     >
                       <XCircle size={16} /> Reject
                     </button>
                     <button
-                      disabled={resolvingId === approval.id}
-                      onClick={() => handleResolve(approval.id, 'approved')}
-                      className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5 shadow-sm"
+                      disabled={items.some(item => resolvingId === item.id)}
+                      onClick={() => handleResolveGroup(items.map(item => item.id), 'approved')}
+                      className="px-3 py-2 rounded-lg text-sm font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5 shadow-sm"
                     >
                       <CheckCircle2 size={16} /> Approve
                     </button>

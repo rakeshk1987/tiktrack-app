@@ -82,8 +82,14 @@ export function useApprovals(familyId: string, childId?: string) {
     }
   };
 
-  const resolveApproval = async (approvalId: string, status: 'approved' | 'rejected', parentId: string) => {
+  const resolveApproval = async (
+    approvalId: string,
+    status: 'approved' | 'rejected',
+    parentId: string,
+    options: { notifyChild?: boolean; awardPoints?: boolean } = {}
+  ) => {
     try {
+      const { notifyChild = true, awardPoints = true } = options;
       const ref = doc(db, 'approvals', approvalId);
       const snap = await getDoc(ref);
       if (!snap.exists()) throw new Error('Approval not found');
@@ -97,7 +103,7 @@ export function useApprovals(familyId: string, childId?: string) {
       });
 
       // If approved and has points, award to child
-      if (status === 'approved' && data.points && data.points > 0) {
+      if (awardPoints && status === 'approved' && data.points && data.points > 0) {
         const profileRef = doc(db, 'child_profile', data.child_id);
         const profileSnap = await getDoc(profileRef);
         if (profileSnap.exists()) {
@@ -109,16 +115,18 @@ export function useApprovals(familyId: string, childId?: string) {
       }
 
       // Send notification message to the child's inbox
-      await addDoc(collection(db, 'messages'), {
-        child_id: data.child_id,
-        parent_id: parentId,
-        content: `Your ${data.type} request "${data.title}" was ${status}!`,
-        timestamp: new Date().toISOString(),
-        is_read: false,
-        sender_role: 'parent',
-        sender_id: parentId,
-        subject: `Quest Resolution`
-      });
+      if (notifyChild) {
+        await addDoc(collection(db, 'messages'), {
+          child_id: data.child_id,
+          parent_id: parentId,
+          content: `Your ${data.type} request "${data.title}" was ${status}!`,
+          timestamp: new Date().toISOString(),
+          is_read: false,
+          sender_role: 'parent',
+          sender_id: parentId,
+          subject: `Quest Resolution`
+        });
+      }
 
     } catch (err: any) {
       setError(err.message);
