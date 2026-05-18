@@ -81,6 +81,7 @@ export const moodOptions: Array<{
 
 export interface ChildLayoutContextValue {
   activeTab: ChildTab;
+  avatarEmoji: string;
   childName: string;
   currentMood: (typeof moodOptions)[number] | null;
   entries: ReturnType<typeof useDiaryEntries>['entries'];
@@ -193,6 +194,8 @@ export default function ChildLayout() {
   const path = location.pathname;
   const activeTab: ChildTab = path.endsWith('/quests')
     ? 'quests'
+    : path.endsWith('/routines')
+      ? 'routines'
     : path.endsWith('/planner')
       ? 'planner'
     : path.endsWith('/diary')
@@ -213,7 +216,7 @@ export default function ChildLayout() {
 
     try {
       const saved = localStorage.getItem(tabStorageKey);
-      if (saved && (['home', 'quests', 'planner', 'diary', 'rewards', 'money-pot', 'profile'] as string[]).includes(saved)) {
+      if (saved && (['home', 'routines', 'quests', 'planner', 'diary', 'rewards', 'money-pot', 'profile'] as string[]).includes(saved)) {
         void navigate(saved === 'home' ? '/child' : `/child/${saved}`);
       }
     } catch {}
@@ -358,6 +361,7 @@ export default function ChildLayout() {
 
   const isDark = theme === 'dark';
   const childName = profile.pet_name || profile.name || 'Explorer';
+  const avatarEmoji = profile.avatar_emoji || '🦊';
   
   const isMoodNegative = moodLog?.mood === 'sad' || moodLog?.mood === 'angry';
   const isMoodPositive = moodLog?.mood === 'happy' || moodLog?.mood === 'excited';
@@ -684,6 +688,7 @@ export default function ChildLayout() {
   const contextValue: ChildLayoutContextValue = {
     accentCaptionClass,
     activeTab,
+    avatarEmoji,
     childName,
     currentMood,
     diaryDraft,
@@ -735,8 +740,8 @@ export default function ChildLayout() {
       <div className="mx-auto max-w-[1680px] px-3 pb-10 pt-4 relative z-10 sm:px-5 lg:px-8 lg:pt-6">
         <div className={clsx('sticky top-3 z-30 mb-4 hidden gap-3 rounded-[1.35rem] border px-3 py-2 shadow-[0_16px_45px_rgba(15,23,42,0.16)] backdrop-blur-xl md:flex md:flex-col xl:flex-row xl:items-center xl:justify-between', navShellClass)}>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/15 bg-white/8 text-sky-300">
-              <UserRound size={17} />
+            <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/15 bg-white/8 text-xl text-sky-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+              {avatarEmoji || <UserRound size={17} />}
             </div>
             <div>
               <p className={clsx('text-[10px] font-black uppercase tracking-[0.2em]', lowContrastTextClass)}>Explorer</p>
@@ -761,7 +766,7 @@ export default function ChildLayout() {
                   {tab.id === 'money-pot' && moneyPotAlert ? (
                     <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-slate-900" />
                   ) : null}
-                  <Icon size={17} />
+                  {tab.id === 'profile' ? <span className="text-base leading-none">{avatarEmoji}</span> : <Icon size={17} />}
                   <span>{tab.label}</span>
                 </button>
               );
@@ -840,7 +845,7 @@ export default function ChildLayout() {
               {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
               {theme === 'light' ? 'Dark sky' : 'Light sky'}
             </button>
-            <div className="ml-auto rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm font-bold text-white/80">Profile: {childName}</div>
+            <div className="ml-auto rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm font-bold text-white/80">Profile: {avatarEmoji} {childName}</div>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -940,7 +945,7 @@ export default function ChildLayout() {
                   {tab.id === 'money-pot' && moneyPotAlert ? (
                     <span className="absolute right-2 top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-slate-900" />
                   ) : null}
-                  <Icon size={20} />
+                  {tab.id === 'profile' ? <span className="text-xl leading-none">{avatarEmoji}</span> : <Icon size={20} />}
                   <span className="text-[11px] font-black">{tab.label}</span>
                 </button>
               );

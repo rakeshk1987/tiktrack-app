@@ -143,30 +143,46 @@ export default function RoutinePage() {
   }
 
   const completedCount = timeline.filter(r => todayLogs[r.id]?.status === 'completed').length;
+  const pendingCount = Math.max(timeline.length - completedCount, 0);
 
   return (
-    <div className="max-w-2xl mx-auto pb-28 px-1">
-      {/* Day banner */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <p className={clsx('text-xs font-black uppercase tracking-widest mb-0.5', isDark ? 'text-cyan-400' : 'text-cyan-600')}>
-            {dayLabel} Routines
-          </p>
-          <h1 className={clsx('text-2xl font-black', isDark ? 'text-white' : 'text-slate-900')}>
-            {now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-          </h1>
-          {timeline.length > 0 && (
-            <p className={clsx('text-sm font-semibold mt-0.5', isDark ? 'text-white/50' : 'text-slate-500')}>
-              {completedCount} / {timeline.length} completed
+    <div className="mx-auto max-w-4xl pb-28 px-1">
+      <div className={clsx('mb-5 rounded-2xl border p-4', isDark ? 'border-white/10 bg-white/[0.04]' : 'border-slate-200 bg-white')}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className={clsx('text-xs font-black uppercase tracking-widest mb-0.5', isDark ? 'text-cyan-400' : 'text-cyan-600')}>
+              {dayLabel} Timeline
             </p>
-          )}
+            <h1 className={clsx('text-2xl font-black', isDark ? 'text-white' : 'text-slate-900')}>
+              {now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+            </h1>
+            <p className={clsx('mt-1 text-sm font-semibold', isDark ? 'text-white/50' : 'text-slate-500')}>
+              Complete today&apos;s routine before 10:00 PM.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 md:min-w-[320px]">
+            <div className={clsx('rounded-xl border px-3 py-2 text-center', isDark ? 'border-emerald-400/20 bg-emerald-400/10' : 'border-emerald-100 bg-emerald-50')}>
+              <p className={clsx('text-xl font-black', isDark ? 'text-emerald-300' : 'text-emerald-600')}>{completedCount}</p>
+              <p className={clsx('text-[10px] font-black uppercase tracking-wider', isDark ? 'text-white/45' : 'text-slate-500')}>Done</p>
+            </div>
+            <div className={clsx('rounded-xl border px-3 py-2 text-center', isDark ? 'border-amber-400/20 bg-amber-400/10' : 'border-amber-100 bg-amber-50')}>
+              <p className={clsx('text-xl font-black', isDark ? 'text-amber-300' : 'text-amber-600')}>{pendingCount}</p>
+              <p className={clsx('text-[10px] font-black uppercase tracking-wider', isDark ? 'text-white/45' : 'text-slate-500')}>Pending</p>
+            </div>
+            <div className={clsx('rounded-xl border px-3 py-2 text-center', isPastLockout ? (isDark ? 'border-rose-400/20 bg-rose-400/10' : 'border-rose-100 bg-rose-50') : (isDark ? 'border-cyan-400/20 bg-cyan-400/10' : 'border-cyan-100 bg-cyan-50'))}>
+              <p className={clsx('text-xl font-black', isPastLockout ? (isDark ? 'text-rose-300' : 'text-rose-600') : (isDark ? 'text-cyan-300' : 'text-cyan-600'))}>{isPastLockout ? 'Locked' : '10 PM'}</p>
+              <p className={clsx('text-[10px] font-black uppercase tracking-wider', isDark ? 'text-white/45' : 'text-slate-500')}>Deadline</p>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-2 text-sm font-bold text-white hover:bg-cyan-400 transition-colors shadow-lg shadow-cyan-500/30"
-        >
-          <Plus size={15} /> Add
-        </button>
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-2 text-sm font-bold text-white hover:bg-cyan-400 transition-colors shadow-lg shadow-cyan-500/30"
+          >
+            <Plus size={15} /> Add
+          </button>
+        </div>
       </div>
 
       {/* 10 PM lockout warning */}

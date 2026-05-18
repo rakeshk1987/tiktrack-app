@@ -42,6 +42,9 @@ export interface ChildProfile {
   money_wish_target?: number;
   avatar_emoji?: string;
   interests?: string[];
+  personality_tags?: string[];
+  communication_style?: 'cheerful' | 'calm' | 'challenge' | 'short';
+  profile_motto?: string;
   early_bird_count?: number;
   reading_completed_count?: number;
   study_completed_count?: number;

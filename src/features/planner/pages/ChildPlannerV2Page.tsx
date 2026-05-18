@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import clsx from 'clsx';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -21,10 +22,21 @@ import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable'
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
-import { expandRecurringEventForRange } from '../utils/planner.recurrence';
+import { expandRecurringEventForRange, formatPlannerRecurrence, getNextPlannerOccurrence, getPlannerExpiryStatus } from '../utils/planner.recurrence';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
 type ActivitySubTab = PlannerActivityModule;
+
+const ACTIVITY_PALETTE = [
+  '#38bdf8',
+  '#a78bfa',
+  '#34d399',
+  '#f59e0b',
+  '#fb7185',
+  '#22d3ee',
+  '#f472b6',
+  '#84cc16'
+];
 
 function categoryLabel(category: string) {
   return category.replace('_', ' ');
@@ -43,12 +55,7 @@ export default function ChildPlannerV2Page() {
   const [teacher, setTeacher] = useState('');
   const [savingCell, setSavingCell] = useState(false);
   const [schoolError, setSchoolError] = useState('');
-  const [selectedEvent, setSelectedEvent] = useState<{
-    title: string;
-    category: string;
-    start: string;
-    end: string;
-  } | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<PlannerEvent | null>(null);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
 
   const { events, loading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
@@ -68,6 +75,24 @@ export default function ChildPlannerV2Page() {
       }))
       .filter((program, index, arr) => arr.findIndex((x) => x.label.toLowerCase() === program.label.toLowerCase()) === index);
   }, [programs]);
+
+  const activityColorById = useMemo(() => {
+    const colorMap = new Map<string, string>();
+    activityTabs.forEach((activity, index) => {
+      colorMap.set(activity.id, ACTIVITY_PALETTE[index % ACTIVITY_PALETTE.length]);
+    });
+    return colorMap;
+  }, [activityTabs]);
+
+  const resolveEventColor = (event: PlannerEvent) => {
+    if (event.linkedProgramId && activityColorById.has(event.linkedProgramId)) {
+      return activityColorById.get(event.linkedProgramId)!;
+    }
+    if (event.category === 'exam') return '#fb7185';
+    if (event.category === 'homework') return '#f59e0b';
+    if (event.category === 'personal') return '#a78bfa';
+    return event.color || '#94a3b8';
+  };
 
   const activeActivity = activityTabs.find((tab) => tab.id === activeActivityId);
   const activeProgram = activeActivity?.program || null;
@@ -203,7 +228,7 @@ export default function ChildPlannerV2Page() {
       );
       for (const inst of instances) {
         const program = programs.find(p => p.id === event.linkedProgramId);
-        const resolvedColor = program?.color || inst.color || '#94a3b8';
+        const resolvedColor = resolveEventColor(event);
 
         expanded.push({
           id: inst.instanceId,
@@ -216,13 +241,15 @@ export default function ChildPlannerV2Page() {
           extendedProps: {
             category: inst.category,
             rootEventId: inst.rootEventId,
-            eventObj: event
+            eventObj: event,
+            programName: program?.name || '',
+            programColor: resolvedColor
           }
         });
       }
     }
     return expanded;
-  }, [filteredEvents]);
+  }, [filteredEvents, programs, activityColorById]);
 
   const schoolRoutineItems = useMemo(() => {
     return allEvents
@@ -454,27 +481,32 @@ export default function ChildPlannerV2Page() {
     const category = String(arg.event.extendedProps.category || 'event');
     const isPrivate = category === 'personal' || category === 'custom';
     const isExam = category === 'exam';
+    const isTask = category === 'homework' || category === 'task';
+    const programName = String(arg.event.extendedProps.programName || '');
     const resolvedColor = arg.event.backgroundColor || '#94a3b8';
     
     return (
       <div 
-        className="flex h-full w-full flex-col justify-center overflow-hidden transition-all duration-200 px-2.5 py-1.5 rounded-lg border border-white/10 hover:brightness-110 active:scale-95" 
+        className="group flex h-full w-full flex-col justify-center overflow-hidden rounded-xl border px-2.5 py-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.18)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:scale-95"
         style={{
-          backgroundColor: resolvedColor,
+          background: `linear-gradient(135deg, ${resolvedColor}, ${resolvedColor}cc)`,
+          borderColor: `${resolvedColor}99`,
+          boxShadow: `0 10px 24px ${resolvedColor}26`
         }}
       >
-        <div className="flex items-center gap-1 overflow-hidden">
-          {category === 'task' && <span className="text-[10px]">📝</span>}
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          {isTask && <span className="text-[10px]">📝</span>}
           {isPrivate && <span className="text-[10px]">🔒</span>}
           {isExam && <span className="text-[10px]">🎓</span>}
           {category === 'event' && <span className="text-[10px]">📅</span>}
-          <span className="truncate text-[11px] font-semibold text-white drop-shadow-sm">{arg.event.title}</span>
+          <span className="truncate text-[11px] font-black text-white drop-shadow-sm">{arg.event.title}</span>
         </div>
-        {!arg.event.allDay && arg.timeText && (
-           <div className="mt-0.5 truncate text-[9.5px] font-medium text-white/90 drop-shadow-sm">
-             {arg.timeText}
-           </div>
-        )}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="truncate text-[9px] font-bold uppercase tracking-wide text-white/80">{programName || categoryLabel(category)}</span>
+          {!arg.event.allDay && arg.timeText ? (
+            <span className="shrink-0 rounded-full bg-black/18 px-1.5 py-0.5 text-[9px] font-black text-white/90">{arg.timeText}</span>
+          ) : null}
+        </div>
       </div>
     );
   };
@@ -487,14 +519,7 @@ export default function ChildPlannerV2Page() {
       } else if (eventObj.category === 'homework' || eventObj.linkedTaskIds.length > 0) {
         setSelectedTaskDetail(eventObj);
       } else {
-        const start = arg.event.start;
-        const end = arg.event.end;
-        setSelectedEvent({
-          title: arg.event.title || 'Event',
-          category: categoryLabel(String(arg.event.extendedProps.category || 'event')),
-          start: start ? start.toLocaleString() : '-',
-          end: end ? end.toLocaleString() : '-'
-        });
+        setSelectedEvent(eventObj);
       }
     }
   };
@@ -558,10 +583,13 @@ export default function ChildPlannerV2Page() {
                 className={`relative flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold transition-all duration-300 ${
                   activeTab === `activity_${activity.id}`
                     ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-[0_8px_20px_rgba(34,211,238,0.25)] scale-[1.02]'
-                    : 'text-white/60 hover:bg-white/5 hover:text-white'
+                  : 'text-white/60 hover:bg-white/5 hover:text-white'
                 }`}
               >
-                <span className="text-sm opacity-90">{programs.find(p => p.id === activity.id)?.icon || '📅'}</span>
+                <span
+                  className="h-3 w-3 rounded-full ring-2 ring-white/10 shadow-[0_0_14px_currentColor]"
+                  style={{ backgroundColor: activityColorById.get(activity.id) || '#38bdf8', color: activityColorById.get(activity.id) || '#38bdf8' }}
+                />
                 {activity.label}
               </button>
             ))}
@@ -584,8 +612,7 @@ export default function ChildPlannerV2Page() {
               <div className="space-y-2.5">
                 {filterOptions.map((option) => {
                   const active = activeCategoryFilters.includes(option.id) || (option.id === 'all' && activeCategoryFilters.includes('all'));
-                  const program = programs.find(p => p.id === option.id);
-                  const color = program?.color || (option.id === 'all' ? '#22d3ee' : '#94a3b8');
+                  const color = option.id === 'all' ? '#22d3ee' : activityColorById.get(option.id) || '#94a3b8';
                   
                   return (
                     <button
@@ -610,8 +637,15 @@ export default function ChildPlannerV2Page() {
                           {option.label}
                         </span>
                       </div>
+                      {option.id !== 'all' ? (
+                        <span
+                          className="h-6 w-1.5 rounded-full shadow-[0_0_12px_currentColor]"
+                          style={{ backgroundColor: color, color }}
+                          aria-hidden="true"
+                        />
+                      ) : null}
                       {active && (
-                        <div className="absolute right-0 top-0 h-full w-1 bg-gradient-to-b from-cyan-400 to-blue-500" />
+                        <div className="absolute right-0 top-0 h-full w-1" style={{ background: `linear-gradient(180deg, ${color}, ${color}88)` }} />
                       )}
                     </button>
                   );
@@ -631,8 +665,8 @@ export default function ChildPlannerV2Page() {
           </aside>
 
           {/* Main Content: Calendar */}
-          <section className="lg:col-span-10 rounded-[2.5rem] border border-white/10 bg-slate-800/50 p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-            
+          <section className="lg:col-span-10 relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(160deg,rgba(18,27,52,0.94),rgba(9,14,30,0.98))] p-4 shadow-[0_30px_90px_rgba(0,0,0,0.38)] backdrop-blur-xl">
+            <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/60 to-transparent" />
             
             {loading ? (
               <div className="flex h-[400px] items-center justify-center">
@@ -643,7 +677,7 @@ export default function ChildPlannerV2Page() {
               </div>
             ) : null}
 
-            <div className={`transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'} [&_.fc]:font-sans [&_.fc]:text-white [&_.fc-theme-standard_td]:border-white/[0.08] [&_.fc-theme-standard_th]:border-white/[0.08] [&_.fc-theme-standard_th]:!bg-black/20 [&_.fc-col-header-cell]:!py-3 [&_.fc-col-header-cell-cushion]:text-[10px] [&_.fc-col-header-cell-cushion]:font-black [&_.fc-col-header-cell-cushion]:uppercase [&_.fc-col-header-cell-cushion]:tracking-widest [&_.fc-col-header-cell-cushion]:!text-white/40 [&_.fc-toolbar-title]:text-2xl [&_.fc-toolbar-title]:font-black [&_.fc-toolbar-title]:tracking-tight [&_.fc-toolbar-title]:bg-gradient-to-r [&_.fc-toolbar-title]:from-cyan-300 [&_.fc-toolbar-title]:to-blue-400 [&_.fc-toolbar-title]:bg-clip-text [&_.fc-toolbar-title]:text-transparent [&_.fc-button]:!bg-white/[0.05] [&_.fc-button]:!border-white/10 [&_.fc-button]:!text-white [&_.fc-button]:!px-4 [&_.fc-button]:!py-2 [&_.fc-button]:!text-xs [&_.fc-button]:!font-bold [&_.fc-button]:!rounded-xl [&_.fc-button:hover]:!bg-white/[0.1] [&_.fc-button-active]:!bg-white !important [&_.fc-button-active]:!text-slate-900 !important [&_.fc-day-today]:!bg-cyan-400/[0.05] [&_.fc-day-today]:border-2 [&_.fc-day-today]:!border-cyan-400/50 [&_.fc-daygrid-day-number]:text-xs [&_.fc-daygrid-day-number]:font-bold [&_.fc-daygrid-day-number]:opacity-60 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!p-0 [&_.fc-daygrid-event]:!border-0 [&_.fc-daygrid-event]:!bg-transparent`}>
+            <div className={`relative transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'} [&_.fc]:font-sans [&_.fc]:text-white [&_.fc-scrollgrid]:!border-white/10 [&_.fc-theme-standard_td]:border-white/[0.07] [&_.fc-theme-standard_th]:border-white/[0.07] [&_.fc-theme-standard_th]:!bg-black/25 [&_.fc-col-header-cell]:!py-4 [&_.fc-col-header-cell-cushion]:text-[10px] [&_.fc-col-header-cell-cushion]:font-black [&_.fc-col-header-cell-cushion]:uppercase [&_.fc-col-header-cell-cushion]:tracking-[0.24em] [&_.fc-col-header-cell-cushion]:!text-white/40 [&_.fc-toolbar]:!mb-6 [&_.fc-toolbar-title]:text-2xl [&_.fc-toolbar-title]:font-black [&_.fc-toolbar-title]:tracking-tight [&_.fc-toolbar-title]:bg-gradient-to-r [&_.fc-toolbar-title]:from-cyan-200 [&_.fc-toolbar-title]:via-sky-300 [&_.fc-toolbar-title]:to-violet-300 [&_.fc-toolbar-title]:bg-clip-text [&_.fc-toolbar-title]:text-transparent [&_.fc-button]:!bg-white/[0.06] [&_.fc-button]:!border-white/10 [&_.fc-button]:!text-white [&_.fc-button]:!px-4 [&_.fc-button]:!py-2.5 [&_.fc-button]:!text-xs [&_.fc-button]:!font-black [&_.fc-button]:!rounded-2xl [&_.fc-button]:!shadow-none [&_.fc-button:hover]:!bg-white/[0.12] [&_.fc-button-active]:!bg-white [&_.fc-button-active]:!text-slate-950 [&_.fc-daygrid-day]:!bg-white/[0.015] [&_.fc-daygrid-day-frame]:!min-h-[104px] [&_.fc-day-today]:!bg-cyan-400/[0.07] [&_.fc-day-today]:!shadow-[inset_0_0_0_1px_rgba(34,211,238,0.55)] [&_.fc-daygrid-day-number]:p-2 [&_.fc-daygrid-day-number]:text-xs [&_.fc-daygrid-day-number]:font-black [&_.fc-daygrid-day-number]:text-white/55 [&_.fc-day-other_.fc-daygrid-day-number]:text-white/20 [&_.fc-daygrid-event]:!rounded-xl [&_.fc-daygrid-event]:!p-0 [&_.fc-daygrid-event]:!border-0 [&_.fc-daygrid-event]:!bg-transparent [&_.fc-event]:!bg-transparent [&_.fc-event]:!border-0`}>
               <FullCalendar
                 plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
                 initialView="dayGridMonth"
@@ -1470,7 +1504,7 @@ export default function ChildPlannerV2Page() {
                     visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').map((event) => (
                     <div key={event.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
                       <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl">📅</div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="text-base font-bold text-white">{event.title}</p>
                         <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleString()}</p>
                       </div>
@@ -1480,6 +1514,7 @@ export default function ChildPlannerV2Page() {
                           <span className="text-xs font-black text-amber-400">{activityPointsConfig.eventPoints}</span>
                         </div>
                       ) : null}
+                      <button onClick={() => setSelectedEvent(event)} className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                     </div>
                   )) : (
                     <div className="col-span-full py-20 text-center text-white/20 font-medium">No specialized events found.</div>
@@ -1491,7 +1526,10 @@ export default function ChildPlannerV2Page() {
         </section>
       ) : null}
 
-      {selectedEvent ? (
+      {selectedEvent ? (() => {
+        const next = getNextPlannerOccurrence(selectedEvent);
+        const status = getPlannerExpiryStatus(selectedEvent);
+        return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-slate-950/40" onClick={() => setSelectedEvent(null)} />
           <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900 p-1 shadow-2xl animate-in zoom-in-95 duration-300">
@@ -1509,18 +1547,34 @@ export default function ChildPlannerV2Page() {
               <div className="space-y-4">
                 <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
                   <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Classification</p>
-                  <p className="text-sm font-black text-cyan-300 uppercase tracking-tight">{selectedEvent.category}</p>
+                  <p className="text-sm font-black text-cyan-300 uppercase tracking-tight">{categoryLabel(selectedEvent.category)}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
                     <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Start Time</p>
-                    <p className="text-xs font-bold text-white/80">{selectedEvent.start}</p>
+                    <p className="text-xs font-bold text-white/80">{new Date(selectedEvent.startAt).toLocaleString()}</p>
                   </div>
                   <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
                     <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">End Time</p>
-                    <p className="text-xs font-bold text-white/80">{selectedEvent.end}</p>
+                    <p className="text-xs font-bold text-white/80">{new Date(selectedEvent.endAt).toLocaleString()}</p>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Repeat</p>
+                    <p className="text-xs font-bold text-white/80">{formatPlannerRecurrence(selectedEvent.recurrence)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Status</p>
+                    <p className={clsx('text-xs font-bold', status === 'Expired' ? 'text-rose-300' : 'text-emerald-300')}>{status}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-white/[0.03] p-4 border border-white/5">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Next Time</p>
+                  <p className="text-xs font-bold text-white/80">{next ? new Date(next.startAt).toLocaleString() : 'No upcoming occurrence'}</p>
                 </div>
               </div>
 
@@ -1534,7 +1588,8 @@ export default function ChildPlannerV2Page() {
             </div>
           </div>
         </div>
-      ) : null}
+        );
+      })() : null}
 
       {/* EXAM DETAIL MODAL */}
       {selectedExamDetail && (
@@ -1548,6 +1603,18 @@ export default function ChildPlannerV2Page() {
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-xs font-bold text-white/40 uppercase">Date & Time</span>
                 <span className="text-sm font-bold text-white">{new Date(selectedExamDetail.startAt).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Repeat</span>
+                <span className="text-sm font-bold text-white">{formatPlannerRecurrence(selectedExamDetail.recurrence)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Next</span>
+                <span className="text-sm font-bold text-white">{getNextPlannerOccurrence(selectedExamDetail) ? new Date(getNextPlannerOccurrence(selectedExamDetail)!.startAt).toLocaleString() : 'No upcoming occurrence'}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Expiry</span>
+                <span className="text-sm font-bold text-white">{getPlannerExpiryStatus(selectedExamDetail)}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-xs font-bold text-white/40 uppercase">Status</span>
@@ -1587,6 +1654,18 @@ export default function ChildPlannerV2Page() {
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-xs font-bold text-white/40 uppercase">Due Date</span>
                 <span className="text-sm font-bold text-white">{new Date(selectedTaskDetail.startAt).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Repeat</span>
+                <span className="text-sm font-bold text-white">{formatPlannerRecurrence(selectedTaskDetail.recurrence)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Next</span>
+                <span className="text-sm font-bold text-white">{getNextPlannerOccurrence(selectedTaskDetail) ? new Date(getNextPlannerOccurrence(selectedTaskDetail)!.startAt).toLocaleString() : 'No upcoming occurrence'}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-xs font-bold text-white/40 uppercase">Expiry</span>
+                <span className="text-sm font-bold text-white">{getPlannerExpiryStatus(selectedTaskDetail)}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-xs font-bold text-white/40 uppercase">Status</span>

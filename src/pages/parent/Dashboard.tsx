@@ -55,6 +55,8 @@ import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTime
 import { usePlannerSubjects } from '../../features/planner/hooks/usePlannerSubjects';
 import { usePlannerChallenges } from '../../features/planner/hooks/usePlannerChallenges';
 
+type ActivityDetailKind = 'task' | 'exam' | 'event';
+
 interface ChildAccount {
   id: string;
   name?: string;
@@ -90,6 +92,72 @@ const toInputDateTimeLocal = (value: string | null | undefined): string => {
   const local = new Date(d.getTime() - offset * 60000);
   return local.toISOString().slice(0, 16);
 };
+
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function activityItemTitle(kind: ActivityDetailKind, item: any): string {
+  if (kind === 'exam') return String(item.subject || item.title || 'Exam');
+  return String(item.title || 'Untitled');
+}
+
+function activityItemDate(kind: ActivityDetailKind, item: any): string | null {
+  if (kind === 'task') return item.due_date || item.end_date || item.created_at || null;
+  if (kind === 'exam') return item.exam_date || item.date || item.created_at || null;
+  return item.date || item.start_at || item.created_at || null;
+}
+
+function activityRecurrenceLabel(item: any): string {
+  const type = item.recurrence_type || 'none';
+  if (type === 'daily') return 'Repeats daily';
+  if (type === 'weekly') {
+    const days = Array.isArray(item.recurrence_days) ? item.recurrence_days : [];
+    return days.length ? `Repeats weekly on ${days.map((day: number) => WEEKDAY_NAMES[day] || '').filter(Boolean).join(', ')}` : 'Repeats weekly';
+  }
+  if (type === 'monthly') return 'Repeats monthly';
+  return 'One time';
+}
+
+function activityNextDate(kind: ActivityDetailKind, item: any, from = new Date()): Date | null {
+  const rawDate = activityItemDate(kind, item);
+  if (!rawDate) return null;
+  const base = new Date(rawDate);
+  if (isNaN(base.getTime())) return null;
+  const recurrence = item.recurrence_type || 'none';
+  if (recurrence === 'none') return base.getTime() >= from.getTime() ? base : null;
+
+  const candidate = new Date(base);
+  const endLimit = item.expires_at || null;
+  const until = endLimit ? new Date(endLimit) : null;
+
+  for (let i = 0; i < 370; i += 1) {
+    if (candidate.getTime() >= from.getTime()) {
+      if (until && candidate.getTime() > until.getTime()) return null;
+      return candidate;
+    }
+    if (recurrence === 'daily') {
+      candidate.setDate(candidate.getDate() + 1);
+    } else if (recurrence === 'weekly') {
+      const days = Array.isArray(item.recurrence_days) && item.recurrence_days.length ? item.recurrence_days : [base.getDay()];
+      const next = new Date(candidate);
+      next.setDate(next.getDate() + 1);
+      while (!days.includes(next.getDay()) && next.getTime() <= from.getTime() + 366 * 86400000) {
+        next.setDate(next.getDate() + 1);
+      }
+      candidate.setTime(next.getTime());
+    } else if (recurrence === 'monthly') {
+      candidate.setMonth(candidate.getMonth() + 1);
+    } else {
+      return null;
+    }
+  }
+  return null;
+}
+
+function activityExpiryStatus(kind: ActivityDetailKind, item: any): string {
+  if (item.status === 'expired') return 'Expired';
+  if (item.expires_at && new Date(item.expires_at).getTime() < Date.now()) return 'Expired';
+  return activityNextDate(kind, item) ? 'Active' : 'Expired';
+}
 
 function ParentDashboardContent() {
   const { user } = useAuth();
@@ -185,10 +253,10 @@ function ParentDashboardContent() {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'family' | 'tasks' | 'approvals' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner' | 'routines'
   >('dashboard');
-  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'approvals', 'rewards', 'routines'] as const;
-  const topLevelActiveTab: 'dashboard' | 'planner' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
+  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'approvals', 'rewards'] as const;
+  const topLevelActiveTab: 'dashboard' | 'planner' | 'routines' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
     ? 'planner'
-    : (activeTab as 'dashboard' | 'communication' | 'settings');
+    : (activeTab as 'dashboard' | 'routines' | 'communication' | 'settings');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
@@ -214,11 +282,13 @@ function ParentDashboardContent() {
   const [activityEventPoints, setActivityEventPoints] = useState<number | ''>('');
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<PlannerProgram | null>(null);
+  const [selectedActivityDetail, setSelectedActivityDetail] = useState<{ kind: ActivityDetailKind; item: any } | null>(null);
   const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
 
   const parentTabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'planner', label: 'Planner' },
+    { id: 'routines', label: 'Routines' },
     { id: 'communication', label: 'Communication' },
     { id: 'settings', label: 'Settings' }
   ] as const;
@@ -226,7 +296,6 @@ function ParentDashboardContent() {
   const plannerWorkspaceTabs = [
     { id: 'planner', label: 'Main Planner' },
     { id: 'family', label: 'Kid Activities' },
-    { id: 'routines', label: 'Routines' },
     { id: 'tasks', label: 'Tasks / Duties' },
     { id: 'exams', label: 'Exams / Tests' },
     { id: 'challenges', label: 'Challenges' },
@@ -3399,8 +3468,12 @@ function ParentDashboardContent() {
                 </div>
                 {selectedActivityTasks.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped tasks yet.</p> : null}
                 {selectedActivityTasks.map((task) => (
-                  <div key={task.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{task.title}</p>
+                  <div key={task.id} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <div>
+                      <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{task.title}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{activityRecurrenceLabel(task)} • {activityExpiryStatus('task', task)}</p>
+                    </div>
+                    <button type="button" onClick={() => setSelectedActivityDetail({ kind: 'task', item: task })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Details</button>
                   </div>
                 ))}
                 <p className="pt-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Map Existing Tasks</p>
@@ -3440,11 +3513,14 @@ function ParentDashboardContent() {
                 </div>
                 {selectedActivityExams.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped exams yet.</p> : null}
                 {selectedActivityExams.map((exam) => (
-                  <div key={exam.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{exam.subject}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {(exam.status || 'scheduled').replaceAll('_', ' ')} • {exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'No date'} • {exam.marks_scored ?? '-'} / {exam.total_marks ?? '-'}
-                    </p>
+                  <div key={exam.id} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <div>
+                      <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{exam.subject}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {(exam.status || 'scheduled').replaceAll('_', ' ')} • {exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'No date'} • {activityRecurrenceLabel(exam)}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => setSelectedActivityDetail({ kind: 'exam', item: exam })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Details</button>
                   </div>
                 ))}
                 <p className="pt-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Map Existing Exams</p>
@@ -3461,8 +3537,12 @@ function ParentDashboardContent() {
               <div className="space-y-3">
                 {selectedActivityEvents.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No mapped events yet.</p> : null}
                 {selectedActivityEvents.map((ev) => (
-                  <div key={ev.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                    <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ev.title}</p>
+                  <div key={ev.id} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                    <div>
+                      <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{ev.title}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{activityRecurrenceLabel(ev)} • {ev.date ? new Date(ev.date).toLocaleString() : 'No date'}</p>
+                    </div>
+                    <button type="button" onClick={() => setSelectedActivityDetail({ kind: 'event', item: ev })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Details</button>
                   </div>
                 ))}
               </div>
@@ -3647,6 +3727,55 @@ function ParentDashboardContent() {
           </div>
         </div>
       ) : null}
+
+      {selectedActivityDetail ? (() => {
+        const { kind, item } = selectedActivityDetail;
+        const itemDate = activityItemDate(kind, item);
+        const next = activityNextDate(kind, item);
+        const status = activityExpiryStatus(kind, item);
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4">
+            <div className="w-full max-w-lg rounded-3xl border bg-[var(--surface)] p-5 shadow-2xl" style={{ borderColor: 'var(--border-main)' }}>
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400">{kind} details</p>
+                  <h3 className="mt-1 text-xl font-bold" style={{ color: 'var(--text-main)' }}>{activityItemTitle(kind, item)}</h3>
+                </div>
+                <button type="button" onClick={() => setSelectedActivityDetail(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Scheduled</p>
+                  <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{itemDate ? new Date(itemDate).toLocaleString() : 'No date'}</p>
+                </div>
+                <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Repeat</p>
+                  <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{activityRecurrenceLabel(item)}</p>
+                </div>
+                <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Next</p>
+                  <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{next ? next.toLocaleString() : 'No upcoming occurrence'}</p>
+                </div>
+                <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Expiry</p>
+                  <p className={clsx('mt-1 text-sm font-semibold', status === 'Expired' ? 'text-rose-500' : 'text-emerald-500')}>{status}</p>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-xl border p-3 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-muted)' }}>
+                {kind === 'task' ? (
+                  <p>Status: {(item.status || 'pending').replaceAll('_', ' ')} • Points: {item.star_value ?? item.points ?? 0} • Proof: {item.requires_proof ? 'Required' : 'Not required'}</p>
+                ) : kind === 'exam' ? (
+                  <p>Status: {(item.status || 'scheduled').replaceAll('_', ' ')} • Score: {item.marks_scored ?? '-'} / {item.total_marks ?? '-'}{item.syllabus_scope ? ` • ${item.syllabus_scope}` : ''}</p>
+                ) : (
+                  <p>Type: {item.type || item.category || 'event'} • Reminder: {item.reminder_days_before ?? 0} day(s) before</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {isActivityModalOpen && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">

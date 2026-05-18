@@ -8,6 +8,7 @@ import { generateChildDashboardRecommendations } from '../../utils/childRecommen
 
 function ChildDashboard() {
   const {
+    avatarEmoji,
     childName,
     handleMoodSelect,
     isDark,
@@ -39,11 +40,11 @@ function ChildDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="grid h-14 w-14 place-items-center rounded-xl bg-sky-500/20 text-sky-300 border border-sky-300/25">
-              <BadgeCheck size={30} />
+              <span className="text-3xl">{avatarEmoji || <BadgeCheck size={30} />}</span>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-[0.14em] text-sky-300">Level</p>
-              <h3 className="text-[1.75rem] sm:text-[1.9rem] font-display font-bold leading-tight">Junior Explorer</h3>
+              <h3 className="text-[1.75rem] sm:text-[1.9rem] font-display font-bold leading-tight">{childName}, Junior Explorer</h3>
               <p className="mt-1 text-sm leading-6 text-white/70">
                 {Math.max(0, 2 - Math.min(2, profile.total_stars ?? 0))} stars to level up!
               </p>
