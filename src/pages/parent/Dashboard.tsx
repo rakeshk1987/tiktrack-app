@@ -12,7 +12,6 @@ import {
   Menu,
   MessageCircle,
   Moon,
-  Phone,
   Plus,
   Settings,
   ShieldCheck,
@@ -43,6 +42,7 @@ import { useRoutineConfiguration } from '../../hooks/useRoutineConfiguration';
 import { useTaskScheduler } from '../../hooks/useTaskScheduler';
 import { getDefaultReminders, useReminders } from '../../hooks/useReminders';
 import { getDefaultRewards, useRedemptions, useRewards } from '../../hooks/useRedemptions';
+import { useApprovals } from '../../hooks/useApprovals';
 import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
 import { ParentPlannerV2Page } from '../../features/planner';
 import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerPrograms';
@@ -93,7 +93,42 @@ const toInputDateTimeLocal = (value: string | null | undefined): string => {
   return local.toISOString().slice(0, 16);
 };
 
+const toInputDate = (value: string | null | undefined): string => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const CHILD_AVATARS = ['🦊', '🐯', '🦁', '🐼', '🧠', '🚀', '🌟', '🐬'];
+const NUDGE_TEMPLATES = [
+  'You have got this. Pick one small win and start there.',
+  'I am proud of you. Finish one quest and take a tiny break.',
+  'Drink some water, breathe, and then try the next task.',
+  'Start with the easiest thing on your list. Momentum counts.',
+  'Take a 5-minute reset, then come back strong.'
+];
+const CHILD_COMMUNICATION_STYLES: Array<{ id: NonNullable<ChildProfile['communication_style']>; label: string }> = [
+  { id: 'cheerful', label: 'Cheerful' },
+  { id: 'calm', label: 'Calm' },
+  { id: 'challenge', label: 'Challenge' },
+  { id: 'short', label: 'Short' }
+];
+
+interface ChildEditForm {
+  name: string;
+  petName: string;
+  avatarEmoji: string;
+  interests: string;
+  profileMotto: string;
+  communicationStyle: NonNullable<ChildProfile['communication_style']>;
+  dateOfBirth: string;
+  heightCm: string;
+  weightKg: string;
+}
 
 function activityItemTitle(kind: ActivityDetailKind, item: any): string {
   if (kind === 'exam') return String(item.subject || item.title || 'Exam');
@@ -249,19 +284,35 @@ function ParentDashboardContent() {
   const [sickStartDate, setSickStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [sickEndDate, setSickEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [sickReason, setSickReason] = useState('');
+  const [isNudgeModalOpen, setIsNudgeModalOpen] = useState(false);
+  const [nudgeChildId, setNudgeChildId] = useState('');
+  const [nudgeMessage, setNudgeMessage] = useState('');
 
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'family' | 'tasks' | 'approvals' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner' | 'routines'
   >('dashboard');
-  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'approvals', 'rewards'] as const;
-  const topLevelActiveTab: 'dashboard' | 'planner' | 'routines' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
+  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'rewards'] as const;
+  const topLevelActiveTab: 'dashboard' | 'planner' | 'routines' | 'approvals' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
     ? 'planner'
-    : (activeTab as 'dashboard' | 'routines' | 'communication' | 'settings');
+    : (activeTab as 'dashboard' | 'routines' | 'approvals' | 'communication' | 'settings');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
   const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'growth' | 'coparenting'>('create_child');
+  const [editingChildId, setEditingChildId] = useState<string | null>(null);
+  const [childEditForm, setChildEditForm] = useState<ChildEditForm>({
+    name: '',
+    petName: '',
+    avatarEmoji: CHILD_AVATARS[0],
+    interests: '',
+    profileMotto: '',
+    communicationStyle: 'cheerful',
+    dateOfBirth: '',
+    heightCm: '',
+    weightKg: ''
+  });
+  const [childEditSaving, setChildEditSaving] = useState(false);
 
   const [chTitle, setChTitle] = useState('');
   const [chChild, setChChild] = useState('');
@@ -289,7 +340,7 @@ function ParentDashboardContent() {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'planner', label: 'Planner' },
     { id: 'routines', label: 'Routines' },
-    { id: 'communication', label: 'Communication' },
+    { id: 'approvals', label: 'Approvals' },
     { id: 'settings', label: 'Settings' }
   ] as const;
 
@@ -300,8 +351,7 @@ function ParentDashboardContent() {
     { id: 'exams', label: 'Exams / Tests' },
     { id: 'challenges', label: 'Challenges' },
     { id: 'events', label: 'Events' },
-    { id: 'automation', label: 'Automation' },
-    { id: 'approvals', label: 'Approvals & Settlements' }
+    { id: 'automation', label: 'Automation' }
   ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
@@ -315,8 +365,27 @@ function ParentDashboardContent() {
     );
   };
   const { messages: inboxMessages, sendMessage, markAsRead } = useMessages(familyId, 'parent');
+  const { approvals: topLevelApprovals } = useApprovals(familyId);
   
   const unreadMessagesCount = useMemo(() => inboxMessages.filter(m => m.sender_role === 'child' && !m.is_read).length, [inboxMessages]);
+  const pendingApprovalCount = useMemo(() => topLevelApprovals.filter((approval) => approval.status === 'pending').length, [topLevelApprovals]);
+
+  const openParentChat = useCallback(() => {
+    const latestUnread = inboxMessages
+      .filter((message) => message.sender_role === 'child' && !message.is_read)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    const fallbackChildId = inboxChildId || latestUnread?.child_id || children[0]?.id || '';
+    if (fallbackChildId) {
+      setInboxChildId(fallbackChildId);
+    }
+    setActiveTab('communication');
+  }, [children, inboxChildId, inboxMessages]);
+
+  const openNudgeModal = useCallback(() => {
+    setNudgeChildId((prev) => prev || children[0]?.id || '');
+    setNudgeMessage((prev) => prev || 'You have got this. Pick one small win and start there.');
+    setIsNudgeModalOpen(true);
+  }, [children]);
 
   useEffect(() => {
     if (activeTab === 'communication' && inboxChildId) {
@@ -606,6 +675,108 @@ function ParentDashboardContent() {
     } catch (err) {
       console.error('Failed to create child password reset request:', err);
       setError('Could not trigger password reset request.');
+    }
+  };
+
+  const updateChildEditForm = <K extends keyof ChildEditForm>(field: K, value: ChildEditForm[K]) => {
+    setChildEditForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const startEditChildProfile = (child: ChildAccount, profile?: any) => {
+    setEditingChildId(child.id);
+    setChildEditForm({
+      name: profile?.name || child.name || '',
+      petName: profile?.pet_name || '',
+      avatarEmoji: profile?.avatar_emoji || CHILD_AVATARS[0],
+      interests: Array.isArray(profile?.interests) ? profile.interests.join(', ') : '',
+      profileMotto: profile?.profile_motto || '',
+      communicationStyle: profile?.communication_style || 'cheerful',
+      dateOfBirth: toInputDate(profile?.date_of_birth),
+      heightCm: profile?.height_cm ? String(profile.height_cm) : '',
+      weightKg: profile?.weight_kg ? String(profile.weight_kg) : ''
+    });
+  };
+
+  const cancelEditChildProfile = () => {
+    setEditingChildId(null);
+    setChildEditForm({
+      name: '',
+      petName: '',
+      avatarEmoji: CHILD_AVATARS[0],
+      interests: '',
+      profileMotto: '',
+      communicationStyle: 'cheerful',
+      dateOfBirth: '',
+      heightCm: '',
+      weightKg: ''
+    });
+  };
+
+  const handleSaveChildProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingChildId) return;
+
+    const name = childEditForm.name.trim();
+    if (!name) {
+      setError('Child name is required.');
+      return;
+    }
+
+    const height = childEditForm.heightCm ? Number(childEditForm.heightCm) : null;
+    const weight = childEditForm.weightKg ? Number(childEditForm.weightKg) : null;
+    if ((height !== null && height <= 0) || (weight !== null && weight <= 0)) {
+      setError('Height and weight must be positive numbers.');
+      return;
+    }
+
+    const interests = childEditForm.interests
+      .split(',')
+      .map((interest) => interest.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+
+    setChildEditSaving(true);
+    setError('');
+
+    try {
+      const now = new Date().toISOString();
+      await setDoc(doc(db, 'users', editingChildId), {
+        name,
+        updated_at: now
+      }, { merge: true });
+
+      const profilePayload: Record<string, any> = {
+        id: editingChildId,
+        user_id: editingChildId,
+        parent_id: familyId,
+        family_id: familyId,
+        name,
+        pet_name: childEditForm.petName.trim() || null,
+        avatar_emoji: childEditForm.avatarEmoji,
+        interests,
+        profile_motto: childEditForm.profileMotto.trim().slice(0, 90) || null,
+        communication_style: childEditForm.communicationStyle,
+        updated_at: now
+      };
+
+      if (childEditForm.dateOfBirth) {
+        profilePayload.date_of_birth = new Date(childEditForm.dateOfBirth).toISOString();
+      }
+      if (height !== null) {
+        profilePayload.height_cm = height;
+      }
+      if (weight !== null) {
+        profilePayload.weight_kg = weight;
+      }
+
+      await setDoc(doc(db, 'child_profile', editingChildId), profilePayload, { merge: true });
+      setSuccess('Child profile updated.');
+      cancelEditChildProfile();
+    } catch (err) {
+      console.error('Failed to update child profile:', err);
+      setError('Could not update child profile.');
+    } finally {
+      setChildEditSaving(false);
     }
   };
 
@@ -1964,46 +2135,71 @@ function ParentDashboardContent() {
     }
   };
 
+  const handleSendNudge = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!nudgeChildId || !nudgeMessage.trim()) {
+      setError('Select a child and choose a nudge message.');
+      return;
+    }
+
+    try {
+      await sendMessage(nudgeChildId, familyId, nudgeMessage.trim(), 'parent', familyId, 'Quick nudge');
+      setInboxChildId(nudgeChildId);
+      setInboxMessage('');
+      setInboxSubject('');
+      setIsNudgeModalOpen(false);
+      setSuccess('Nudge sent.');
+    } catch (err: any) {
+      console.error('Failed to send nudge:', err);
+      setError(err?.message || 'Could not send nudge.');
+    }
+  };
+
   return (
     <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto max-w-[1680px] rounded-[2rem] border bg-[var(--surface)]/95 backdrop-blur-md p-3 sm:p-4 lg:p-5" style={{ borderColor: 'var(--border-main)' }}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[92px_1fr]">
           <aside
-            className="rounded-[1.6rem] p-4 text-white"
+            className="rounded-[1.6rem] p-3 text-white sm:p-4"
             style={{ background: 'linear-gradient(165deg, var(--bg-hero-a), var(--bg-hero-b))' }}
           >
-            <div className="flex lg:flex-col items-center justify-between gap-3 h-full">
-              <div className="flex lg:flex-col items-center gap-3">
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('dashboard')}>
-                  <Menu size={20} />
-                </button>
-                <button className="h-11 w-11 rounded-xl bg-white/25 grid place-items-center">
+            <div className="flex h-full gap-3 overflow-x-auto lg:flex-col lg:items-center lg:justify-between lg:overflow-visible">
+              <div className="flex items-center gap-3 lg:flex-col">
+                <button title="Dashboard" aria-label="Dashboard" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'dashboard' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('dashboard')}>
                   <Home size={20} />
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition relative" onClick={() => setActiveTab('communication')}>
+                <button title="Family Chat" aria-label="Family Chat" className={clsx('relative grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'communication' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={openParentChat}>
                   <Mail size={18} />
                   {unreadMessagesCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white ring-2 ring-rose-300 animate-pulse">
-                      {unreadMessagesCount}
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white ring-2 ring-rose-300">
+                      {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                     </span>
                   )}
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('communication')}>
-                  <Phone size={18} />
+                <button title="Approvals" aria-label="Approvals" className={clsx('relative grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'approvals' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('approvals')}>
+                  <ShieldCheck size={18} />
+                  {pendingApprovalCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-950 ring-2 ring-amber-100">
+                      {pendingApprovalCount > 99 ? '99+' : pendingApprovalCount}
+                    </span>
+                  )}
+                </button>
+                <button title="Planner" aria-label="Planner" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'planner' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('planner')}>
+                  <Menu size={18} />
+                </button>
+                <button title="Send Nudge" aria-label="Send Nudge" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/18 transition hover:bg-white/28" onClick={openNudgeModal}>
+                  <MessageCircle size={18} />
                 </button>
               </div>
 
-              <div className="flex lg:flex-col items-center gap-3">
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('automation')}>
-                  <MessageCircle size={18} />
-                </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={() => setActiveTab('settings')}>
+              <div className="ml-auto flex items-center gap-3 lg:ml-0 lg:flex-col">
+                <button title="Settings" aria-label="Settings" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'settings' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('settings')}>
                   <Settings size={18} />
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-white/18 grid place-items-center hover:bg-white/28 transition" onClick={toggleTheme} aria-label="toggle-theme">
+                <button title="Toggle theme" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/18 transition hover:bg-white/28" onClick={toggleTheme} aria-label="toggle-theme">
                   {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
                 </button>
-                <button className="h-11 w-11 rounded-xl bg-rose-500/40 grid place-items-center hover:bg-rose-500/60 transition" onClick={handleLogout}>
+                <button title="Logout" aria-label="Logout" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rose-500/40 transition hover:bg-rose-500/60" onClick={handleLogout}>
                   <LogOut size={18} />
                 </button>
               </div>
@@ -2024,6 +2220,25 @@ function ParentDashboardContent() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openParentChat}
+                  aria-label={`Open family chat${unreadMessagesCount ? `, ${unreadMessagesCount} unread` : ''}`}
+                  className={clsx(
+                    'relative grid h-10 w-10 place-items-center rounded-xl border text-sm font-bold transition',
+                    activeTab === 'communication'
+                      ? 'border-cyan-300 bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                      : 'hover:bg-slate-100 dark:hover:bg-white/10'
+                  )}
+                  style={activeTab === 'communication' ? {} : { color: 'var(--text-main)', borderColor: 'var(--border-main)', background: 'var(--surface)' }}
+                >
+                  <MessageCircle size={18} />
+                  {unreadMessagesCount > 0 ? (
+                    <span className="absolute -right-1.5 -top-1.5 grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black leading-none text-white ring-2 ring-white dark:ring-slate-900">
+                      {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                    </span>
+                  ) : null}
+                </button>
                 <button onClick={() => setIsModaling(true)} className="px-3 py-2 rounded-xl text-sm font-bold text-white inline-flex items-center gap-1" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                   <Plus size={16} /> Add Child
                 </button>
@@ -2047,7 +2262,14 @@ function ParentDashboardContent() {
                         : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700'
                     )}
                   >
-                    {tab.label}
+                    <span className="inline-flex items-center gap-2">
+                      {tab.label}
+                      {tab.id === 'approvals' && pendingApprovalCount > 0 ? (
+                        <span className="grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black leading-none text-white">
+                          {pendingApprovalCount > 99 ? '99+' : pendingApprovalCount}
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -3137,36 +3359,183 @@ function ParentDashboardContent() {
                           <div className="space-y-2">
                             {children.map((child) => {
                               const meta = enrichedChildProfiles.find((p) => p.id === child.id) as any;
+                              const isEditingThisChild = editingChildId === child.id;
                               return (
-                                <div key={child.id} className="rounded-xl border p-3 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                                  <div>
-                                    <p className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-                                      {child.name || 'Child'}
-                                      {getActiveSickPeriod(child.id) && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full uppercase font-bold">Sick 🤒</span>}
-                                    </p>
-                                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
-                                    {meta ? <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★</p> : null}
+                                <div key={child.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border text-2xl" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                        {meta?.avatar_emoji || CHILD_AVATARS[0]}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="flex flex-wrap items-center gap-2 font-semibold" style={{ color: 'var(--text-main)' }}>
+                                          {child.name || 'Child'}
+                                          {meta?.pet_name ? <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-bold uppercase text-cyan-700">Call me {meta.pet_name}</span> : null}
+                                          {getActiveSickPeriod(child.id) && <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-yellow-700">Sick 🤒</span>}
+                                        </p>
+                                        <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{(child.email || '').replace('@tiktrack.family', '')}</p>
+                                        {meta ? <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>Level {meta.levelInfo?.level} • {meta.computedTotalStars}★ • {meta.consistency_score || 0}% consistency</p> : null}
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => isEditingThisChild ? cancelEditChildProfile() : startEditChildProfile(child, meta)}
+                                        className="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-white"
+                                      >
+                                        {isEditingThisChild ? 'Close Edit' : 'Edit Profile'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSickTargetChild(child.id);
+                                          setIsSickModalOpen(true);
+                                        }}
+                                        className="rounded-lg bg-yellow-500 px-3 py-1.5 text-xs font-bold text-white"
+                                      >
+                                        Mark Sick
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleParentResetChildPassword(child)}
+                                        className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white"
+                                      >
+                                        Reset Password
+                                      </button>
+                                      <Circle size={14} className="text-emerald-500 fill-current" />
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSickTargetChild(child.id);
-                                        setIsSickModalOpen(true);
-                                      }}
-                                      className="rounded-lg bg-yellow-500 px-3 py-1.5 text-xs font-bold text-white"
-                                    >
-                                      Mark Sick
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleParentResetChildPassword(child)}
-                                      className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white"
-                                    >
-                                      Reset Password
-                                    </button>
-                                    <Circle size={14} className="text-emerald-500 fill-current" />
-                                  </div>
+
+                                  {isEditingThisChild ? (
+                                    <form onSubmit={handleSaveChildProfile} className="mt-4 rounded-2xl border p-3 sm:p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                                        <div className="lg:col-span-2">
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Full Name</label>
+                                          <input
+                                            required
+                                            value={childEditForm.name}
+                                            onChange={(event) => updateChildEditForm('name', event.target.value)}
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Nickname</label>
+                                          <input
+                                            value={childEditForm.petName}
+                                            onChange={(event) => updateChildEditForm('petName', event.target.value)}
+                                            placeholder="Used in greetings"
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                        <div className="lg:col-span-3">
+                                          <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Avatar</p>
+                                          <div className="flex flex-wrap gap-2">
+                                            {CHILD_AVATARS.map((emoji) => (
+                                              <button
+                                                key={emoji}
+                                                type="button"
+                                                onClick={() => updateChildEditForm('avatarEmoji', emoji)}
+                                                className={clsx('grid h-11 w-11 place-items-center rounded-xl border text-xl transition', childEditForm.avatarEmoji === emoji ? 'border-cyan-300 bg-cyan-500/15' : 'hover:bg-slate-100 dark:hover:bg-white/10')}
+                                                style={childEditForm.avatarEmoji === emoji ? {} : { borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}
+                                                aria-label={`Choose avatar ${emoji}`}
+                                              >
+                                                {emoji}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Date of Birth</label>
+                                          <input
+                                            type="date"
+                                            value={childEditForm.dateOfBirth}
+                                            onChange={(event) => updateChildEditForm('dateOfBirth', event.target.value)}
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Height (cm)</label>
+                                          <input
+                                            type="number"
+                                            min="30"
+                                            max="250"
+                                            value={childEditForm.heightCm}
+                                            onChange={(event) => updateChildEditForm('heightCm', event.target.value)}
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Weight (kg)</label>
+                                          <input
+                                            type="number"
+                                            min="5"
+                                            max="200"
+                                            step="0.1"
+                                            value={childEditForm.weightKg}
+                                            onChange={(event) => updateChildEditForm('weightKg', event.target.value)}
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Greeting Style</label>
+                                          <select
+                                            value={childEditForm.communicationStyle}
+                                            onChange={(event) => updateChildEditForm('communicationStyle', event.target.value as ChildEditForm['communicationStyle'])}
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          >
+                                            {CHILD_COMMUNICATION_STYLES.map((style) => (
+                                              <option key={style.id} value={style.id}>{style.label}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <div className="lg:col-span-2">
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Interests</label>
+                                          <input
+                                            value={childEditForm.interests}
+                                            onChange={(event) => updateChildEditForm('interests', event.target.value)}
+                                            placeholder="gardening, chess, animals"
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                        <div className="lg:col-span-3">
+                                          <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Profile Motto</label>
+                                          <input
+                                            maxLength={90}
+                                            value={childEditForm.profileMotto}
+                                            onChange={(event) => updateChildEditForm('profileMotto', event.target.value)}
+                                            placeholder="A short line that appears in the profile"
+                                            className="w-full rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                        <button
+                                          type="button"
+                                          onClick={cancelEditChildProfile}
+                                          className="rounded-xl border px-4 py-2.5 text-sm font-bold"
+                                          style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="submit"
+                                          disabled={childEditSaving}
+                                          className="rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-70"
+                                          style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}
+                                        >
+                                          {childEditSaving ? 'Saving...' : 'Save Profile'}
+                                        </button>
+                                      </div>
+                                    </form>
+                                  ) : null}
                                 </div>
                               );
                             })}
@@ -3898,6 +4267,110 @@ function ParentDashboardContent() {
               <button disabled={childRegistering} type="submit" className="w-full text-white font-bold py-3.5 rounded-xl transition mt-4 disabled:opacity-70" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                 {childRegistering ? 'Registering...' : 'Create Child Account'}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isNudgeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="w-full max-w-lg rounded-3xl border bg-[var(--surface)] p-5 shadow-2xl sm:p-6" style={{ borderColor: 'var(--border-main)' }}>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-500">Quick Nudge</p>
+                <h2 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>Send encouragement</h2>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Send a small message directly into the family chat.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNudgeModalOpen(false)}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border transition hover:bg-slate-100 dark:hover:bg-white/10"
+                style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+                aria-label="Close nudge"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendNudge} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Child
+                </label>
+                <select
+                  required
+                  value={nudgeChildId}
+                  onChange={(event) => setNudgeChildId(event.target.value)}
+                  className="w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none"
+                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                >
+                  <option value="">Select child</option>
+                  {children.map((child) => (
+                    <option key={child.id} value={child.id}>
+                      {child.name || child.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Pick a message
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {NUDGE_TEMPLATES.map((template) => (
+                    <button
+                      key={template}
+                      type="button"
+                      onClick={() => setNudgeMessage(template)}
+                      className={clsx(
+                        'min-h-16 rounded-2xl border p-3 text-left text-sm font-semibold transition',
+                        nudgeMessage === template
+                          ? 'border-cyan-300 bg-cyan-500/15 text-cyan-300 shadow-sm'
+                          : 'hover:bg-slate-100 dark:hover:bg-white/10'
+                      )}
+                      style={nudgeMessage === template ? {} : { borderColor: 'var(--border-main)', color: 'var(--text-main)', background: 'var(--surface-soft)' }}
+                    >
+                      {template}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Message
+                </label>
+                <textarea
+                  required
+                  value={nudgeMessage}
+                  onChange={(event) => setNudgeMessage(event.target.value)}
+                  rows={4}
+                  className="w-full resize-none rounded-xl border px-4 py-3 text-sm font-semibold outline-none"
+                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                  placeholder="Write your own quick encouragement..."
+                />
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsNudgeModalOpen(false)}
+                  className="rounded-xl border px-5 py-3 text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-white/10"
+                  style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:shadow-xl"
+                  style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}
+                >
+                  Send Nudge
+                </button>
+              </div>
             </form>
           </div>
         </div>

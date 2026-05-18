@@ -9,7 +9,7 @@ export default defineConfig({
     VitePWA({
       disable: process.env.NODE_ENV === 'development',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon.svg', 'icons.svg', 'app-icon.svg', 'icon-192.png', 'icon-512.png'],
       workbox: {
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
@@ -49,27 +49,22 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml'
-          },
-          {
-            src: '/icons.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any'
-          },
-          {
             src: '/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
+          },
+          {
+            src: '/app-icon.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'any'
           }
         ],
         categories: ['education', 'productivity', 'lifestyle']
