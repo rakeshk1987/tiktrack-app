@@ -55,37 +55,43 @@ export function getChildBadges(params: {
   studyCompletions: number;
   perfectWeekCount: number;
 }) {
-  const badges: Array<{ id: string; label: string; unlocked: boolean; hint: string }> = [
+  const makeBadge = (
+    id: string,
+    label: string,
+    current: number,
+    target: number,
+    hint: string,
+    icon: string,
+    valueLabel = `${current} / ${target}`
+  ) => ({
+    id,
+    label,
+    current,
+    target,
+    unlocked: current >= target,
+    hint,
+    icon,
+    valueLabel,
+    progressPct: Math.max(0, Math.min(100, Math.round((current / Math.max(1, target)) * 100)))
+  });
+
+  const perfectWeekUnlocked = params.perfectWeekCount >= 1 || params.streakCount >= 7;
+  const badges = [
     {
-      id: 'consistency',
-      label: 'Consistency Badge',
-      unlocked: params.consistencyScore >= 80,
-      hint: 'Reach 80% consistency.'
+      ...makeBadge(
+        'consistency',
+        'Consistency Badge',
+        Math.min(100, Math.round(params.consistencyScore)),
+        80,
+        'Reach 80% consistency.',
+        '🎯',
+        `${Math.min(100, Math.round(params.consistencyScore))}% / 80%`
+      )
     },
-    {
-      id: 'reading_streak',
-      label: 'Reading Streak',
-      unlocked: params.readingCompletions >= 10,
-      hint: 'Complete 10 reading quests.'
-    },
-    {
-      id: 'study_streak',
-      label: 'Study Streak',
-      unlocked: params.studyCompletions >= 12,
-      hint: 'Complete 12 study quests.'
-    },
-    {
-      id: 'early_bird',
-      label: 'Early Bird',
-      unlocked: params.earlyBirdCompletions >= 5,
-      hint: 'Finish 5 tasks before 8:30 AM.'
-    },
-    {
-      id: 'perfect_week',
-      label: 'Perfect Week',
-      unlocked: params.perfectWeekCount >= 1 || params.streakCount >= 7,
-      hint: 'Complete all tasks for one full week.'
-    }
+    makeBadge('reading_streak', 'Reading Streak', params.readingCompletions, 10, 'Complete 10 reading quests.', '📚'),
+    makeBadge('study_streak', 'Study Streak', params.studyCompletions, 12, 'Complete 12 study quests.', '🧠'),
+    makeBadge('early_bird', 'Early Bird', params.earlyBirdCompletions, 5, 'Finish 5 tasks before 8:30 AM.', '🌅'),
+    makeBadge('perfect_week', 'Perfect Week', perfectWeekUnlocked ? 1 : 0, 1, 'Complete all tasks for one full week.', '🏆', perfectWeekUnlocked ? 'Unlocked' : 'Locked')
   ];
 
   return badges;

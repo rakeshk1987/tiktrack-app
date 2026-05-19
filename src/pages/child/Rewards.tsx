@@ -87,6 +87,8 @@ export default function ChildRewards() {
   const availableStars = Number(profile.total_stars || 0);
   const cashStarsValue = cashStars === '' ? 0 : Number(cashStars);
   const cashEstimate = Number((cashStarsValue * conversionRate).toFixed(2));
+  const unlockedBadges = useMemo(() => badges.filter((badge) => badge.unlocked).length, [badges]);
+  const nextBadge = useMemo(() => badges.find((badge) => !badge.unlocked) || null, [badges]);
 
   const requestCashRedemption = async () => {
     if (!cashStarsValue || cashStarsValue <= 0) {
@@ -132,34 +134,33 @@ export default function ChildRewards() {
     <div className="mt-6 space-y-5 pb-20">
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
         <h2 className="text-3xl font-display font-bold">Stars & Rewards</h2>
-        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Track stars, streaks, badges, and reward requests.</p>
+        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Earn stars, request cash, or spend stars on rewards.</p>
 
         {loadingSummary ? <p className={clsx('mt-3 text-sm', mutedTextClass)}>Loading progress summary...</p> : null}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Total Stars</p><p className="mt-1 text-2xl font-black">{profile.total_stars || 0}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Monthly Stars</p><p className="mt-1 text-2xl font-black">{monthlyEarnedStars}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Estimate</p><p className="mt-1 text-2xl font-black">{monthlyPayoutEstimate}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Stars Spent</p><p className="mt-1 text-2xl font-black">{monthlySpentStars}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Streak / Shields</p><p className="mt-1 text-2xl font-black">{profile.streak_count || 0} / {profile.streak_shields || 0}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Pending Rewards</p><p className="mt-1 text-2xl font-black">{pendingRewards}</p></div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-200">Level Progress</p>
-          <p className="mt-1 text-lg font-bold">{level.levelName}</p>
-          <p className="text-sm text-cyan-100/90">{level.nextLevelName ? `${level.starsToNext} stars to ${level.nextLevelName}` : 'Top level unlocked. Keep shining.'}</p>
-          <div className="mt-2 h-2 rounded-full bg-white/10 p-[2px]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#818cf8,#f472b6)] transition-all" style={{ width: `${level.progressPct}%` }} /></div>
-        </div>
-      </div>
-
-      <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h3 className="text-2xl font-display font-bold">Badges</h3>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {badges.map((badge) => (
-            <div key={badge.id} className={clsx('rounded-xl border px-3 py-3', badge.unlocked ? 'border-emerald-300/35 bg-emerald-500/10' : 'border-white/10 bg-white/[0.03]')}>
-              <p className="font-bold">{badge.label}</p>
-              <p className={clsx('text-xs', mutedTextClass)}>{badge.unlocked ? 'Unlocked' : badge.hint}</p>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1.6fr_1fr]">
+          <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-3">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-200">Level Progress</p>
+            <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+              <p className="text-lg font-bold">{level.levelName}</p>
+              <p className="text-sm text-cyan-100/90">{level.nextLevelName ? `${level.starsToNext} stars to ${level.nextLevelName}` : 'Top level unlocked'}</p>
             </div>
-          ))}
+            <div className="mt-2 h-2 rounded-full bg-white/10 p-[2px]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#818cf8,#f472b6)] transition-all" style={{ width: `${level.progressPct}%` }} /></div>
+          </div>
+          <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 p-3">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-200">Badges</p>
+            <p className="mt-1 text-lg font-bold">{unlockedBadges} / {badges.length} unlocked</p>
+            <p className="text-sm text-amber-100/90">{nextBadge ? `Next: ${nextBadge.label}` : 'All badges unlocked'}</p>
+          </div>
         </div>
       </div>
 
@@ -231,11 +232,31 @@ export default function ChildRewards() {
       </div>
 
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h3 className="text-2xl font-display font-bold">Monthly Summary</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Rate</p><p className="mt-1 text-lg font-black">1 star = {conversionRate}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Stars Spent</p><p className="mt-1 text-lg font-black">{monthlySpentStars}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Estimate</p><p className="mt-1 text-lg font-black">{monthlyPayoutEstimate}</p></div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-2xl font-display font-bold">Badges</h3>
+            <p className={clsx('mt-1 text-sm', mutedTextClass)}>Small milestones that track consistency, routines, and learning habits.</p>
+          </div>
+          <p className="rounded-full border border-amber-300/30 bg-amber-400/10 px-3 py-1 text-sm font-black text-amber-200">
+            {unlockedBadges} / {badges.length} unlocked
+          </p>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {badges.map((badge) => (
+            <div key={badge.id} className={clsx('rounded-xl border px-3 py-3', badge.unlocked ? 'border-emerald-300/35 bg-emerald-500/10' : 'border-white/10 bg-white/[0.03]')}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-2xl">{badge.icon}</p>
+                  <p className="mt-1 font-bold">{badge.label}</p>
+                </div>
+                <p className={clsx('text-xs font-black', badge.unlocked ? 'text-emerald-300' : mutedTextClass)}>{badge.unlocked ? 'Unlocked' : badge.valueLabel}</p>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-white/10 p-[2px]">
+                <div className={clsx('h-full rounded-full transition-all', badge.unlocked ? 'bg-emerald-300' : 'bg-amber-300')} style={{ width: `${badge.progressPct}%` }} />
+              </div>
+              <p className={clsx('mt-2 text-xs', mutedTextClass)}>{badge.unlocked ? badge.valueLabel : badge.hint}</p>
+            </div>
+          ))}
         </div>
 
         <div className="mt-4 space-y-2">

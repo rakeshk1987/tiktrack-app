@@ -487,12 +487,18 @@ export function useQuestActions(childId: string) {
         const isEarlyBird = data.last_task_date !== today && (currentHour < 8 || (currentHour === 8 && currentMins <= 30));
 
         const { updatedProfile } = applyTaskCompletionToProfile(data, task.star_value, true, today, isEarlyBird);
+        const badgeText = `${task.title || ''} ${task.description || ''} ${task.category || ''}`.toLowerCase();
+        const isReadingTask = /\b(read|reading|book|comic)\b/.test(badgeText);
+        const isStudyTask = /\b(study|homework|math|science|english|practice|exam)\b/.test(badgeText);
         await updateDoc(profileRef, {
           total_stars: updatedProfile.total_stars,
           streak_count: updatedProfile.streak_count,
           streak_shields: updatedProfile.streak_shields,
           consistency_score: updatedProfile.consistency_score,
-          last_task_date: updatedProfile.last_task_date
+          last_task_date: updatedProfile.last_task_date,
+          early_bird_count: (Number(data.early_bird_count) || 0) + (isEarlyBird ? 1 : 0),
+          reading_completed_count: (Number(data.reading_completed_count) || 0) + (isReadingTask ? 1 : 0),
+          study_completed_count: (Number(data.study_completed_count) || 0) + (isStudyTask ? 1 : 0)
         });
       }
     } finally {

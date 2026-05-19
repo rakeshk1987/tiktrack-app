@@ -1256,12 +1256,17 @@ function ParentDashboardContent() {
               true,
               today
             );
+            const badgeText = `${task?.title || ''} ${task?.description || ''} ${task?.category || ''}`.toLowerCase();
+            const isReadingTask = /\b(read|reading|book|comic)\b/.test(badgeText);
+            const isStudyTask = /\b(study|homework|math|science|english|practice|exam)\b/.test(badgeText);
             await updateDoc(profileRef, {
               total_stars: updatedProfile.total_stars,
               streak_count: updatedProfile.streak_count,
               consistency_score: updatedProfile.consistency_score,
               streak_shields: updatedProfile.streak_shields,
-              last_task_date: updatedProfile.last_task_date
+              last_task_date: updatedProfile.last_task_date,
+              reading_completed_count: (Number(existing.reading_completed_count) || 0) + (isReadingTask ? 1 : 0),
+              study_completed_count: (Number(existing.study_completed_count) || 0) + (isStudyTask ? 1 : 0)
             });
           } catch (innerErr) {
             console.error('Failed to update child profile after proof approval:', innerErr);
