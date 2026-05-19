@@ -276,7 +276,8 @@ export default function ChildPlannerV2Page() {
     if (!childId || !newTaskTitle.trim() || !activeActivityId || !newTaskSubjectId) return;
     setTaskCreating(true);
     try {
-      await addDoc(collection(db, 'tasks'), {
+      const starValue = activityPointsConfig?.taskPoints || 0;
+      const createdRef = await addDoc(collection(db, 'tasks'), {
         title: newTaskTitle.trim(),
         child_id: childId,
         family_id: familyId,
@@ -289,10 +290,22 @@ export default function ChildPlannerV2Page() {
         subject_id: newTaskSubjectId,
         category: 'homework',
         priority: 'medium',
-        star_value: activityPointsConfig?.taskPoints || 0,
-        points: activityPointsConfig?.taskPoints || 0,
+        star_value: starValue,
+        points: starValue,
+        created_by: 'child',
+        approval_status: 'pending',
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
+      });
+      await addDoc(collection(db, 'approvals'), {
+        family_id: familyId,
+        child_id: childId,
+        type: 'task',
+        reference_id: createdRef.id,
+        title: newTaskTitle.trim(),
+        points: 0,
+        status: 'pending',
+        created_at: new Date().toISOString()
       });
       setNewTaskTitle('');
       setNewTaskDue('');
@@ -319,11 +332,8 @@ export default function ChildPlannerV2Page() {
     try {
       const hasResult = newExamMarks !== '' && newExamTotalMarks !== '';
       const allocatedPoints = activityPointsConfig?.examPoints || null;
-      const newPointsEarned = hasResult && allocatedPoints
-        ? Math.round(allocatedPoints * (Number(newExamMarks) / Number(newExamTotalMarks)))
-        : null;
 
-      await addDoc(collection(db, 'exams'), {
+      const createdRef = await addDoc(collection(db, 'exams'), {
         subject: newExamSubject.trim() || 'Placeholder Subject',
         subject_id: newExamSubjectId === 'custom' ? '' : newExamSubjectId,
         child_id: childId,
@@ -333,25 +343,27 @@ export default function ChildPlannerV2Page() {
         marks_scored: newExamMarks === '' ? null : newExamMarks,
         total_marks: newExamTotalMarks === '' ? null : newExamTotalMarks,
         points_allocated: allocatedPoints,
-        points_earned: newPointsEarned,
-        status: hasResult ? 'result_published' : 'scheduled',
+        points_earned: null,
+        status: hasResult ? 'completed_pending_result' : 'scheduled',
         linked_program_id: activeActivityId,
         recurrence_type: newExamRecurrence,
         recurrence_days: newExamRecurrence === 'weekly' ? newExamRecurrenceDays : [],
+        created_by: 'child',
+        approval_status: 'pending',
+        result_published_at: null,
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
-
-      if (newPointsEarned && newPointsEarned > 0) {
-        const profileRef = doc(db, 'child_profile', childId);
-        const profileSnap = await getDoc(profileRef);
-        if (profileSnap.exists()) {
-          const currentStars = profileSnap.data().total_stars || 0;
-          await updateDoc(profileRef, {
-            total_stars: currentStars + newPointsEarned
-          });
-        }
-      }
+      await addDoc(collection(db, 'approvals'), {
+        family_id: familyId,
+        child_id: childId,
+        type: 'exam',
+        reference_id: createdRef.id,
+        title: newExamSubject.trim() || 'Exam',
+        points: 0,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
       setNewExamSubject('');
       setNewExamSubjectId('');
       setNewExamDate('');

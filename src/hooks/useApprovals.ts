@@ -102,6 +102,15 @@ export function useApprovals(familyId: string, childId?: string) {
         reviewed_by: parentId,
       });
 
+      if (data.reference_id && ['task', 'exam'].includes(data.type)) {
+        const targetCollection = data.type === 'task' ? 'tasks' : 'exams';
+        await updateDoc(doc(db, targetCollection, data.reference_id), {
+          approval_status: status,
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: parentId,
+        });
+      }
+
       // If approved and has points, award to child
       if (awardPoints && status === 'approved' && data.points && data.points > 0) {
         const profileRef = doc(db, 'child_profile', data.child_id);

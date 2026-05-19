@@ -303,7 +303,7 @@ export interface Approval {
   id: string;
   family_id: string;
   child_id: string;
-  type: 'task' | 'routine' | 'reward' | 'custom';
+  type: 'task' | 'routine' | 'reward' | 'exam' | 'custom';
   reference_id?: string;
   title: string;
   points: number;
