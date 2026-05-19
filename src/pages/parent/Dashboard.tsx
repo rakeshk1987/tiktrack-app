@@ -2622,57 +2622,87 @@ function ParentDashboardContent() {
 
                 <div className={activeTab === 'rewards' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Model</h2>
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length}</span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
-                      <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star" type="number" min="0" step="0.01" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                      <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
-                        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
-                      </label>
-
-                      <div className="col-span-1 sm:col-span-3 flex gap-2">
-                        <button disabled={rewardLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : '+ Save Setting')}</button>
-                        {editRewardId ? (
-                          <button type="button" onClick={cancelEditReward} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
-                        ) : (
-                          <button type="button" onClick={() => { setRStarRate(''); setRWeeklyBonus(false); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
-                        )}
+                    <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>Rewards Setup</h2>
+                        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                          Configure how stars convert to cash, what reward items children can request, and how requests are settled.
+                        </p>
                       </div>
-                    </form>
-
-	                    <div>
-	                      {rewardsLoading ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading reward settings...</p>
-                      ) : rewards.length === 0 ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No rewards configured yet.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {rewards.map((r) => (
-                            <div key={r.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                              <div>
-                                <p className="font-semibold" style={{ color: 'var(--text-main)' }}>1 star = {r.star_to_currency_rate} cash value</p>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Weekly bonus: {r.weekly_bonus_enabled ? 'enabled' : 'disabled'}</p>
-                              </div>
-                              <div className="flex gap-2">
-                                <button onClick={() => startEditReward(r)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
-                                <button onClick={() => handleDeleteReward(r.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-	                      )}
-	                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-                        Add Default Reward Items
-                      </button>
+                      <div className="flex flex-wrap gap-2 text-xs font-bold">
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">Cash rules: {rewards.length}</span>
+                        <span className="rounded-full bg-cyan-100 px-3 py-1 text-cyan-700">Catalogue items: {rewardItems.length}</span>
+                      </div>
                     </div>
-                    <div className="mt-4 space-y-4">
+
+                  <div className="space-y-5">
+                    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Cash Rules</h3>
+                          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                            Children can request cash by redeeming stars. You approve it, then manually settle the payout.
+                          </p>
+                        </div>
+                        {rewards[0] ? (
+                          <div className="rounded-xl border px-3 py-2 text-sm font-bold" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Current rate: </span>
+                            <span style={{ color: 'var(--text-main)' }}>1 star = {rewards[0].star_to_currency_rate}</span>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <form onSubmit={handleSaveReward} className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+                        <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star, e.g. 0.5" type="number" min="0" step="0.01" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                        <label className="inline-flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
+                          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
+                        </label>
+
+                        <div className="flex gap-2">
+                          <button disabled={rewardLoading} type="submit" className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : '+ Save Rule')}</button>
+                          {editRewardId ? (
+                            <button type="button" onClick={cancelEditReward} className="rounded-xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
+                          ) : (
+                            <button type="button" onClick={() => { setRStarRate(''); setRWeeklyBonus(false); }} className="rounded-xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
+                          )}
+                        </div>
+                      </form>
+
+	                  <div className="mt-4">
+	                    {rewardsLoading ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading cash rules...</p>
+                        ) : rewards.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No cash rule saved yet. Add a cash value per star to enable cash requests.</p>
+                        ) : (
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {rewards.map((r) => (
+                              <div key={r.id} className="rounded-xl p-3 border flex items-center justify-between gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                <div>
+                                  <p className="font-semibold" style={{ color: 'var(--text-main)' }}>1 star = {r.star_to_currency_rate} cash value</p>
+                                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Weekly bonus: {r.weekly_bonus_enabled ? 'enabled' : 'disabled'}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={() => startEditReward(r)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                                  <button onClick={() => handleDeleteReward(r.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+	                    )}
+	                  </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Catalogue</h3>
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Set the star cost for screen time, treats, items, experiences, privileges, and learning rewards.</p>
+                        </div>
+                        <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                          Add Starter Catalogue
+                        </button>
+                      </div>
                       <RewardManagement
                         rewards={rewardItems}
                         onCreateReward={createRewardForFamily}
@@ -2680,6 +2710,9 @@ function ParentDashboardContent() {
                         onDeleteReward={deleteReward}
                         loading={rewardItemsLoading}
                       />
+                    </div>
+
+                    <div className="space-y-4">
                       <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                           <div>
@@ -2696,7 +2729,7 @@ function ParentDashboardContent() {
                         <RedemptionHistory redemptions={redemptions} onUpdateStatus={updateRedemptionStatus} loading={redemptionsLoading} />
                       </div>
                     </div>
-	                  </div>
+	              </div>
 	                </div>
               </div>
 
