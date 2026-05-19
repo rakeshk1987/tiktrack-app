@@ -889,33 +889,64 @@ function ParentDashboardContent() {
   }, [user, familyId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !familyId) {
       setRewards([]);
       setRewardsLoading(false);
       return;
     }
 
     setRewardsLoading(true);
-    const rq = query(
-      collection(db, 'reward_settings'),
-      where('parent_id', '==', familyId),
-      orderBy('created_at', 'desc')
-    );
+    const snapshots: Record<string, any[]> = { family: [], parent: [], legacyFamilyParent: [] };
+    const publishRewards = () => {
+      const merged = new Map<string, any>();
+      [...snapshots.family, ...snapshots.parent, ...snapshots.legacyFamilyParent].forEach((reward) => merged.set(reward.id, reward));
+      const mapped = Array.from(merged.values()).sort((a, b) => {
+        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+        return bTime - aTime;
+      });
+      setRewards(mapped);
+      setRewardsLoading(false);
+    };
 
-    const unsub = onSnapshot(
-      rq,
-      (snap) => {
-        const mapped = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-        setRewards(mapped);
-        setRewardsLoading(false);
-      },
-      (err) => {
-        console.error('Failed to fetch reward settings:', err);
-        setRewardsLoading(false);
-      }
-    );
+    const handleError = (err: unknown) => {
+      console.error('Failed to fetch reward settings:', err);
+      setRewardsLoading(false);
+    };
 
-    return () => unsub();
+    const unsubscribers = [
+      onSnapshot(
+        query(collection(db, 'reward_settings'), where('family_id', '==', familyId)),
+        (snap) => {
+          snapshots.family = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+          publishRewards();
+        },
+        handleError
+      ),
+      onSnapshot(
+        query(collection(db, 'reward_settings'), where('parent_id', '==', user.id)),
+        (snap) => {
+          snapshots.parent = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+          publishRewards();
+        },
+        handleError
+      )
+    ];
+
+    if (user.id !== familyId) {
+      unsubscribers.push(
+        onSnapshot(
+          query(collection(db, 'reward_settings'), where('parent_id', '==', familyId)),
+          (snap) => {
+            snapshots.legacyFamilyParent = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+            publishRewards();
+          },
+          handleError
+        )
+      );
+    }
+
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [user, familyId]);
 
   useEffect(() => {
@@ -1270,7 +1301,7 @@ function ParentDashboardContent() {
     if (eMarks !== '' && Number(eMarks) < 0) { alert('Marks scored cannot be negative.'); return; }
     if (eTotal !== '' && Number(eTotal) < 0) { alert('Total marks cannot be negative.'); return; }
     if (eMarks !== '' && eTotal !== '' && Number(eMarks) > Number(eTotal)) { alert('Marks scored cannot be greater than total marks.'); return; }
-    if (ePoints !== '' && Number(ePoints) < 0) { alert('Max points cannot be negative.'); return; }
+    if (ePoints !== '' && Number(ePoints) < 0) { alert('Max stars cannot be negative.'); return; }
 
     setError('');
     setExamLoading(true);
@@ -1638,7 +1669,7 @@ function ParentDashboardContent() {
 
     try {
       const payload = {
-        parent_id: familyId,
+        parent_id: user.id,
         family_id: familyId,
         star_to_currency_rate: Number(rStarRate) || 0,
         weekly_bonus_enabled: Boolean(rWeeklyBonus),
@@ -2017,14 +2048,19 @@ function ParentDashboardContent() {
   const createRewardForFamily = async (reward: Omit<RewardItem, 'id' | 'created_at' | 'updated_at'>) => {
     await createReward({
       ...reward,
-      parent_id: familyId
+      parent_id: user?.id || familyId,
+      family_id: familyId
     });
     setSuccess('Reward saved.');
   };
 
   const seedDefaultRewards = async () => {
     for (const reward of getDefaultRewards(familyId)) {
-      await createReward(reward);
+      await createReward({
+        ...reward,
+        parent_id: user?.id || familyId,
+        family_id: familyId
+      });
     }
     setSuccess('Default reward marketplace added.');
   };
@@ -2582,13 +2618,13 @@ function ParentDashboardContent() {
                 <div className={activeTab === 'rewards' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Rewards Configuration</h2>
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Model</h2>
                     <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length}</span>
                   </div>
 
                   <div className="space-y-3">
                     <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
-                      <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Stars → Currency rate" type="number" min="0" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                      <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star" type="number" min="0" step="0.01" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                       <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
                         <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
@@ -2614,7 +2650,7 @@ function ParentDashboardContent() {
                           {rewards.map((r) => (
                             <div key={r.id} className="rounded-xl p-3 border flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                               <div>
-                                <p className="font-semibold" style={{ color: 'var(--text-main)' }}>1 star = {r.star_to_currency_rate} coins</p>
+                                <p className="font-semibold" style={{ color: 'var(--text-main)' }}>1 star = {r.star_to_currency_rate} cash value</p>
                                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Weekly bonus: {r.weekly_bonus_enabled ? 'enabled' : 'disabled'}</p>
                               </div>
                               <div className="flex gap-2">
@@ -2702,7 +2738,7 @@ function ParentDashboardContent() {
                               </select>
                             )}
 
-                            <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Points / Stars" type="number" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Stars earned" type="number" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             <select value={tRecurrenceType} onChange={(e) => setTRecurrenceType(e.target.value as 'none' | 'daily' | 'weekly')} className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                               <option value="none">One-time</option>
                               <option value="daily">Daily quest</option>
@@ -2788,7 +2824,7 @@ function ParentDashboardContent() {
                                       <div>
                                         <div className="flex justify-between items-start mb-1">
                                           <p className="font-bold text-base" style={{ color: 'var(--text-main)' }}>{t.title}</p>
-                                          <span className="font-bold text-emerald-600 text-sm bg-emerald-100 px-2 rounded-full">{t.points ?? t.star_value} pts</span>
+                                          <span className="font-bold text-emerald-600 text-sm bg-emerald-100 px-2 rounded-full">{t.points ?? t.star_value} stars</span>
                                         </div>
                                         <p className="text-sm line-clamp-2 mb-3" style={{ color: 'var(--text-muted)' }}>{t.description}</p>
                                         
@@ -2886,7 +2922,7 @@ function ParentDashboardContent() {
 
                 <div className={activeTab === 'approvals' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <ApprovalsManagement familyId={familyId} childrenProfiles={childProfiles} />
+                    <ApprovalsManagement familyId={familyId} childrenProfiles={childProfiles} starCashRate={Number(rewards[0]?.star_to_currency_rate || 0)} />
                   </div>
                 </div>
 
@@ -3130,7 +3166,7 @@ function ParentDashboardContent() {
                               <div className="col-span-1 md:col-span-2 grid grid-cols-3 gap-2">
                                 <input value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                                 <input value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                                <input value={ePoints as any} onChange={(ev) => setEPoints(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Max Points" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                                <input value={ePoints as any} onChange={(ev) => setEPoints(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Max stars" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                               </div>
 
                               <div className="md:col-span-2 flex gap-3 mt-4">
@@ -3567,7 +3603,7 @@ function ParentDashboardContent() {
                         </div>
                         <div className="space-y-4">
                           <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
-                            <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Stars → Currency rate" type="number" min="0" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star" type="number" min="0" step="0.01" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
                               <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
                               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
@@ -3974,7 +4010,7 @@ function ParentDashboardContent() {
                             disabled={ch.status === 'completed'}
                             className="mt-1 w-full rounded bg-rose-500 text-white py-1 text-[10px] font-bold disabled:opacity-30"
                           >
-                            +1 Point
+                            +1 Score
                           </button>
                         </div>
                         <div className="text-center flex-1">
@@ -4149,7 +4185,7 @@ function ParentDashboardContent() {
 
               <div className="mt-3 rounded-xl border p-3 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-muted)' }}>
                 {kind === 'task' ? (
-                  <p>Status: {(item.status || 'pending').replaceAll('_', ' ')} • Points: {item.star_value ?? item.points ?? 0} • Proof: {item.requires_proof ? 'Required' : 'Not required'}</p>
+                  <p>Status: {(item.status || 'pending').replaceAll('_', ' ')} • Stars: {item.star_value ?? item.points ?? 0} • Proof: {item.requires_proof ? 'Required' : 'Not required'}</p>
                 ) : kind === 'exam' ? (
                   <p>Status: {(item.status || 'scheduled').replaceAll('_', ' ')} • Score: {item.marks_scored ?? '-'} / {item.total_marks ?? '-'}{item.syllabus_scope ? ` • ${item.syllabus_scope}` : ''}</p>
                 ) : (
@@ -4194,11 +4230,11 @@ function ParentDashboardContent() {
                   ))}
                 </div>
               </div>
-              {/* Points Config — only shown for point-bearing modules */}
+              {/* Stars Config — only shown for star-bearing modules */}
               {(['tasks', 'exams', 'challenges', 'events'] as PlannerActivityModule[]).some(m => activityModules.includes(m)) && (
                 <div className="kid-glass rounded-2xl p-3">
-                  <label className="text-sm font-bold ml-1 mb-3 block" style={{ color: 'var(--text-muted)' }}>⭐ Points Config (Stars)</label>
-                  <p className="text-xs ml-1 mb-3" style={{ color: 'var(--text-muted)' }}>Set the default stars a child earns for each module. Leave blank for no points.</p>
+                  <label className="text-sm font-bold ml-1 mb-3 block" style={{ color: 'var(--text-muted)' }}>⭐ Stars Config</label>
+                  <p className="text-xs ml-1 mb-3" style={{ color: 'var(--text-muted)' }}>Set the default stars a child earns for each module. Leave blank for no stars.</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {activityModules.includes('tasks') && (
                       <div>

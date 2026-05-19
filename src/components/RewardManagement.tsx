@@ -29,13 +29,16 @@ const RewardManagement: React.FC<RewardManagementProps> = ({
   });
 
   const categoryOptions = [
-    { value: 'activity', label: '🎯 Activity', icon: '🎯' },
+    { value: 'screen_time', label: '📱 Screen Time', icon: '📱' },
+    { value: 'treat', label: '🍦 Treat', icon: '🍦' },
     { value: 'item', label: '🎁 Item', icon: '🎁' },
-    { value: 'privilege', label: '👑 Privilege', icon: '👑' },
     { value: 'experience', label: '✨ Experience', icon: '✨' },
+    { value: 'privilege', label: '👑 Privilege', icon: '👑' },
+    { value: 'learning', label: '📚 Learning', icon: '📚' },
+    { value: 'activity', label: '🎯 Activity', icon: '🎯' },
   ];
 
-  const emojiOptions = ['🎮', '🎬', '🍦', '🚗', '📵', '🍕', '💰', '👫', '🏆', '📚', '⚽', '🎨'];
+  const emojiOptions = ['🎮', '📱', '📺', '🎬', '🍦', '🍕', '🍰', '🧸', '🎁', '🚗', '📵', '💰', '👫', '🏆', '📚', '⚽', '🎨'];
 
   const handleAddReward = async () => {
     if (!formData.name || !formData.description) {
@@ -139,7 +142,7 @@ const RewardManagement: React.FC<RewardManagementProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Star Cost
+                  Reward Cost (Stars)
                 </label>
                 <input
                   type="number"

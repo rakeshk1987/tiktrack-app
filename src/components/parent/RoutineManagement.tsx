@@ -131,7 +131,7 @@ export function RoutineManagement({ familyId, childrenProfiles }: RoutineManagem
         </div>
         <h3 className="font-bold text-base text-slate-900 dark:text-white">{routine.title}</h3>
         <div className="flex items-center gap-3 mt-2">
-          <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">⭐ {routine.points} pts</p>
+          <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">⭐ {routine.points} stars</p>
           {routine.requires_approval && (
             <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
               <CheckSquare size={11} /> Needs approval
@@ -297,10 +297,10 @@ export function RoutineManagement({ familyId, childrenProfiles }: RoutineManagem
                 </div>
               </div>
 
-              {/* Points + Icon */}
+              {/* Stars + Icon */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-500 dark:text-white/60">Points *</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-500 dark:text-white/60">Stars *</label>
                   <input
                     required
                     type="number"
@@ -345,7 +345,7 @@ export function RoutineManagement({ familyId, childrenProfiles }: RoutineManagem
                 />
                 <div>
                   <p className="text-sm font-bold text-slate-800 dark:text-white">Requires Parent Approval</p>
-                  <p className="text-xs text-slate-500 dark:text-white/50">Points are only awarded after you approve the completion.</p>
+                  <p className="text-xs text-slate-500 dark:text-white/50">Stars are awarded after you approve the completion.</p>
                 </div>
               </label>
 

@@ -19,10 +19,14 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const categoryIcons: Record<string, string> = {
+    cash: '💰',
+    screen_time: '📱',
+    treat: '🍦',
     activity: '🎯',
     item: '🎁',
     privilege: '👑',
     experience: '✨',
+    learning: '📚',
   };
 
   const categories = Array.from(new Set(rewards.map(r => r.category)));
@@ -60,7 +64,7 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">🎁 Reward Marketplace</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">🎁 Star Rewards</h2>
         <div className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-100 to-yellow-50 dark:from-yellow-900 dark:to-yellow-800 rounded-lg">
           <div>
             <p className="text-sm text-gray-600 dark:text-gray-300">Your Stars</p>

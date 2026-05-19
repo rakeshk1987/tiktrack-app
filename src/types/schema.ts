@@ -179,6 +179,7 @@ export interface Event {
 export interface RewardSetting {
   id: string;
   parent_id: string;
+  family_id?: string;
   star_to_currency_rate: number;
   weekly_bonus_enabled: boolean;
 }
@@ -261,11 +262,13 @@ export interface ReminderLog {
 export interface RewardItem {
   id: string;
   parent_id: string;
+  family_id?: string;
+  child_id?: string;
   name: string;
   description: string;
   star_cost: number;
   icon?: string;
-  category: 'activity' | 'item' | 'privilege' | 'experience';
+  category: 'cash' | 'screen_time' | 'treat' | 'item' | 'privilege' | 'experience' | 'learning' | 'activity';
   is_available: boolean;
   max_redemptions_per_week?: number;
   created_at: string;

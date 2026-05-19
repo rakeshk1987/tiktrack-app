@@ -198,7 +198,7 @@ export interface RewardItem {
   description: string;
   star_cost: number;
   icon?: string;
-  category: 'activity' | 'item' | 'privilege' | 'experience';
+  category: 'cash' | 'screen_time' | 'treat' | 'item' | 'privilege' | 'experience' | 'learning' | 'activity';
   is_available: boolean;
   max_redemptions_per_week?: number;
   created_at: string;

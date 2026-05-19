@@ -8,9 +8,10 @@ import { CheckCircle2, XCircle, ShieldCheck, DollarSign, Calendar, Plus, Hash } 
 interface ApprovalsManagementProps {
   familyId: string;
   childrenProfiles: ChildProfile[];
+  starCashRate?: number;
 }
 
-export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsManagementProps) {
+export function ApprovalsManagement({ familyId, childrenProfiles, starCashRate = 0 }: ApprovalsManagementProps) {
   const { approvals, settlements, resolveApproval, createSettlement, markSettlementPaid, loading } = useApprovals(familyId);
   const { addToast } = useToast();
 
@@ -83,17 +84,17 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
         return appDate >= startDate && appDate <= endDate;
       });
 
-      const totalPoints = childApprovals.reduce((acc, curr) => acc + (curr.points || 0), 0);
+      const totalStars = childApprovals.reduce((acc, curr) => acc + (curr.points || 0), 0);
       
-      // Compute total money based on points (e.g. 1 point = $0.10, or custom rate)
-      const calculatedMoney = totalPoints * 0.10 + (Number(baseMoney) || 0);
+      // Legacy settlement field is named total_points; the product model calls these stars.
+      const calculatedMoney = totalStars * starCashRate + (Number(baseMoney) || 0);
 
       await createSettlement({
         family_id: familyId,
         child_id: settlementChild,
         period_start: startDate,
         period_end: endDate,
-        total_points: totalPoints,
+        total_points: totalStars,
         total_money: Number(calculatedMoney.toFixed(2)),
       });
 
@@ -123,7 +124,7 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
           <h2 className="text-xl font-bold flex items-center gap-2">
             <ShieldCheck className="text-cyan-500" /> Approvals & Settlements
           </h2>
-          <p className="text-sm text-slate-500 dark:text-white/60">Review child submissions, approve points, and run monthly allowance payouts.</p>
+          <p className="text-sm text-slate-500 dark:text-white/60">Review child submissions, approve stars, and run monthly allowance payouts.</p>
         </div>
         <div className="flex gap-2">
           {(['pending', 'history', 'settlements'] as const).map(tab => (
@@ -361,7 +362,7 @@ export function ApprovalsManagement({ familyId, childrenProfiles }: ApprovalsMan
                   onChange={(e) => setBaseMoney(e.target.value === '' ? '' : Number(e.target.value))}
                   className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">This will be added on top of child points earned during this period (calculated at 1 point = $0.10).</p>
+                <p className="text-[10px] text-slate-400 mt-1">Cash rate: 1 star = {starCashRate}.</p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-100 dark:border-white/10 flex justify-end gap-3">
                 <button

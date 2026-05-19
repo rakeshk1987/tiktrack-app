@@ -13,6 +13,12 @@ import {
 } from 'firebase/firestore';
 import type { RewardItem, Redemption } from '../types/schema';
 
+const mergeRewards = (rewardGroups: RewardItem[][]) => {
+  const merged = new Map<string, RewardItem>();
+  rewardGroups.flat().forEach((reward) => merged.set(reward.id, reward));
+  return Array.from(merged.values()).sort((a, b) => a.star_cost - b.star_cost);
+};
+
 /**
  * Get default reward items to suggest
  */
@@ -24,7 +30,7 @@ export const getDefaultRewards = (parentId: string): Omit<RewardItem, 'id' | 'cr
       description: 'Get 1 extra hour of gaming time',
       star_cost: 20,
       icon: '🎮',
-      category: 'privilege',
+      category: 'screen_time',
       is_available: true,
       max_redemptions_per_week: 1,
     },
@@ -44,7 +50,7 @@ export const getDefaultRewards = (parentId: string): Omit<RewardItem, 'id' | 'cr
       description: 'Get your favorite ice cream',
       star_cost: 15,
       icon: '🍦',
-      category: 'item',
+      category: 'treat',
       is_available: true,
       max_redemptions_per_week: 3,
     },
@@ -74,19 +80,9 @@ export const getDefaultRewards = (parentId: string): Omit<RewardItem, 'id' | 'cr
       description: 'Request your favorite meal',
       star_cost: 18,
       icon: '🍕',
-      category: 'item',
+      category: 'treat',
       is_available: true,
       max_redemptions_per_week: 2,
-    },
-    {
-      parent_id: parentId,
-      name: 'Extra Allowance',
-      description: 'Get ₹50 bonus allowance',
-      star_cost: 40,
-      icon: '💰',
-      category: 'item',
-      is_available: true,
-      max_redemptions_per_week: 1,
     },
     {
       parent_id: parentId,
@@ -95,6 +91,16 @@ export const getDefaultRewards = (parentId: string): Omit<RewardItem, 'id' | 'cr
       star_cost: 35,
       icon: '👫',
       category: 'experience',
+      is_available: true,
+      max_redemptions_per_week: 1,
+    },
+    {
+      parent_id: parentId,
+      name: 'Book or Comic Pick',
+      description: 'Choose a new book or comic',
+      star_cost: 40,
+      icon: '📚',
+      category: 'learning',
       is_available: true,
       max_redemptions_per_week: 1,
     },
@@ -111,15 +117,14 @@ export const useRewards = (parentId: string) => {
       try {
         setLoading(true);
         const rewardsRef = collection(db, 'reward_items');
-        const q = query(
-          rewardsRef,
-          where('parent_id', '==', parentId),
-          where('is_available', '==', true)
-        );
+        const [familySnapshot, parentSnapshot] = await Promise.all([
+          getDocs(query(rewardsRef, where('family_id', '==', parentId), where('is_available', '==', true))),
+          getDocs(query(rewardsRef, where('parent_id', '==', parentId), where('is_available', '==', true))),
+        ]);
 
-        const snapshot = await getDocs(q);
-        const fetchedRewards = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<RewardItem, 'id'>) }));
-        setRewards(fetchedRewards.sort((a, b) => a.star_cost - b.star_cost));
+        const byFamily = familySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<RewardItem, 'id'>) }));
+        const byParent = parentSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<RewardItem, 'id'>) }));
+        setRewards(mergeRewards([byFamily, byParent]));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch rewards');
       } finally {

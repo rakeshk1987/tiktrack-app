@@ -87,7 +87,7 @@ export default function RoutinePage() {
       if (routine.requires_approval) {
         addToast(`✅ ${routine.title} submitted for parent approval!`, 'info');
       } else {
-        addToast(`🌟 Awesome! ${routine.title} done — +${routine.points} pts!`, 'success');
+        addToast(`🌟 Awesome! ${routine.title} done — +${routine.points} stars!`, 'success');
       }
     } catch {
       addToast('Failed to log routine. Please try again.', 'error');
@@ -266,7 +266,7 @@ export default function RoutinePage() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={clsx('text-xs font-bold flex items-center gap-0.5', isDark ? 'text-emerald-400' : 'text-emerald-600')}>
-                          <Star size={12} className="fill-current" /> {routine.points} pts
+                          <Star size={12} className="fill-current" /> {routine.points} stars
                         </span>
                         {(routine.streak > 0) && (
                           <span className={clsx('text-xs font-bold flex items-center gap-0.5', isDark ? 'text-orange-400' : 'text-orange-600')}>
@@ -278,7 +278,7 @@ export default function RoutinePage() {
 
                     {routine.requires_approval && !isCompleted && (
                       <p className={clsx('text-[10px] font-bold mb-2', isDark ? 'text-amber-400/80' : 'text-amber-600')}>
-                        ⚠️ Needs parent approval for points
+                        ⚠️ Needs parent approval for stars
                       </p>
                     )}
 
@@ -385,7 +385,7 @@ export default function RoutinePage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={clsx('block text-xs font-bold uppercase tracking-wider mb-1', isDark ? 'text-white/50' : 'text-slate-500')}>Points *</label>
+                  <label className={clsx('block text-xs font-bold uppercase tracking-wider mb-1', isDark ? 'text-white/50' : 'text-slate-500')}>Stars *</label>
                   <input
                     required type="number" min="0"
                     value={form.points}
@@ -404,7 +404,7 @@ export default function RoutinePage() {
               </div>
 
               <p className={clsx('text-xs rounded-xl border px-3 py-2', isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-amber-200 bg-amber-50 text-amber-700')}>
-                ⚠️ Child-created routines need parent approval before points are awarded.
+                ⚠️ Child-created routines need parent approval before stars are awarded.
               </p>
 
               <div className="flex justify-end gap-3 pt-1">
