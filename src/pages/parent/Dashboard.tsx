@@ -32,7 +32,6 @@ import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy,
 import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
 import { RealTimeProvider } from '../../contexts/RealTimeContext';
 import RealTimeNotifications from '../../components/RealTimeNotifications';
-import RealTimeDashboard from '../../components/RealTimeDashboard';
 import RoutineConfigurationUI from '../../components/RoutineConfigurationUI';
 import TaskSchedulerUI from '../../components/TaskSchedulerUI';
 import ReminderManagement from '../../components/ReminderManagement';
@@ -2190,6 +2189,45 @@ function ParentDashboardContent() {
   const latestGrowthLogs = [...growthLogs]
     .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
     .slice(0, 3);
+  const dashboardChildId = selectedAutomationChildId || children[0]?.id || '';
+  const dashboardChild = children.find((child) => child.id === dashboardChildId) || children[0];
+  const dashboardProfile = (childProfiles.find((profile) => profile.id === dashboardChildId) || null) as ChildProfile | null;
+  const dashboardChildName = dashboardChild?.name || dashboardProfile?.name || 'your child';
+  const dashboardTasks = tasks.filter((task) => !dashboardChildId || task.child_id === dashboardChildId);
+  const activeDashboardTasks = dashboardTasks.filter((task) => task.status !== 'completed' && task.status !== 'expired' && task.status !== 'failed');
+  const completedDashboardTasks = dashboardTasks.filter((task) => task.status === 'completed');
+  const dashboardChallenges = activeChallenges.filter((challenge) => !dashboardChildId || challenge.child_id === dashboardChildId);
+  const dashboardStars = Number(dashboardProfile?.total_stars || 0);
+  const dashboardPendingApprovals = topLevelApprovals.filter((approval) => approval.status === 'pending' && (!dashboardChildId || approval.child_id === dashboardChildId));
+  const dashboardPendingProofs = visiblePendingProofs.filter((proof) => !dashboardChildId || proof.child_id === dashboardChildId);
+  const dashboardNeedsAttention = dashboardPendingApprovals.length + dashboardPendingProofs.length;
+  const dashboardStatusText = !hasChildren
+    ? 'Add a child to begin.'
+    : dashboardNeedsAttention > 0
+      ? `${dashboardNeedsAttention} item${dashboardNeedsAttention === 1 ? '' : 's'} need your review.`
+      : activeDashboardTasks.length > 0
+        ? `${dashboardChildName} has ${activeDashboardTasks.length} active task${activeDashboardTasks.length === 1 ? '' : 's'} today.`
+        : `${dashboardChildName} is all clear right now.`;
+  const dashboardRecentActivity = [
+    ...completedDashboardTasks.map((task) => ({
+      id: `task-${task.id}`,
+      title: task.title,
+      meta: `${Number(task.points ?? task.star_value ?? 0)} stars earned`,
+      date: task.completed_at || task.updated_at || task.created_at,
+      tone: 'emerald' as const,
+    })),
+    ...topLevelApprovals
+      .filter((approval) => !dashboardChildId || approval.child_id === dashboardChildId)
+      .map((approval) => ({
+        id: `approval-${approval.id}`,
+        title: approval.title,
+        meta: `${approval.type} ${approval.status}`,
+        date: approval.reviewed_at || approval.created_at,
+        tone: approval.status === 'pending' ? 'amber' as const : 'cyan' as const,
+      })),
+  ]
+    .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+    .slice(0, 5);
 
   const saveRoutineConfiguration = async (updates: Parameters<typeof updateRoutine>[0]) => {
     if (!routine?.id) {
@@ -2571,79 +2609,203 @@ function ParentDashboardContent() {
             {error && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-red-100 text-red-700 mb-4">{error}</div>}
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5">
-              <div className={activeTab === 'dashboard' ? 'xl:col-span-7 2xl:col-span-8 space-y-4' : 'hidden'}>
-                <section className="xl:col-span-7 2xl:col-span-8 space-y-4">
-                  {/* Real-time Dashboards for each child */}
-                {children.map((child) => (
-                  <RealTimeDashboard
-                    key={child.id}
-                    childId={child.id}
-                    childName={child.name || (child.email || '').replace('@tiktrack.family', '')}
-                    tasks={tasks.filter((task) => task.child_id === child.id)}
-                    challenges={activeChallenges.filter((challenge) => challenge.child_id === child.id)}
-                    streakCurrent={(childProfiles.find((profile) => profile.id === child.id) as ChildProfile | undefined)?.streak_count || 0}
-                  />
-                ))}
+              <div className={activeTab === 'dashboard' ? 'xl:col-span-12 space-y-5' : 'hidden'}>
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.85fr)]">
+                  <div className={`${cardBase} overflow-hidden bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Today</p>
+                        <h2 className="mt-1 text-2xl font-display font-black" style={{ color: 'var(--text-main)' }}>
+                          {hasChildren ? `${dashboardChildName}'s day at a glance` : 'Start your family hub'}
+                        </h2>
+                        <p className="mt-2 max-w-2xl text-sm" style={{ color: 'var(--text-muted)' }}>{dashboardStatusText}</p>
+                      </div>
+                      <select
+                        value={dashboardChildId}
+                        onChange={(event) => setAutomationChildId(event.target.value)}
+                        className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                        style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                      >
+                        {children.map((child) => (
+                          <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Analytics</h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
-                      <p className="text-white text-xs">Children</p>
-                      <p className="text-white font-extrabold">{children.length}</p>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-2xl border p-4" style={{ borderColor: 'rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.10)' }}>
+                        <p className="text-xs font-black uppercase text-emerald-300">Completed</p>
+                        <p className="mt-2 text-3xl font-black" style={{ color: 'var(--text-main)' }}>{completedDashboardTasks.length}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>tasks finished</p>
+                      </div>
+                      <div className="rounded-2xl border p-4" style={{ borderColor: 'rgba(34,211,238,0.35)', background: 'rgba(34,211,238,0.10)' }}>
+                        <p className="text-xs font-black uppercase text-cyan-300">Active</p>
+                        <p className="mt-2 text-3xl font-black" style={{ color: 'var(--text-main)' }}>{activeDashboardTasks.length}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>open tasks</p>
+                      </div>
+                      <div className="rounded-2xl border p-4" style={{ borderColor: dashboardNeedsAttention > 0 ? 'rgba(245,158,11,0.45)' : 'rgba(34,197,94,0.35)', background: dashboardNeedsAttention > 0 ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.10)' }}>
+                        <p className={clsx('text-xs font-black uppercase', dashboardNeedsAttention > 0 ? 'text-amber-300' : 'text-emerald-300')}>Needs Review</p>
+                        <p className="mt-2 text-3xl font-black" style={{ color: 'var(--text-main)' }}>{dashboardNeedsAttention}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>approvals and proofs</p>
+                      </div>
+                      <div className="rounded-2xl border p-4" style={{ borderColor: 'rgba(168,85,247,0.38)', background: 'rgba(168,85,247,0.12)' }}>
+                        <p className="text-xs font-black uppercase text-violet-300">Stars</p>
+                        <p className="mt-2 text-3xl font-black" style={{ color: 'var(--text-main)' }}>{dashboardStars}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>available now</p>
+                      </div>
                     </div>
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #06b6d4, #14b8a6)' }}>
-                      <p className="text-white text-xs">Tasks</p>
-                      <p className="text-white font-extrabold">{totalTasksCount}</p>
-                    </div>
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
-                      <p className="text-white text-xs">Pending Proofs</p>
-                      <p className="text-white font-extrabold">{pendingProofCount}</p>
-                    </div>
-                    <div className="rounded-xl p-3 text-center" style={{ background: 'linear-gradient(135deg, #ef4444, #fb7185)' }}>
-                      <p className="text-white text-xs">Upcoming Events</p>
-                      <p className="text-white font-extrabold">{upcomingEventsCount}</p>
-                    </div>
-                    <div className="rounded-xl p-3 text-center col-span-2 sm:col-span-2" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}>
-                      <p className="text-white text-xs">Avg Consistency</p>
-                      <p className="text-white font-extrabold">{avgConsistency}%</p>
-                    </div>
-                    <div className="rounded-xl p-3 text-center col-span-2 sm:col-span-2" style={{ background: 'linear-gradient(135deg, #8b5cf6, #c084fc)' }}>
-                      <p className="text-white text-xs">Avg BMI</p>
-                      <p className="text-white font-extrabold">{avgBmi}</p>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <button type="button" onClick={() => setActiveTab('approvals')} className="rounded-xl border px-4 py-3 text-left text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-white/10" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>
+                        Review approvals
+                        <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{pendingApprovalCount} waiting</span>
+                      </button>
+                      <button type="button" onClick={() => setActiveTab('tasks')} className="rounded-xl border px-4 py-3 text-left text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-white/10" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>
+                        Add or edit task
+                        <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{totalTasksCount} total tasks</span>
+                      </button>
+                      <button type="button" onClick={() => setActiveTab('rewards')} className="rounded-xl border px-4 py-3 text-left text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-white/10" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>
+                        Award stars
+                        <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--text-muted)' }}>Gift or scratch reward</span>
+                      </button>
+                      <button type="button" onClick={openNudgeModal} className="rounded-xl border px-4 py-3 text-left text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-white/10" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>
+                        Send nudge
+                        <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--text-muted)' }}>Quick encouragement</span>
+                      </button>
                     </div>
                   </div>
-                </div>
-                <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                  <div className="flex items-start justify-between">
-                    <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--text-main)' }}>Weekly Trend</h2>
-                    <div className="mb-3">
-                      <select value={selectedTrendChild} onChange={(e) => setSelectedTrendChild(e.target.value)} className="rounded-xl py-1 px-2 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Parent Attention</h2>
+                      <span className={clsx('rounded-full px-3 py-1 text-xs font-black', dashboardNeedsAttention > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700')}>
+                        {dashboardNeedsAttention > 0 ? `${dashboardNeedsAttention} to review` : 'Clear'}
+                      </span>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {dashboardPendingApprovals.slice(0, 3).map((approval) => (
+                        <div key={approval.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{approval.title}</p>
+                          <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{approval.type} • {approval.points} stars</p>
+                        </div>
+                      ))}
+                      {dashboardPendingProofs.slice(0, 2).map((proof) => (
+                        <div key={proof.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{proof.task_title || 'Proof waiting'}</p>
+                          <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>Proof submitted by {getChildName(proof.child_id)}</p>
+                        </div>
+                      ))}
+                      {dashboardNeedsAttention === 0 ? (
+                        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-4">
+                          <p className="font-bold text-emerald-300">No parent action needed</p>
+                          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>You can add a task, send a nudge, or award a surprise from here.</p>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setActiveTab('approvals')} className="w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-black text-slate-950">
+                          Open review queue
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Active Tasks</h2>
+                      <button type="button" onClick={() => setActiveTab('tasks')} className="rounded-xl border px-3 py-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Manage tasks</button>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {activeDashboardTasks.length === 0 ? (
+                        <p className="rounded-2xl border border-dashed p-5 text-sm" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>No active tasks for {dashboardChildName}.</p>
+                      ) : activeDashboardTasks.slice(0, 6).map((task) => (
+                        <div key={task.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-bold" style={{ color: 'var(--text-main)' }}>{task.title}</p>
+                              <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{task.category || 'Task'} • {Number(task.points ?? task.star_value ?? 0)} stars {task.due_date ? `• due ${new Date(task.due_date).toLocaleDateString()}` : ''}</p>
+                            </div>
+                            <span className={clsx('rounded-full px-2 py-1 text-[11px] font-black uppercase', task.priority === 'high' ? 'bg-amber-100 text-amber-700' : 'bg-cyan-100 text-cyan-700')}>
+                              {task.priority || 'live'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Rewards Pulse</h2>
+                      <button type="button" onClick={() => setActiveTab('rewards')} className="rounded-xl border px-3 py-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Open rewards</button>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl border p-3" style={{ borderColor: 'rgba(168,85,247,0.35)', background: 'rgba(168,85,247,0.10)' }}>
+                        <p className="text-xs font-bold uppercase text-violet-300">Stars</p>
+                        <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{dashboardStars}</p>
+                      </div>
+                      <div className="rounded-2xl border p-3" style={{ borderColor: 'rgba(34,211,238,0.35)', background: 'rgba(34,211,238,0.10)' }}>
+                        <p className="text-xs font-bold uppercase text-cyan-300">Catalogue</p>
+                        <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{rewardItems.length}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      <button type="button" onClick={() => setActiveTab('rewards')} className="w-full rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white">
+                        Send surprise or scratch reward
+                      </button>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Use rewards when something deserves recognition beyond regular tasks.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Weekly Stars</h2>
+                      <select value={selectedTrendChild} onChange={(e) => setSelectedTrendChild(e.target.value)} className="rounded-xl border px-2 py-1 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">All Children</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || (c.email || '').replace('@tiktrack.family','')}</option>))}
                       </select>
                     </div>
-                  </div>
-                  <div className="h-44 rounded-2xl p-4 bg-[var(--surface-soft)] border" style={{ borderColor: 'var(--border-main)' }}>
-                    <div className="h-full w-full relative flex items-end gap-2">
-                      {weeklyStarsTrend.length === 0 ? (
-                        <div className="flex-1 grid place-items-center text-sm" style={{ color: 'var(--text-muted)' }}>No recent activity</div>
-                      ) : (
-                        (() => {
-                          const max = Math.max(...weeklyStarsTrend, 1);
-                          return weeklyStarsTrend.map((val, idx) => (
-                            <div key={idx} className="flex-1 flex flex-col items-center justify-end">
-                              <div className="w-full rounded-t-md bg-emerald-400" style={{ height: `${Math.round((val / max) * 100)}%` }} />
-                              <div className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>{/* label */}</div>
-                            </div>
-                          ));
-                        })()
-                      )}
+                    <div className="mt-4 h-44 rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="flex h-full items-end gap-2">
+                        {weeklyStarsTrend.every((value) => value === 0) ? (
+                          <div className="grid flex-1 place-items-center text-center text-sm" style={{ color: 'var(--text-muted)' }}>Complete tasks for a few days to see the weekly trend.</div>
+                        ) : (
+                          (() => {
+                            const max = Math.max(...weeklyStarsTrend, 1);
+                            return weeklyStarsTrend.map((val, idx) => (
+                              <div key={idx} className="flex flex-1 flex-col items-center justify-end">
+                                <div className="w-full rounded-t-lg bg-emerald-400" style={{ height: `${Math.max(8, Math.round((val / max) * 100))}%` }} />
+                                <span className="mt-2 text-[10px]" style={{ color: 'var(--text-muted)' }}>{val}</span>
+                              </div>
+                            ));
+                          })()
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+
+                  <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Recent Activity</h2>
+                    <div className="mt-4 space-y-2">
+                      {dashboardRecentActivity.length === 0 ? (
+                        <p className="rounded-2xl border border-dashed p-5 text-sm" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>No recent activity yet.</p>
+                      ) : dashboardRecentActivity.map((item) => (
+                        <div key={item.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{item.title}</p>
+                              <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{item.meta}</p>
+                            </div>
+                            <span className={clsx('h-2.5 w-2.5 rounded-full', item.tone === 'emerald' ? 'bg-emerald-400' : item.tone === 'amber' ? 'bg-amber-400' : 'bg-cyan-400')} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </section>
-            </div>
+              </div>
 
                 <div className={activeTab === 'planner' ? 'xl:col-span-12' : 'hidden'}>
                   <ParentPlannerV2Page childId={selectedActivityChildId} familyId={familyId} />
@@ -3406,9 +3568,8 @@ function ParentDashboardContent() {
 
               <section className={clsx(
                 'space-y-4',
-                activeTab === 'dashboard' && 'xl:col-span-5 2xl:col-span-4',
                 ['family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'xl:col-span-12',
-                !['dashboard', 'family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'hidden'
+                !['family', 'exams', 'challenges', 'communication', 'settings'].includes(activeTab) && 'hidden'
               )}>
                 {activeTab === 'dashboard' && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
