@@ -65,8 +65,18 @@ export interface Task {
   points?: number;
   star_value: number;
   energy_level?: 'low' | 'medium' | 'high' | number | string;
+  available_from?: string | null;
   due_date?: string;
   expires_at?: string;
+  end_date?: string | null;
+  is_mandatory?: boolean;
+  missed_action?: {
+    notify_parent?: boolean;
+    notify_child?: boolean;
+    reduce_stars?: boolean;
+    star_penalty?: number;
+    create_parent_approval?: boolean;
+  };
   recurrence_type?: 'none' | 'daily' | 'weekly';
   recurrence_days?: number[];
   requires_proof?: boolean;

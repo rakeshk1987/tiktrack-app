@@ -195,6 +195,19 @@ function activityExpiryStatus(kind: ActivityDetailKind, item: any): string {
   return activityNextDate(kind, item) ? 'Active' : 'Expired';
 }
 
+function taskWindowState(task: any, now = new Date()): 'past' | 'future' | 'active' {
+  const availableFrom = task.available_from || task.due_date || null;
+  const expiresAt = task.expires_at || task.end_date || null;
+  const startTime = availableFrom ? new Date(availableFrom).getTime() : null;
+  const endTime = expiresAt ? new Date(expiresAt).getTime() : null;
+  const nowTime = now.getTime();
+
+  if (task.status === 'completed' || task.status === 'expired' || task.status === 'failed') return 'past';
+  if (endTime && endTime < nowTime) return 'past';
+  if (startTime && startTime > nowTime) return 'future';
+  return 'active';
+}
+
 function ParentDashboardContent() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -232,6 +245,11 @@ function ParentDashboardContent() {
   const [tDue, setTDue] = useState('');
   const [tRecurrenceType, setTRecurrenceType] = useState<'none' | 'daily' | 'weekly'>('none');
   const [tRecurrenceDays, setTRecurrenceDays] = useState<number[]>([]);
+  const [tMandatory, setTMandatory] = useState(false);
+  const [tNotifyParentOnMiss, setTNotifyParentOnMiss] = useState(true);
+  const [tNotifyChildOnMiss, setTNotifyChildOnMiss] = useState(true);
+  const [tReduceStarsOnMiss, setTReduceStarsOnMiss] = useState(false);
+  const [tStarPenalty, setTStarPenalty] = useState<number | ''>('');
   const [tChild, setTChild] = useState('');
   const [tActivityId, setTActivityId] = useState('');
   const [tEndDate, setTEndDate] = useState('');
@@ -574,6 +592,11 @@ function ParentDashboardContent() {
     setTEndDate('');
     setTRecurrenceType('none');
     setTRecurrenceDays([]);
+    setTMandatory(false);
+    setTNotifyParentOnMiss(true);
+    setTNotifyChildOnMiss(true);
+    setTReduceStarsOnMiss(false);
+    setTStarPenalty('');
     setEditTaskId(null);
     setShowTaskModal(false);
   };
@@ -590,6 +613,11 @@ function ParentDashboardContent() {
     setTEndDate(task.end_date ? toInputDateTimeLocal(task.end_date) : '');
     setTRecurrenceType((task.recurrence_type as 'none' | 'daily' | 'weekly') || 'none');
     setTRecurrenceDays(Array.isArray(task.recurrence_days) ? task.recurrence_days : []);
+    setTMandatory(Boolean(task.is_mandatory));
+    setTNotifyParentOnMiss(task.missed_action?.notify_parent ?? true);
+    setTNotifyChildOnMiss(task.missed_action?.notify_child ?? true);
+    setTReduceStarsOnMiss(Boolean(task.missed_action?.reduce_stars));
+    setTStarPenalty(task.missed_action?.star_penalty ?? '');
     setShowTaskModal(true);
   };
 
@@ -619,6 +647,12 @@ function ParentDashboardContent() {
       }
 
       const starValue = Number(tPoints) || 1;
+      if (tMandatory && !tEndDate) {
+        setError('Mandatory timed tasks need a Complete Before date and time.');
+        setTaskLoading(false);
+        return;
+      }
+
       const taskPayload = {
         title: tTitle,
         description: tDesc,
@@ -632,8 +666,18 @@ function ParentDashboardContent() {
         status: 'pending',
         child_id: tChild,
         child_name: selectedChild.name || selectedChild.email || '',
+        available_from: tDue ? new Date(tDue).toISOString() : null,
         due_date: tDue ? new Date(tDue).toISOString() : null,
+        expires_at: tEndDate ? new Date(tEndDate).toISOString() : null,
         end_date: tEndDate ? new Date(tEndDate).toISOString() : null,
+        is_mandatory: tMandatory,
+        missed_action: {
+          notify_parent: tNotifyParentOnMiss,
+          notify_child: tNotifyChildOnMiss,
+          reduce_stars: tReduceStarsOnMiss,
+          star_penalty: tReduceStarsOnMiss ? Number(tStarPenalty || starValue) : 0,
+          create_parent_approval: true,
+        },
         recurrence_type: tRecurrenceType,
         recurrence_days: tRecurrenceType === 'weekly' ? tRecurrenceDays : [],
         linked_program_id: tActivityId || null,
@@ -3341,9 +3385,9 @@ function ParentDashboardContent() {
                       <div>
                         <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Manage Tasks</h2>
                         <div className="flex gap-2 mt-1">
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-800">Today: {tasks.filter(t => { const d = t.due_date ? new Date(t.due_date).getTime() : 0; const now = new Date(); now.setHours(0,0,0,0); return t.status !== 'completed' && t.status !== 'expired' && (!t.due_date || (d >= now.getTime() && d < now.getTime() + 86400000)); }).length}</span>
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800">Future: {tasks.filter(t => { const d = t.due_date ? new Date(t.due_date).getTime() : 0; const now = new Date(); now.setHours(0,0,0,0); return t.status !== 'completed' && t.status !== 'expired' && t.due_date && d >= now.getTime() + 86400000; }).length}</span>
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700">Past: {tasks.filter(t => { const d = t.due_date ? new Date(t.due_date).getTime() : 0; const now = new Date(); now.setHours(0,0,0,0); return t.status === 'completed' || t.status === 'expired' || (t.due_date && d < now.getTime()); }).length}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-800">Active: {tasks.filter(t => taskWindowState(t) === 'active').length}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800">Future: {tasks.filter(t => taskWindowState(t) === 'future').length}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700">Past: {tasks.filter(t => taskWindowState(t) === 'past').length}</span>
                         </div>
                       </div>
                       <button onClick={() => { clearTaskForm(); setShowTaskModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Create Task</button>
@@ -3386,12 +3430,39 @@ function ParentDashboardContent() {
                             </select>
 
                             <div className="col-span-1 flex flex-col gap-1">
-                              <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Start / Due Date</label>
+                              <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Available From</label>
                               <input value={tDue} onChange={(e) => setTDue(e.target.value)} type="datetime-local" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             </div>
                             <div className="col-span-1 flex flex-col gap-1">
-                              <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>End Date (Optional)</label>
+                              <label className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Complete Before</label>
                               <input value={tEndDate} onChange={(e) => setTEndDate(e.target.value)} type="datetime-local" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            </div>
+
+                            <div className="col-span-1 sm:col-span-2 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                              <label className="flex items-center gap-2 text-sm font-bold" style={{ color: 'var(--text-main)' }}>
+                                <input type="checkbox" checked={tMandatory} onChange={(e) => setTMandatory(e.target.checked)} />
+                                Mandatory timed task
+                              </label>
+                              <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>Use for online classes, tuition homework, or tasks that must be completed before the expiry time.</p>
+                              {tMandatory ? (
+                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                  <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                    <input type="checkbox" checked={tNotifyParentOnMiss} onChange={(e) => setTNotifyParentOnMiss(e.target.checked)} />
+                                    Notify parent if missed
+                                  </label>
+                                  <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                    <input type="checkbox" checked={tNotifyChildOnMiss} onChange={(e) => setTNotifyChildOnMiss(e.target.checked)} />
+                                    Remind child if missed
+                                  </label>
+                                  <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                    <input type="checkbox" checked={tReduceStarsOnMiss} onChange={(e) => setTReduceStarsOnMiss(e.target.checked)} />
+                                    Reduce stars if missed
+                                  </label>
+                                  {tReduceStarsOnMiss ? (
+                                    <input value={tStarPenalty as any} onChange={(e) => setTStarPenalty(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Penalty stars" type="number" min="0" className="rounded-xl py-2 px-3 border text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
 
                             {tRecurrenceType === 'weekly' ? (
@@ -3435,14 +3506,10 @@ function ParentDashboardContent() {
                           const tPast: any[] = [];
 
                           tasks.forEach((t) => {
-                            const dTime = t.due_date ? new Date(t.due_date).getTime() : 0;
-                            if (t.status === 'completed' || t.status === 'expired') {
+                            const state = taskWindowState(t);
+                            if (state === 'past') {
                               tPast.push(t);
-                            } else if (!t.due_date) {
-                              tToday.push(t);
-                            } else if (dTime < todayStart.getTime()) {
-                              tPast.push(t);
-                            } else if (dTime >= todayEnd.getTime()) {
+                            } else if (state === 'future') {
                               tFuture.push(t);
                             } else {
                               tToday.push(t);
@@ -3470,7 +3537,9 @@ function ParentDashboardContent() {
                                         
                                         <div className="flex flex-wrap gap-2 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
                                           <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">👤 {getChildName(t.child_id)}</span>
-                                          {t.due_date && <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">📅 {new Date(t.due_date).toLocaleDateString()} {new Date(t.due_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
+                                          {(t.available_from || t.due_date) && <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">▶ {new Date(t.available_from || t.due_date).toLocaleDateString()} {new Date(t.available_from || t.due_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
+                                          {(t.expires_at || t.end_date) && <span className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-1 rounded">⏳ before {new Date(t.expires_at || t.end_date).toLocaleDateString()} {new Date(t.expires_at || t.end_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
+                                          {t.is_mandatory && <span className="flex items-center gap-1 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded">Mandatory</span>}
                                           {t.subject_id && <span className="flex items-center gap-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded">📚 {t.subject_id}</span>}
                                         </div>
                                       </div>
@@ -3834,7 +3903,13 @@ function ParentDashboardContent() {
 
                             visibleExams.forEach((ex) => {
                               const dTime = ex.exam_date ? new Date(ex.exam_date).getTime() : 0;
-                              if (ex.status === 'completed' || ex.status === 'published' || ex.status === 'result_published' || ex.marks_scored !== undefined) {
+                              const hasPublishedResult =
+                                ex.status === 'completed' ||
+                                ex.status === 'published' ||
+                                ex.status === 'result_published' ||
+                                (ex.marks_scored !== undefined && ex.marks_scored !== null && ex.total_marks !== undefined && ex.total_marks !== null);
+
+                              if (hasPublishedResult) {
                                 exPast.push(ex);
                               } else if (!ex.exam_date) {
                                 exToday.push(ex);

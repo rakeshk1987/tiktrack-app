@@ -8,10 +8,12 @@ export {
   generateDailyTasksJob,
   dispatchRemindersJob,
   generateExamPrepTasksJob,
+  processExpiredMandatoryTasksJob,
   cleanupExpiredDataJob,
   triggerDailyTasksJob,
   triggerReminderDispatchJob,
   triggerExamPrepJob,
+  triggerMandatoryTaskExpiryJob,
   triggerCleanupJob,
 } from './backgroundJobs';
 

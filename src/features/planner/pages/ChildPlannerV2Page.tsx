@@ -107,6 +107,8 @@ export default function ChildPlannerV2Page() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDue, setNewTaskDue] = useState('');
+  const [newTaskExpiresAt, setNewTaskExpiresAt] = useState('');
+  const [newTaskMandatory, setNewTaskMandatory] = useState(false);
   const [newTaskRecurrence, setNewTaskRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [newTaskSubjectId, setNewTaskSubjectId] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
@@ -274,17 +276,25 @@ export default function ChildPlannerV2Page() {
   async function handleCreateTask(e: React.FormEvent) {
     e.preventDefault();
     if (!childId || !newTaskTitle.trim() || !activeActivityId || !newTaskSubjectId) return;
+    if (newTaskMandatory && !newTaskExpiresAt) {
+      alert('Please add a complete-before time for a mandatory task.');
+      return;
+    }
     setTaskCreating(true);
     try {
       const starValue = activityPointsConfig?.taskPoints || 0;
+      const availableFrom = newTaskDue ? new Date(newTaskDue).toISOString() : null;
+      const expiresAt = newTaskExpiresAt ? new Date(newTaskExpiresAt).toISOString() : null;
       const createdRef = await addDoc(collection(db, 'tasks'), {
         title: newTaskTitle.trim(),
         child_id: childId,
         family_id: familyId,
         parent_id: familyId,
         status: 'pending',
-        due_date: newTaskDue ? new Date(newTaskDue).toISOString() : null,
-        end_date: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+        available_from: availableFrom,
+        due_date: availableFrom,
+        expires_at: expiresAt,
+        end_date: expiresAt || availableFrom,
         recurrence_type: newTaskRecurrence,
         linked_program_id: activeActivityId,
         subject_id: newTaskSubjectId,
@@ -294,6 +304,14 @@ export default function ChildPlannerV2Page() {
         points: starValue,
         created_by: 'child',
         approval_status: 'pending',
+        is_mandatory: newTaskMandatory,
+        missed_action: {
+          notify_parent: newTaskMandatory,
+          notify_child: true,
+          reduce_stars: false,
+          star_penalty: 0,
+          create_parent_approval: newTaskMandatory,
+        },
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
@@ -309,6 +327,8 @@ export default function ChildPlannerV2Page() {
       });
       setNewTaskTitle('');
       setNewTaskDue('');
+      setNewTaskExpiresAt('');
+      setNewTaskMandatory(false);
       setNewTaskRecurrence('none');
       setNewTaskSubjectId('');
       setShowTaskForm(false);
@@ -776,6 +796,16 @@ export default function ChildPlannerV2Page() {
                         type="datetime-local"
                         value={newTaskDue}
                         onChange={(e) => setNewTaskDue(e.target.value)}
+                        aria-label="Available from"
+                        title="Available from"
+                        className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
+                      />
+                      <input 
+                        type="datetime-local"
+                        value={newTaskExpiresAt}
+                        onChange={(e) => setNewTaskExpiresAt(e.target.value)}
+                        aria-label="Complete before"
+                        title="Complete before"
                         className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-cyan-500/50"
                       />
                       <select 
@@ -788,7 +818,19 @@ export default function ChildPlannerV2Page() {
                         <option value="weekly" className="bg-slate-900">Weekly</option>
                         <option value="monthly" className="bg-slate-900">Monthly</option>
                       </select>
+                      <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-white/70">
+                        <input
+                          type="checkbox"
+                          checked={newTaskMandatory}
+                          onChange={(e) => setNewTaskMandatory(e.target.checked)}
+                          className="h-4 w-4 accent-cyan-400"
+                        />
+                        Mandatory
+                      </label>
                     </div>
+                    <p className="mt-3 text-[11px] font-bold text-cyan-100/55">
+                      Mandatory tasks stay active only inside this window and will ask your parent to approve the request.
+                    </p>
                     <button 
                       type="submit" 
                       disabled={taskCreating}

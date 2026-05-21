@@ -196,11 +196,12 @@ export const useTaskScheduler = (
 
       const snapshot = await getDocs(q);
       for (const doc of snapshot.docs) {
+        if ((doc.data() as Task).is_mandatory === true) continue;
         await deleteDoc(doc.ref);
       }
 
       setScheduledTasks(prev =>
-        prev.filter(t => !t.expires_at || new Date(t.expires_at) > new Date())
+        prev.filter(t => t.is_mandatory || !t.expires_at || new Date(t.expires_at) > new Date())
       );
     } catch (err) {
       console.error('Error cleaning up expired tasks:', err);

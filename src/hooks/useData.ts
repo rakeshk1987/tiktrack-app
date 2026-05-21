@@ -24,12 +24,31 @@ const getTodayKey = () => new Date().toISOString().slice(0, 10);
 const MAX_CHILD_VISIBLE_TASKS = 7;
 const isTaskActiveForToday = (task: Task) => {
   const today = getTodayKey();
+  const now = new Date();
   const todayWeekday = new Date().getDay();
   const dueDateKey = task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : null;
+  const availableFrom = task.available_from ? new Date(task.available_from) : null;
+  const expiresAt = task.expires_at ? new Date(task.expires_at) : null;
   const createdDateKey = task.created_at ? new Date(task.created_at).toISOString().slice(0, 10) : null;
 
   if (task.status === 'completed') {
     return false;
+  }
+
+  if (task.status === 'failed' || task.status === 'expired' || task.status === 'paused') {
+    return false;
+  }
+
+  if (availableFrom && availableFrom.getTime() > now.getTime()) {
+    return false;
+  }
+
+  if (expiresAt && expiresAt.getTime() < now.getTime()) {
+    return false;
+  }
+
+  if (task.available_from || task.expires_at) {
+    return true;
   }
 
   if (task.recurrence_type === 'daily') {

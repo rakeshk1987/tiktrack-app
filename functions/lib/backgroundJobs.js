@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.triggerCleanupJob = exports.triggerExamPrepJob = exports.triggerReminderDispatchJob = exports.triggerDailyTasksJob = exports.cleanupExpiredDataJob = exports.generateExamPrepTasksJob = exports.dispatchRemindersJob = exports.generateDailyTasksJob = void 0;
+exports.triggerCleanupJob = exports.triggerMandatoryTaskExpiryJob = exports.triggerExamPrepJob = exports.triggerReminderDispatchJob = exports.triggerDailyTasksJob = exports.cleanupExpiredDataJob = exports.processExpiredMandatoryTasksJob = exports.generateExamPrepTasksJob = exports.dispatchRemindersJob = exports.generateDailyTasksJob = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const taskScheduler_1 = require("./taskScheduler");
@@ -287,6 +287,137 @@ exports.generateExamPrepTasksJob = functions
     }
 });
 /**
+ * Background job: close mandatory timed tasks that passed their expiry window.
+ */
+exports.processExpiredMandatoryTasksJob = functions
+    .pubsub
+    .schedule('15 * * * *') // Every hour at minute 15
+    .timeZone('Asia/Kolkata')
+    .onRun(async () => {
+    console.log('⏳ Starting mandatory task expiry job');
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const results = {
+        scanned: 0,
+        failedTasks: 0,
+        parentMessages: 0,
+        childMessages: 0,
+        starDeductions: 0,
+        approvalsCreated: 0,
+        errors: 0,
+    };
+    try {
+        const expiredSnapshot = await tasksRef
+            .where('is_mandatory', '==', true)
+            .where('status', '==', 'pending')
+            .where('expires_at', '<', nowIso)
+            .get();
+        results.scanned = expiredSnapshot.size;
+        for (const taskDoc of expiredSnapshot.docs) {
+            const task = taskDoc.data();
+            const childId = task.child_id;
+            if (!childId) {
+                console.warn(`⚠️ Mandatory task ${taskDoc.id} has no child_id`);
+                results.errors++;
+                continue;
+            }
+            try {
+                const missedAction = task.missed_action || {};
+                const parentId = task.parent_id || task.family_id || '';
+                const penalty = Math.max(0, Number(missedAction.star_penalty || 0));
+                await taskDoc.ref.update({
+                    status: 'failed',
+                    missed_at: nowIso,
+                    updated_at: nowIso,
+                });
+                results.failedTasks++;
+                await db.collection('task_logs').doc(`${childId}_${taskDoc.id}_${nowIso.slice(0, 10)}`).set({
+                    task_id: taskDoc.id,
+                    child_id: childId,
+                    date: nowIso.slice(0, 10),
+                    status: 'failed',
+                    points_earned: 0,
+                    missed_reason: 'Mandatory task expired before completion',
+                    logged_at: nowIso,
+                }, { merge: true });
+                if (missedAction.reduce_stars && penalty > 0) {
+                    const profileRef = profilesRef.doc(childId);
+                    await db.runTransaction(async (transaction) => {
+                        var _a;
+                        const profileSnap = await transaction.get(profileRef);
+                        const currentStars = Number(((_a = profileSnap.data()) === null || _a === void 0 ? void 0 : _a.total_stars) || 0);
+                        transaction.update(profileRef, {
+                            total_stars: Math.max(0, currentStars - penalty),
+                        });
+                    });
+                    await db.collection('reward_ledger').add({
+                        child_id: childId,
+                        parent_id: parentId,
+                        family_id: task.family_id || parentId,
+                        stars_delta: -penalty,
+                        reason: `Missed mandatory task: ${task.title}`,
+                        source_type: 'task_expiry',
+                        source_id: taskDoc.id,
+                        created_at: nowIso,
+                    });
+                    results.starDeductions++;
+                }
+                if (missedAction.notify_parent && parentId) {
+                    await db.collection('messages').add({
+                        child_id: childId,
+                        parent_id: parentId,
+                        content: `Mandatory task "${task.title}" expired before completion.`,
+                        timestamp: nowIso,
+                        is_read: false,
+                        sender_role: 'child',
+                        sender_id: childId,
+                        subject: 'Mandatory task missed',
+                    });
+                    results.parentMessages++;
+                }
+                if (missedAction.notify_child && parentId) {
+                    await db.collection('messages').add({
+                        child_id: childId,
+                        parent_id: parentId,
+                        content: `Your mandatory task "${task.title}" expired. Please talk to your parent and plan the next step.`,
+                        timestamp: nowIso,
+                        is_read: false,
+                        sender_role: 'parent',
+                        sender_id: parentId,
+                        subject: 'Task window closed',
+                    });
+                    results.childMessages++;
+                }
+                if (missedAction.create_parent_approval && parentId) {
+                    await db.collection('approvals').add({
+                        family_id: task.family_id || parentId,
+                        child_id: childId,
+                        type: 'custom',
+                        reference_id: taskDoc.id,
+                        title: `Missed mandatory task: ${task.title}`,
+                        points: 0,
+                        status: 'pending',
+                        created_at: nowIso,
+                        reason: 'Mandatory task expired before completion',
+                    });
+                    results.approvalsCreated++;
+                }
+            }
+            catch (error) {
+                console.error(`❌ Failed to process mandatory task ${taskDoc.id}:`, error);
+                results.errors++;
+            }
+        }
+        console.log('📊 Mandatory task expiry job completed:', results);
+        return results;
+    }
+    catch (error) {
+        console.error('💥 Mandatory task expiry job failed:', error);
+        results.errors++;
+        return results;
+    }
+});
+/**
  * Background job: Clean up expired tasks and old logs weekly
  */
 exports.cleanupExpiredDataJob = functions
@@ -311,9 +442,10 @@ exports.cleanupExpiredDataJob = functions
             .where('expires_at', '<', now.toISOString())
             .where('is_generated', '==', true)
             .get();
-        const deletePromises = expiredTasksQuery.docs.map(doc => doc.ref.delete());
+        const generatedNonMandatoryTasks = expiredTasksQuery.docs.filter(doc => doc.data().is_mandatory !== true);
+        const deletePromises = generatedNonMandatoryTasks.map(doc => doc.ref.delete());
         await Promise.all(deletePromises);
-        results.expiredTasksDeleted = expiredTasksQuery.size;
+        results.expiredTasksDeleted = generatedNonMandatoryTasks.length;
         // Delete old reminder logs (older than 30 days)
         const oldLogsQuery = await db.collection('reminder_logs')
             .where('dispatched_at', '<', admin.firestore.Timestamp.fromDate(thirtyDaysAgo))
@@ -467,6 +599,15 @@ exports.triggerReminderDispatchJob = functions.https.onRequest(async (req, res) 
 exports.triggerExamPrepJob = functions.https.onRequest(async (req, res) => {
     try {
         const result = await exports.generateExamPrepTasksJob.run({}, {});
+        res.json({ success: true, result });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+});
+exports.triggerMandatoryTaskExpiryJob = functions.https.onRequest(async (req, res) => {
+    try {
+        const result = await exports.processExpiredMandatoryTasksJob.run({}, {});
         res.json({ success: true, result });
     }
     catch (error) {

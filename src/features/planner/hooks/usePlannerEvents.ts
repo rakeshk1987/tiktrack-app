@@ -72,13 +72,17 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
         const mappedTasks: PlannerEvent[] = snap.docs.map((d) => {
           const row = d.data() as Record<string, unknown>;
           let baseStart = now;
-          if (typeof row.due_date === 'string') {
+          if (typeof row.available_from === 'string') {
+            baseStart = row.available_from;
+          } else if (typeof row.due_date === 'string') {
             baseStart = row.due_date;
           } else if (typeof row.end_date === 'string') {
             baseStart = row.end_date;
           }
           let endAt = baseStart;
-          if (typeof row.end_date === 'string') {
+          if (typeof row.expires_at === 'string') {
+            endAt = row.expires_at;
+          } else if (typeof row.end_date === 'string') {
             endAt = row.end_date;
           }
           return {
@@ -222,4 +226,3 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
 
   return { events: allEvents, upcoming, loading, refresh: () => {} };
 }
-

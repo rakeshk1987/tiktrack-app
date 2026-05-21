@@ -46,7 +46,19 @@ export interface Task {
   requires_proof: boolean;
   generated_at?: string;
   generation_reason?: string;
+  available_from?: string | null;
+  due_date?: string;
   expires_at?: string;
+  end_date?: string | null;
+  status?: 'pending' | 'completed' | 'expired' | 'failed' | 'paused';
+  is_mandatory?: boolean;
+  missed_action?: {
+    notify_parent?: boolean;
+    notify_child?: boolean;
+    reduce_stars?: boolean;
+    star_penalty?: number;
+    create_parent_approval?: boolean;
+  };
   is_generated?: boolean;
 }
 
