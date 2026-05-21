@@ -347,6 +347,45 @@ service cloud.firestore {
       );
     }
 
+    match /reward_ledger/{entryId} {
+      allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (isChild() && request.resource.data.child_id == request.auth.uid);
+      allow update: if isParent() || (
+        isChild() &&
+        resource.data.child_id == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['surprise_state', 'revealed_at'])
+      );
+      allow delete: if isParent();
+    }
+
+    match /scratch_rewards/{scratchId} {
+      allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
+      allow create: if isParent() || (
+        isChild() &&
+        request.resource.data.child_id == request.auth.uid &&
+        request.resource.data.source_id is string &&
+        request.resource.data.source_type in ['task', 'routine', 'approval']
+      );
+      allow update: if isParent() || (
+        isChild() &&
+        resource.data.child_id == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revealed_at'])
+      );
+      allow delete: if isParent();
+    }
+
+    match /scratch_reward_templates/{templateId} {
+      allow read: if signedIn() && (
+        isParent() ||
+        ('family_id' in resource.data && sameFamily(resource.data.family_id)) ||
+        (resource.data.child_id is string && isSelf(resource.data.child_id))
+      );
+      allow create, update, delete: if isParent() && (
+        !('family_id' in request.resource.data) ||
+        sameFamily(request.resource.data.family_id)
+      );
+    }
+
     match /redemptions/{redemptionId} {
       allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
       allow create: if isChild() && request.resource.data.child_id == request.auth.uid;

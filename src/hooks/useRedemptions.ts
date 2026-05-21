@@ -12,6 +12,7 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import type { RewardItem, Redemption } from '../types/schema';
+import { createRewardLedgerEntry } from './useRewardLedger';
 
 const mergeRewards = (rewardGroups: RewardItem[][]) => {
   const merged = new Map<string, RewardItem>();
@@ -308,6 +309,18 @@ export const useRedemptions = (childId: string, parentId: string) => {
           await updateDoc(profileRef, {
             total_stars: Math.max(0, totalStars - existingRedemption.stars_spent),
           });
+          await createRewardLedgerEntry({
+            child_id: existingRedemption.child_id,
+            parent_id: existingRedemption.parent_id,
+            family_id: existingRedemption.reward_item.family_id || existingRedemption.parent_id,
+            type: 'redemption',
+            stars_delta: -Math.abs(existingRedemption.stars_spent),
+            title: existingRedemption.reward_item.name,
+            reason: `Redeemed stars for ${existingRedemption.reward_item.name}`,
+            source_id: existingRedemption.id,
+            source_type: 'redemption',
+            visible_to_child: true,
+          });
         }
       }
 
@@ -318,6 +331,18 @@ export const useRedemptions = (childId: string, parentId: string) => {
           const totalStars = Number(profileSnap.data().total_stars) || 0;
           await updateDoc(profileRef, {
             total_stars: totalStars + existingRedemption.stars_spent,
+          });
+          await createRewardLedgerEntry({
+            child_id: existingRedemption.child_id,
+            parent_id: existingRedemption.parent_id,
+            family_id: existingRedemption.reward_item.family_id || existingRedemption.parent_id,
+            type: 'adjustment',
+            stars_delta: Math.abs(existingRedemption.stars_spent),
+            title: `${existingRedemption.reward_item.name} refunded`,
+            reason: `Stars returned after reward request was rejected`,
+            source_id: existingRedemption.id,
+            source_type: 'redemption',
+            visible_to_child: true,
           });
         }
       }

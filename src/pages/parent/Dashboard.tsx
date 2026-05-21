@@ -42,6 +42,8 @@ import { useRoutineConfiguration } from '../../hooks/useRoutineConfiguration';
 import { useTaskScheduler } from '../../hooks/useTaskScheduler';
 import { getDefaultReminders, useReminders } from '../../hooks/useReminders';
 import { getDefaultRewards, useRedemptions, useRewards } from '../../hooks/useRedemptions';
+import { createRewardLedgerEntry } from '../../hooks/useRewardLedger';
+import { awardScratchRewardForTrigger, useScratchRewards } from '../../hooks/useScratchRewards';
 import { useApprovals } from '../../hooks/useApprovals';
 import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
 import { ParentPlannerV2Page } from '../../features/planner';
@@ -277,6 +279,24 @@ function ParentDashboardContent() {
   const [rStarRate, setRStarRate] = useState<number | ''>('');
   const [rWeeklyBonus, setRWeeklyBonus] = useState(false);
   const [editRewardId, setEditRewardId] = useState<string | null>(null);
+  const [awardChildId, setAwardChildId] = useState('');
+  const [awardStars, setAwardStars] = useState<number | ''>('');
+  const [awardReason, setAwardReason] = useState('');
+  const [awardSurprise, setAwardSurprise] = useState(true);
+  const [awardSaving, setAwardSaving] = useState(false);
+  const [scratchChildId, setScratchChildId] = useState('');
+  const [scratchTitle, setScratchTitle] = useState('Scratch surprise');
+  const [scratchPrizeType, setScratchPrizeType] = useState<'stars' | 'book' | 'toy' | 'treat' | 'custom'>('stars');
+  const [scratchStars, setScratchStars] = useState<number | ''>(10);
+  const [scratchPrizeLabel, setScratchPrizeLabel] = useState('10 stars');
+  const [scratchReason, setScratchReason] = useState('');
+  const [scratchSaving, setScratchSaving] = useState(false);
+  const [scratchTemplateChildId, setScratchTemplateChildId] = useState('');
+  const [scratchTemplateTitle, setScratchTemplateTitle] = useState('Task completion scratch');
+  const [scratchTemplatePrizeType, setScratchTemplatePrizeType] = useState<'stars' | 'book' | 'toy' | 'treat' | 'custom'>('stars');
+  const [scratchTemplateStars, setScratchTemplateStars] = useState<number | ''>(10);
+  const [scratchTemplatePrizeLabel, setScratchTemplatePrizeLabel] = useState('10 stars');
+  const [scratchTemplateSaving, setScratchTemplateSaving] = useState(false);
 
   const { initiateSickPeriod, getActiveSickPeriod } = useSickMode(user?.id || '');
   const [isSickModalOpen, setIsSickModalOpen] = useState(false);
@@ -1256,6 +1276,7 @@ function ParentDashboardContent() {
               true,
               today
             );
+            const earnedStars = Math.max(0, Number(updatedProfile.total_stars || 0) - Number(existing.total_stars || 0));
             const badgeText = `${task?.title || ''} ${task?.description || ''} ${task?.category || ''}`.toLowerCase();
             const isReadingTask = /\b(read|reading|book|comic)\b/.test(badgeText);
             const isStudyTask = /\b(study|homework|math|science|english|practice|exam)\b/.test(badgeText);
@@ -1268,6 +1289,28 @@ function ParentDashboardContent() {
               reading_completed_count: (Number(existing.reading_completed_count) || 0) + (isReadingTask ? 1 : 0),
               study_completed_count: (Number(existing.study_completed_count) || 0) + (isStudyTask ? 1 : 0)
             });
+            if (earnedStars > 0) {
+              await createRewardLedgerEntry({
+                child_id: childId,
+                parent_id: task?.parent_id || familyId,
+                family_id: task?.family_id || familyId,
+                type: 'task_completed',
+                stars_delta: earnedStars,
+                title: task?.title || 'Task completed',
+                reason: `Proof approved for "${task?.title || 'Task'}"`,
+                source_id: taskId,
+                source_type: 'task',
+                visible_to_child: true,
+              });
+              await awardScratchRewardForTrigger({
+                childId,
+                parentId: task?.parent_id || familyId,
+                familyId: task?.family_id || familyId,
+                sourceId: taskId,
+                sourceType: 'task',
+                reason: `Proof approved for "${task?.title || 'Task'}"`,
+              });
+            }
           } catch (innerErr) {
             console.error('Failed to update child profile after proof approval:', innerErr);
           }
@@ -1725,6 +1768,171 @@ function ParentDashboardContent() {
     setRWeeklyBonus(false);
   };
 
+  const handleAwardStars = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !awardChildId) {
+      setError('Choose a child before awarding stars.');
+      return;
+    }
+
+    const stars = Number(awardStars);
+    if (!Number.isFinite(stars) || stars <= 0) {
+      setError('Enter a positive number of stars.');
+      return;
+    }
+
+    if (!awardReason.trim()) {
+      setError('Add the reason for this award.');
+      return;
+    }
+
+    setAwardSaving(true);
+    setError('');
+    try {
+      const profileRef = doc(db, 'child_profile', awardChildId);
+      const profileSnap = await getDoc(profileRef);
+      const currentStars = profileSnap.exists() ? Number(profileSnap.data().total_stars || 0) : 0;
+      const childName = children.find((child) => child.id === awardChildId)?.name || 'your child';
+      const reason = awardReason.trim();
+
+      await updateDoc(profileRef, {
+        total_stars: currentStars + stars,
+      });
+
+      await createRewardLedgerEntry({
+        child_id: awardChildId,
+        parent_id: user.id,
+        family_id: familyId,
+        type: 'manual_award',
+        stars_delta: stars,
+        title: `Parent awarded ${stars} stars`,
+        reason,
+        source_type: 'parent_award',
+        visible_to_child: true,
+        surprise_state: awardSurprise ? 'hidden' : 'none',
+      });
+
+      await sendMessage(
+        awardChildId,
+        familyId,
+        awardSurprise
+          ? 'You received a surprise gift from parent. Open it in Rewards.'
+          : `Parent awarded ${stars} stars for ${reason}.`,
+        'parent',
+        familyId,
+        awardSurprise ? 'Surprise gift' : 'Stars awarded'
+      );
+
+      setSuccess(`Awarded ${stars} stars to ${childName}.`);
+      setAwardStars('');
+      setAwardReason('');
+      setAwardSurprise(true);
+    } catch (err) {
+      console.error('Failed to award stars:', err);
+      setError('Could not award stars. Please try again.');
+    } finally {
+      setAwardSaving(false);
+    }
+  };
+
+  const handleSendScratchReward = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !scratchChildId) {
+      setError('Choose a child for the scratch reward.');
+      return;
+    }
+
+    const stars = Number(scratchStars);
+    if (scratchPrizeType === 'stars' && (!Number.isFinite(stars) || stars <= 0)) {
+      setError('Enter the star value for this scratch reward.');
+      return;
+    }
+
+    const prizeLabel = scratchPrizeType === 'stars'
+      ? `${stars} stars`
+      : scratchPrizeLabel.trim();
+
+    if (!prizeLabel) {
+      setError('Add the scratch reward prize.');
+      return;
+    }
+
+    setScratchSaving(true);
+    setError('');
+    try {
+      await createScratchCard({
+        child_id: scratchChildId,
+        parent_id: user.id,
+        family_id: familyId,
+        title: scratchTitle.trim() || 'Scratch surprise',
+        prize_type: scratchPrizeType,
+        prize_label: prizeLabel,
+        stars_value: scratchPrizeType === 'stars' ? stars : 0,
+        reason: scratchReason.trim() || 'Completed something special',
+      });
+
+      await sendMessage(
+        scratchChildId,
+        familyId,
+        'You received a scratch reward. Open it in Rewards.',
+        'parent',
+        familyId,
+        'Scratch reward'
+      );
+
+      setSuccess('Scratch reward sent.');
+      setScratchReason('');
+      setScratchPrizeLabel(scratchPrizeType === 'stars' ? `${stars} stars` : '');
+    } catch (err) {
+      console.error('Failed to send scratch reward:', err);
+      setError('Could not send scratch reward.');
+    } finally {
+      setScratchSaving(false);
+    }
+  };
+
+  const handleSaveScratchTemplate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    const stars = Number(scratchTemplateStars);
+    if (scratchTemplatePrizeType === 'stars' && (!Number.isFinite(stars) || stars <= 0)) {
+      setError('Enter the star value for this scratch template.');
+      return;
+    }
+
+    const prizeLabel = scratchTemplatePrizeType === 'stars'
+      ? `${stars} stars`
+      : scratchTemplatePrizeLabel.trim();
+
+    if (!prizeLabel) {
+      setError('Add the scratch template prize.');
+      return;
+    }
+
+    setScratchTemplateSaving(true);
+    setError('');
+    try {
+      await createScratchTemplate({
+        parent_id: user.id,
+        family_id: familyId,
+        child_id: scratchTemplateChildId || '',
+        title: scratchTemplateTitle.trim() || 'Task completion scratch',
+        prize_type: scratchTemplatePrizeType,
+        prize_label: prizeLabel,
+        stars_value: scratchTemplatePrizeType === 'stars' ? stars : 0,
+        trigger: 'task_completion',
+        is_active: true,
+      });
+      setSuccess('Scratch template saved. Future completed tasks can award this card.');
+    } catch (err) {
+      console.error('Failed to save scratch template:', err);
+      setError('Could not save scratch template.');
+    } finally {
+      setScratchTemplateSaving(false);
+    }
+  };
+
   // Analytics state
   const [childProfiles, setChildProfiles] = useState<Array<any>>([]);
   const [enrichedChildProfiles, setEnrichedChildProfiles] = useState<Array<any>>([]);
@@ -1804,6 +2012,13 @@ function ParentDashboardContent() {
     loading: redemptionsLoading,
     updateRedemptionStatus
   } = useRedemptions(selectedAutomationChildId, familyId);
+  const {
+    templates: scratchTemplates,
+    templatesLoading: scratchTemplatesLoading,
+    createScratchCard,
+    createScratchTemplate,
+    updateScratchTemplate
+  } = useScratchRewards(scratchChildId || selectedAutomationChildId, familyId);
 
   useEffect(() => {
     if (!automationChildId && children[0]?.id) {
@@ -2691,6 +2906,231 @@ function ParentDashboardContent() {
                           </div>
 	                    )}
 	                  </div>
+                    </div>
+
+                    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Award Stars</h3>
+                          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                            Give stars for thoughtful choices, kindness, sacrifice, savings, or anything that deserves a parent gift.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-bold text-pink-700">
+                          Surprise gift ready
+                        </span>
+                      </div>
+
+                      <form onSubmit={handleAwardStars} className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_0.6fr_1.5fr_auto] xl:items-center">
+                        <select
+                          value={awardChildId}
+                          onChange={(event) => setAwardChildId(event.target.value)}
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        >
+                          <option value="">Select child</option>
+                          {children.map((child) => (
+                            <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                          ))}
+                        </select>
+                        <input
+                          value={awardStars as any}
+                          onChange={(event) => setAwardStars(event.target.value === '' ? '' : Number(event.target.value))}
+                          placeholder="Stars"
+                          type="number"
+                          min="1"
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        />
+                        <input
+                          value={awardReason}
+                          onChange={(event) => setAwardReason(event.target.value)}
+                          placeholder="Reason, e.g. saved 1000 by skipping a dress"
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        />
+                        <button disabled={awardSaving} type="submit" className="rounded-xl bg-pink-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                          {awardSaving ? 'Sending...' : 'Award'}
+                        </button>
+                        <label className="inline-flex items-center gap-2 text-sm xl:col-span-4">
+                          <input type="checkbox" checked={awardSurprise} onChange={(event) => setAwardSurprise(event.target.checked)} className="h-4 w-4" />
+                          <span style={{ color: 'var(--text-muted)' }}>Send as surprise gift for child to open</span>
+                        </label>
+                      </form>
+                    </div>
+
+                    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Scratch Rewards</h3>
+                        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                          Send a scratch card with a parent-decided prize like stars, a book, a toy, a treat, or a custom surprise.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleSaveScratchTemplate} className="mb-5 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                          <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Award Template</h4>
+                          <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">after task completion</span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-5 xl:items-center">
+                          <select
+                            value={scratchTemplateChildId}
+                            onChange={(event) => setScratchTemplateChildId(event.target.value)}
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                          >
+                            <option value="">All children</option>
+                            {children.map((child) => (
+                              <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                            ))}
+                          </select>
+                          <input
+                            value={scratchTemplateTitle}
+                            onChange={(event) => setScratchTemplateTitle(event.target.value)}
+                            placeholder="Template title"
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                          />
+                          <select
+                            value={scratchTemplatePrizeType}
+                            onChange={(event) => {
+                              const nextType = event.target.value as typeof scratchTemplatePrizeType;
+                              setScratchTemplatePrizeType(nextType);
+                              setScratchTemplatePrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'stars' ? `${scratchTemplateStars || 10} stars` : '');
+                            }}
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                          >
+                            <option value="stars">Stars</option>
+                            <option value="book">Book</option>
+                            <option value="toy">Toy</option>
+                            <option value="treat">Treat</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                          {scratchTemplatePrizeType === 'stars' ? (
+                            <input
+                              value={scratchTemplateStars as any}
+                              onChange={(event) => {
+                                const value = event.target.value === '' ? '' : Number(event.target.value);
+                                setScratchTemplateStars(value);
+                                setScratchTemplatePrizeLabel(value === '' ? '' : `${value} stars`);
+                              }}
+                              placeholder="Stars"
+                              type="number"
+                              min="1"
+                              className="rounded-xl py-2.5 px-3 border"
+                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                            />
+                          ) : (
+                            <input
+                              value={scratchTemplatePrizeLabel}
+                              onChange={(event) => setScratchTemplatePrizeLabel(event.target.value)}
+                              placeholder="Prize label"
+                              className="rounded-xl py-2.5 px-3 border"
+                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                            />
+                          )}
+                          <button disabled={scratchTemplateSaving} type="submit" className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                            {scratchTemplateSaving ? 'Saving...' : 'Save Template'}
+                          </button>
+                        </div>
+                      </form>
+
+                      <div className="mb-5 grid gap-2 md:grid-cols-2">
+                        {scratchTemplatesLoading ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading scratch templates...</p>
+                        ) : scratchTemplates.length === 0 ? (
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No scratch templates yet. Save one to auto-award cards after task completion.</p>
+                        ) : (
+                          scratchTemplates.map((template) => (
+                            <div key={template.id} className="rounded-xl border p-3 flex items-center justify-between gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                              <div>
+                                <p className="font-bold" style={{ color: 'var(--text-main)' }}>{template.title}</p>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                                  {template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {template.prize_label}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void updateScratchTemplate(template.id, { is_active: !template.is_active })}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${template.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}
+                              >
+                                {template.is_active ? 'Active' : 'Paused'}
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <form onSubmit={handleSendScratchReward} className="grid grid-cols-1 gap-3 xl:grid-cols-5 xl:items-center">
+                        <select
+                          value={scratchChildId}
+                          onChange={(event) => setScratchChildId(event.target.value)}
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        >
+                          <option value="">Select child</option>
+                          {children.map((child) => (
+                            <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                          ))}
+                        </select>
+                        <input
+                          value={scratchTitle}
+                          onChange={(event) => setScratchTitle(event.target.value)}
+                          placeholder="Scratch title"
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        />
+                        <select
+                          value={scratchPrizeType}
+                          onChange={(event) => {
+                            const nextType = event.target.value as typeof scratchPrizeType;
+                            setScratchPrizeType(nextType);
+                            setScratchPrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'stars' ? `${scratchStars || 10} stars` : '');
+                          }}
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        >
+                          <option value="stars">Stars</option>
+                          <option value="book">Book</option>
+                          <option value="toy">Toy</option>
+                          <option value="treat">Treat</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                        {scratchPrizeType === 'stars' ? (
+                          <input
+                            value={scratchStars as any}
+                            onChange={(event) => {
+                              const value = event.target.value === '' ? '' : Number(event.target.value);
+                              setScratchStars(value);
+                              setScratchPrizeLabel(value === '' ? '' : `${value} stars`);
+                            }}
+                            placeholder="Stars"
+                            type="number"
+                            min="1"
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                          />
+                        ) : (
+                          <input
+                            value={scratchPrizeLabel}
+                            onChange={(event) => setScratchPrizeLabel(event.target.value)}
+                            placeholder="Prize label"
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                          />
+                        )}
+                        <button disabled={scratchSaving} type="submit" className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                          {scratchSaving ? 'Sending...' : 'Send Scratch'}
+                        </button>
+                        <input
+                          value={scratchReason}
+                          onChange={(event) => setScratchReason(event.target.value)}
+                          placeholder="Reason, e.g. completed a difficult task"
+                          className="rounded-xl py-2.5 px-3 border xl:col-span-5"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        />
+                      </form>
                     </div>
 
                     <div className="space-y-4">

@@ -186,12 +186,12 @@ export default function ChildProfile() {
               <p className="mt-1 truncate text-base font-bold">{profile.name}</p>
             </div>
             <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
-              <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Level</p>
-              <p className="mt-1 truncate text-base font-bold">{level.levelName}</p>
+              <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Streak</p>
+              <p className="mt-1 truncate text-base font-bold">{profile.streak_count || 0} days</p>
             </div>
             <div className={clsx('min-w-0 rounded-2xl border px-3 py-3', profileCardClass)}>
-              <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Stars to Next</p>
-              <p className="mt-1 text-base font-bold">{level.starsToNext}</p>
+              <p className={clsx('text-[11px] font-bold uppercase tracking-[0.14em]', labelClass)}>Shields</p>
+              <p className="mt-1 text-base font-bold">{profile.streak_shields || 0}</p>
             </div>
           </div>
 

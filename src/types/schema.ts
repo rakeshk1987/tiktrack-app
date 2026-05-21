@@ -288,6 +288,64 @@ export interface Redemption {
   notes?: string;
 }
 
+export type RewardLedgerType =
+  | 'task_completed'
+  | 'manual_award'
+  | 'scratch_reward'
+  | 'redemption'
+  | 'bonus'
+  | 'adjustment';
+
+export interface RewardLedgerEntry {
+  id: string;
+  child_id: string;
+  parent_id: string;
+  family_id?: string;
+  type: RewardLedgerType;
+  stars_delta: number;
+  title: string;
+  reason: string;
+  source_id?: string;
+  source_type?: 'task' | 'routine' | 'approval' | 'redemption' | 'parent_award' | 'scratch' | 'system';
+  visible_to_child: boolean;
+  surprise_state?: 'none' | 'hidden' | 'revealed';
+  created_at: string;
+  revealed_at?: string;
+}
+
+export interface ScratchRewardCard {
+  id: string;
+  child_id: string;
+  parent_id: string;
+  family_id?: string;
+  template_id?: string;
+  source_id?: string;
+  source_type?: 'task' | 'routine' | 'approval' | 'manual';
+  title: string;
+  prize_label: string;
+  prize_type: 'stars' | 'book' | 'toy' | 'treat' | 'custom';
+  stars_value?: number;
+  reason: string;
+  status: 'available' | 'revealed';
+  created_at: string;
+  revealed_at?: string;
+}
+
+export interface ScratchRewardTemplate {
+  id: string;
+  parent_id: string;
+  family_id?: string;
+  child_id?: string;
+  title: string;
+  prize_label: string;
+  prize_type: 'stars' | 'book' | 'toy' | 'treat' | 'custom';
+  stars_value?: number;
+  trigger: 'task_completion' | 'manual';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Achievement {
   id: string;
   child_id: string;

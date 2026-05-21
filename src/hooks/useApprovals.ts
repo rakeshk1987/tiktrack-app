@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDocs, orderBy, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { Approval, Settlement } from '../types/schema';
+import { createRewardLedgerEntry } from './useRewardLedger';
+import { awardScratchRewardForTrigger } from './useScratchRewards';
 
 export function useApprovals(familyId: string, childId?: string) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -116,9 +118,30 @@ export function useApprovals(familyId: string, childId?: string) {
         const profileRef = doc(db, 'child_profile', data.child_id);
         const profileSnap = await getDoc(profileRef);
         if (profileSnap.exists()) {
-          const currentStars = profileSnap.data().total_stars || 0;
+          const profile = profileSnap.data();
+          const currentStars = profile.total_stars || 0;
           await updateDoc(profileRef, {
             total_stars: currentStars + data.points
+          });
+          await createRewardLedgerEntry({
+            child_id: data.child_id,
+            parent_id: parentId,
+            family_id: data.family_id,
+            type: data.type === 'routine' ? 'bonus' : 'task_completed',
+            stars_delta: data.points,
+            title: data.title,
+            reason: `${data.type === 'routine' ? 'Routine' : 'Task'} approved by parent: ${data.title}`,
+            source_id: data.reference_id || approvalId,
+            source_type: data.type === 'routine' ? 'routine' : 'approval',
+            visible_to_child: true,
+          });
+          await awardScratchRewardForTrigger({
+            childId: data.child_id,
+            parentId,
+            familyId: data.family_id,
+            sourceId: data.reference_id || approvalId,
+            sourceType: data.type === 'routine' ? 'routine' : 'approval',
+            reason: `${data.type === 'routine' ? 'Routine' : 'Task'} approved: ${data.title}`,
           });
         }
       }

@@ -17,6 +17,8 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
+import { createRewardLedgerEntry } from './useRewardLedger';
+import { awardScratchRewardForTrigger } from './useScratchRewards';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
 const MAX_CHILD_VISIBLE_TASKS = 7;
@@ -487,6 +489,7 @@ export function useQuestActions(childId: string) {
         const isEarlyBird = data.last_task_date !== today && (currentHour < 8 || (currentHour === 8 && currentMins <= 30));
 
         const { updatedProfile } = applyTaskCompletionToProfile(data, task.star_value, true, today, isEarlyBird);
+        const earnedStars = Math.max(0, Number(updatedProfile.total_stars || 0) - Number(data.total_stars || 0));
         const badgeText = `${task.title || ''} ${task.description || ''} ${task.category || ''}`.toLowerCase();
         const isReadingTask = /\b(read|reading|book|comic)\b/.test(badgeText);
         const isStudyTask = /\b(study|homework|math|science|english|practice|exam)\b/.test(badgeText);
@@ -500,6 +503,31 @@ export function useQuestActions(childId: string) {
           reading_completed_count: (Number(data.reading_completed_count) || 0) + (isReadingTask ? 1 : 0),
           study_completed_count: (Number(data.study_completed_count) || 0) + (isStudyTask ? 1 : 0)
         });
+
+        if (earnedStars > 0) {
+          await createRewardLedgerEntry({
+            child_id: childId,
+            parent_id: task.parent_id || task.family_id || data.parent_id || data.family_id || '',
+            family_id: task.family_id || data.family_id || task.parent_id || data.parent_id || '',
+            type: 'task_completed',
+            stars_delta: earnedStars,
+            title: task.title || 'Task completed',
+            reason: isEarlyBird
+              ? `Completed task "${task.title || 'Task'}" with early bird bonus`
+              : `Completed task "${task.title || 'Task'}"`,
+            source_id: task.id,
+            source_type: 'task',
+            visible_to_child: true,
+          });
+          await awardScratchRewardForTrigger({
+            childId,
+            parentId: task.parent_id || task.family_id || data.parent_id || data.family_id || '',
+            familyId: task.family_id || data.family_id || task.parent_id || data.parent_id || '',
+            sourceId: task.id,
+            sourceType: 'task',
+            reason: `Completed task "${task.title || 'Task'}"`,
+          });
+        }
       }
     } finally {
       setSaving(false);
