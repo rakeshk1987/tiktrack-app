@@ -5,7 +5,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import {
   Activity,
   BarChart3,
+  CalendarDays,
   Circle,
+  Gift,
   Home,
   LogOut,
   Mail,
@@ -374,22 +376,22 @@ function ParentDashboardContent() {
   const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
 
   const parentTabs = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'planner', label: 'Planner' },
-    { id: 'routines', label: 'Routines' },
-    { id: 'approvals', label: 'Approvals' },
-    { id: 'rewards', label: 'Rewards' },
-    { id: 'settings', label: 'Settings' }
+    { id: 'dashboard', label: 'Dashboard', shortLabel: 'Home', icon: Home },
+    { id: 'planner', label: 'Planner', shortLabel: 'Plan', icon: CalendarDays },
+    { id: 'routines', label: 'Routines', shortLabel: 'Routine', icon: Activity },
+    { id: 'rewards', label: 'Rewards', shortLabel: 'Rewards', icon: Gift },
+    { id: 'approvals', label: 'Approvals', shortLabel: 'Review', icon: ShieldCheck },
+    { id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings }
   ] as const;
 
   const plannerWorkspaceTabs = [
-    { id: 'planner', label: 'Main Planner' },
-    { id: 'family', label: 'Kid Activities' },
-    { id: 'tasks', label: 'Tasks / Duties' },
-    { id: 'exams', label: 'Exams / Tests' },
-    { id: 'challenges', label: 'Challenges' },
-    { id: 'events', label: 'Events' },
-    { id: 'automation', label: 'Automation' }
+    { id: 'planner', label: 'Main Planner', shortLabel: 'Calendar' },
+    { id: 'family', label: 'Kid Activities', shortLabel: 'Activities' },
+    { id: 'tasks', label: 'Tasks / Duties', shortLabel: 'Tasks' },
+    { id: 'exams', label: 'Exams / Tests', shortLabel: 'Exams' },
+    { id: 'challenges', label: 'Challenges', shortLabel: 'Challenges' },
+    { id: 'events', label: 'Events', shortLabel: 'Events' },
+    { id: 'automation', label: 'Automation', shortLabel: 'Auto' }
   ] as const;
 
   const familyId = user?.linked_family_id || user?.id || '';
@@ -2510,15 +2512,15 @@ function ParentDashboardContent() {
   };
 
   return (
-    <div className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
-      <div className="mx-auto max-w-[1680px] rounded-[2rem] border bg-[var(--surface)]/95 backdrop-blur-md p-3 sm:p-4 lg:p-5" style={{ borderColor: 'var(--border-main)' }}>
+    <div className="min-h-screen overflow-x-hidden px-2 py-3 sm:px-8 sm:py-8">
+      <div className="mx-auto max-w-[1680px] rounded-[1.25rem] border bg-[var(--surface)]/95 p-2 backdrop-blur-md sm:rounded-[2rem] sm:p-4 lg:p-5" style={{ borderColor: 'var(--border-main)' }}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[92px_1fr]">
           <aside
-            className="rounded-[1.6rem] p-3 text-white sm:p-4"
+            className="hidden rounded-[1.6rem] p-3 text-white sm:p-4 lg:block"
             style={{ background: 'linear-gradient(165deg, var(--bg-hero-a), var(--bg-hero-b))' }}
           >
-            <div className="flex h-full gap-3 overflow-x-auto lg:flex-col lg:items-center lg:justify-between lg:overflow-visible">
-              <div className="flex items-center gap-3 lg:flex-col">
+            <div className="flex h-full flex-col items-center justify-between gap-3">
+              <div className="flex flex-col items-center gap-3">
                 <button title="Dashboard" aria-label="Dashboard" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'dashboard' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('dashboard')}>
                   <Home size={20} />
                 </button>
@@ -2538,15 +2540,18 @@ function ParentDashboardContent() {
                     </span>
                   )}
                 </button>
-                <button title="Planner" aria-label="Planner" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'planner' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('planner')}>
-                  <Menu size={18} />
+                <button title="Planner" aria-label="Planner" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', topLevelActiveTab === 'planner' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('planner')}>
+                  <CalendarDays size={18} />
+                </button>
+                <button title="Rewards" aria-label="Rewards" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'rewards' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('rewards')}>
+                  <Gift size={18} />
                 </button>
                 <button title="Send Nudge" aria-label="Send Nudge" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/18 transition hover:bg-white/28" onClick={openNudgeModal}>
                   <MessageCircle size={18} />
                 </button>
               </div>
 
-              <div className="ml-auto flex items-center gap-3 lg:ml-0 lg:flex-col">
+              <div className="flex flex-col items-center gap-3">
                 <button title="Settings" aria-label="Settings" className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition', activeTab === 'settings' ? 'bg-white/30 shadow-lg' : 'bg-white/18 hover:bg-white/28')} onClick={() => setActiveTab('settings')}>
                   <Settings size={18} />
                 </button>
@@ -2560,20 +2565,20 @@ function ParentDashboardContent() {
             </div>
           </aside>
 
-          <main className="rounded-[1.5rem] p-3 sm:p-4 bg-[var(--surface-soft)]" style={{ border: '1px solid var(--border-main)' }}>
-            <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-              <div>
-                <h1 className="text-2xl font-display font-extrabold" style={{ color: 'var(--text-main)' }}>
+          <main className="min-w-0 rounded-[1.1rem] bg-[var(--surface-soft)] p-3 sm:rounded-[1.5rem] sm:p-4" style={{ border: '1px solid var(--border-main)' }}>
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h1 className="font-display text-[1.65rem] font-extrabold leading-tight sm:text-2xl" style={{ color: 'var(--text-main)' }}>
                   Parent Control Panel
                 </h1>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
                   Welcome, {user?.email || 'Parent'}
                 </p>
                 <p className="text-xs font-bold mt-1 inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                   {isUsingFirebaseEmulators ? 'LOCAL EMULATOR' : `${activeFirebaseEnv.toUpperCase()} DB`}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:flex-wrap">
                 <button
                   type="button"
                   onClick={openParentChat}
@@ -2593,31 +2598,36 @@ function ParentDashboardContent() {
                     </span>
                   ) : null}
                 </button>
-                <button onClick={() => setIsModaling(true)} className="px-3 py-2 rounded-xl text-sm font-bold text-white inline-flex items-center gap-1" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                <button onClick={() => setIsModaling(true)} className="inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                   <Plus size={16} /> Add Child
                 </button>
-                <button onClick={toggleTheme} className="px-3 py-2 rounded-xl text-sm font-semibold border" style={{ color: 'var(--text-main)', borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                  {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+                <button onClick={toggleTheme} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-semibold sm:h-auto sm:w-auto sm:px-3 sm:py-2" style={{ color: 'var(--text-main)', borderColor: 'var(--border-main)', background: 'var(--surface)' }} aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
+                  <span className="sm:hidden">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</span>
+                  <span className="hidden sm:inline">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="mb-4 overflow-x-auto">
-              <div className="inline-flex min-w-max gap-2 rounded-full bg-slate-100 p-1 dark:bg-slate-800">
-                {parentTabs.map((tab) => (
+            <div className="mb-4">
+              <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-slate-800 sm:inline-flex sm:rounded-full">
+                {parentTabs.map((tab) => {
+                  const TabIcon = tab.icon;
+                  return (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id === 'planner' ? 'planner' : tab.id)}
                     className={clsx(
-                      'rounded-full px-4 py-2 text-sm font-semibold transition',
+                      'min-w-0 rounded-xl px-2 py-2 text-xs font-bold transition sm:rounded-full sm:px-4 sm:text-sm',
                       topLevelActiveTab === tab.id
                         ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
                         : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700'
                     )}
                   >
-                    <span className="inline-flex items-center gap-2">
-                      {tab.label}
+                    <span className="inline-flex max-w-full items-center justify-center gap-1.5">
+                      <TabIcon size={15} className="shrink-0" />
+                      <span className="truncate sm:hidden">{tab.shortLabel}</span>
+                      <span className="hidden sm:inline">{tab.label}</span>
                       {tab.id === 'approvals' && pendingApprovalCount > 0 ? (
                         <span className="grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black leading-none text-white">
                           {pendingApprovalCount > 99 ? '99+' : pendingApprovalCount}
@@ -2625,26 +2635,28 @@ function ParentDashboardContent() {
                       ) : null}
                     </span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             {topLevelActiveTab === 'planner' ? (
-              <div className="mb-4 overflow-x-auto">
-                <div className="inline-flex min-w-max gap-2 rounded-full bg-slate-100 p-1 dark:bg-slate-800">
+              <div className="mb-4">
+                <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-slate-800 sm:inline-flex sm:rounded-full">
                   {plannerWorkspaceTabs.map((tab) => (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveTab(tab.id)}
                       className={clsx(
-                        'rounded-full px-4 py-2 text-sm font-semibold transition',
+                        'min-w-0 rounded-xl px-2 py-2 text-xs font-bold transition sm:rounded-full sm:px-4 sm:text-sm',
                         activeTab === tab.id
                           ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
                           : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700'
                       )}
                     >
-                      {tab.label}
+                      <span className="sm:hidden">{tab.shortLabel}</span>
+                      <span className="hidden sm:inline">{tab.label}</span>
                     </button>
                   ))}
                 </div>

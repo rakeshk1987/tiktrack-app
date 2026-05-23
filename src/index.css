@@ -72,3 +72,57 @@
     padding-bottom: 5.5rem;
   }
 }
+
+@media (max-width: 640px) {
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .parent-planner-calendar .fc {
+    max-width: 100%;
+  }
+
+  .parent-planner-calendar .fc-header-toolbar {
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .parent-planner-calendar .fc-toolbar-chunk {
+    display: flex;
+    min-width: 0;
+  }
+
+  .parent-planner-calendar .fc-toolbar-title {
+    max-width: 8.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.05rem;
+    line-height: 2.25rem;
+  }
+
+  .parent-planner-calendar .fc-button {
+    padding: 0.45rem 0.6rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .parent-planner-calendar .fc-daygrid-day-frame {
+    min-height: 4.75rem;
+  }
+
+  .parent-planner-calendar .fc-daygrid-day-number {
+    padding: 0.35rem;
+    font-size: 0.72rem;
+  }
+
+  .parent-planner-calendar .fc-event-title,
+  .parent-planner-calendar .fc-event-time {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
