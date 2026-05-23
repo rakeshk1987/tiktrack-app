@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "telegram:setup": "node scripts/setup-telegram.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

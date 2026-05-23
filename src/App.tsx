@@ -23,6 +23,7 @@ const ParentDashboard = lazy(() => import('./pages/parent/Dashboard'));
 const ParentOnboardingPage = lazy(() => import('./pages/parent/Onboarding'));
 const ChildPlannerV2Page = lazy(() => import('./features/planner/pages/ChildPlannerV2Page'));
 const ParentPlannerV2Page = lazy(() => import('./features/planner/pages/ParentPlannerV2Page'));
+const TelegramMiniApp = lazy(() => import('./pages/telegram/MiniApp'));
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
 
@@ -79,6 +80,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<RouteLoader />}>
       <Routes>
+        <Route path="/telegram" element={<TelegramMiniApp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route

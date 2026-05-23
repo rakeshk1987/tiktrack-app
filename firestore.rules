@@ -386,6 +386,29 @@ service cloud.firestore {
       );
     }
 
+    match /telegram_link_codes/{codeId} {
+      allow read: if false;
+      allow create: if isParent() && sameFamilyOnCreate() && request.resource.data.parent_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if isParent() && resource.data.parent_id == request.auth.uid;
+    }
+
+    match /telegram_settings/{familyId} {
+      allow read: if isParent() && sameFamily(familyId);
+      allow create, update: if isParent() &&
+        familyId == request.resource.data.family_id &&
+        sameFamily(request.resource.data.family_id);
+      allow delete: if isParent() && sameFamily(familyId);
+    }
+
+    match /telegram_links/{telegramUserId} {
+      allow read, write: if false;
+    }
+
+    match /telegram_sessions/{telegramUserId} {
+      allow read, write: if false;
+    }
+
     match /redemptions/{redemptionId} {
       allow read: if isParent() || resource == null || isSelf(resource.data.child_id) || isParentOf(resource.data.child_id);
       allow create: if isChild() && request.resource.data.child_id == request.auth.uid;

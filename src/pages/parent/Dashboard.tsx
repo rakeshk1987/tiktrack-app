@@ -30,7 +30,7 @@ import { computeLevelFromStars, evaluateBadges, applyTaskCompletionToProfile } f
 import { useMessages } from '../../hooks/useData';
 import { useChallenges } from '../../hooks/useChallenges';
 import { signOut } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
 import { RealTimeProvider } from '../../contexts/RealTimeContext';
 import RealTimeNotifications from '../../components/RealTimeNotifications';
@@ -210,6 +210,13 @@ function taskWindowState(task: any, now = new Date()): 'past' | 'future' | 'acti
   return 'active';
 }
 
+function createTelegramLinkCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+}
+
 function ParentDashboardContent() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -335,10 +342,15 @@ function ParentDashboardContent() {
     ? 'planner'
     : (activeTab as 'dashboard' | 'routines' | 'approvals' | 'rewards' | 'communication' | 'settings');
   const [coParentCode, setCoParentCode] = useState('');
+  const [telegramLinkCode, setTelegramLinkCode] = useState('');
+  const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState('');
+  const [telegramLinkGenerating, setTelegramLinkGenerating] = useState(false);
+  const [telegramBotUsername, setTelegramBotUsername] = useState('');
+  const [telegramSettingsSaving, setTelegramSettingsSaving] = useState(false);
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
-  const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'growth' | 'coparenting'>('create_child');
+  const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'growth' | 'telegram' | 'coparenting'>('create_child');
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
   const [childEditForm, setChildEditForm] = useState<ChildEditForm>({
     name: '',
@@ -1013,6 +1025,28 @@ function ParentDashboardContent() {
     }
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [user, familyId]);
+
+  useEffect(() => {
+    if (!user || !familyId) {
+      setTelegramBotUsername('');
+      return;
+    }
+
+    let cancelled = false;
+    getDoc(doc(db, 'telegram_settings', familyId))
+      .then((snap) => {
+        if (cancelled || !snap.exists()) return;
+        const data = snap.data() as any;
+        setTelegramBotUsername(String(data.bot_username || ''));
+      })
+      .catch((err) => {
+        console.warn('Failed to load Telegram settings:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, familyId]);
 
   useEffect(() => {
@@ -2488,6 +2522,53 @@ function ParentDashboardContent() {
       setSuccess('Activity deleted.');
     } catch (err: any) {
       setError(err.message || 'Could not delete activity.');
+    }
+  };
+
+  const handleGenerateTelegramLinkCode = async () => {
+    if (!user || !familyId || telegramLinkGenerating) return;
+    setTelegramLinkGenerating(true);
+    setError('');
+    try {
+      const code = createTelegramLinkCode();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      await setDoc(doc(db, 'telegram_link_codes', code), {
+        family_id: familyId,
+        parent_id: user.id,
+        created_by: user.id,
+        created_at: new Date().toISOString(),
+        expires_at: Timestamp.fromDate(expiresAt),
+        used: false
+      });
+      setTelegramLinkCode(code);
+      setTelegramLinkExpiresAt(expiresAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setSuccess('Telegram link code created.');
+    } catch (err: any) {
+      setError(err?.message || 'Could not create Telegram link code.');
+    } finally {
+      setTelegramLinkGenerating(false);
+    }
+  };
+
+  const handleSaveTelegramSettings = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !familyId || telegramSettingsSaving) return;
+    setTelegramSettingsSaving(true);
+    setError('');
+    try {
+      const normalizedUsername = telegramBotUsername.trim().replace(/^@/, '');
+      await setDoc(doc(db, 'telegram_settings', familyId), {
+        family_id: familyId,
+        parent_id: user.id,
+        bot_username: normalizedUsername,
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+      setTelegramBotUsername(normalizedUsername);
+      setSuccess('Telegram settings saved.');
+    } catch (err: any) {
+      setError(err?.message || 'Could not save Telegram settings.');
+    } finally {
+      setTelegramSettingsSaving(false);
     }
   };
 
@@ -4095,15 +4176,21 @@ function ParentDashboardContent() {
                   <div className="space-y-4">
                     <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                       <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Settings</h2>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         <button onClick={() => setSettingsTab('create_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'create_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'create_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Create Child
                         </button>
                         <button onClick={() => setSettingsTab('edit_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'edit_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'edit_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Edit Child
                         </button>
+                        <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Rewards
+                        </button>
                         <button onClick={() => setSettingsTab('growth')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'growth' ? 'white' : 'var(--text-main)', background: settingsTab === 'growth' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Growth
+                        </button>
+                        <button onClick={() => setSettingsTab('telegram')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'telegram' ? 'white' : 'var(--text-main)', background: settingsTab === 'telegram' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Telegram
                         </button>
                         <button onClick={() => setSettingsTab('coparenting')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'coparenting' ? 'white' : 'var(--text-main)', background: settingsTab === 'coparenting' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Co-Parenting
@@ -4470,6 +4557,74 @@ function ParentDashboardContent() {
                                 ))}
                               </div>
                             )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsTab === 'telegram' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <h3 className="text-base font-bold mb-3" style={{ color: 'var(--text-main)' }}>Telegram Bot</h3>
+                        <div className="space-y-4">
+                          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <p className="text-sm font-bold mb-1">Create a dedicated TikTrack bot</p>
+                            <p className="text-xs opacity-70">Use BotFather in Telegram to create a new bot. Store the bot token in Firebase Functions config, not in this browser UI.</p>
+                            <div className="mt-3 rounded-lg bg-black/10 p-3 font-mono text-xs dark:bg-black/30">
+                              firebase functions:config:set telegram.bot_token="BOT_TOKEN" telegram.webhook_secret="LONG_RANDOM_SECRET"
+                            </div>
+                          </div>
+
+                          <form onSubmit={handleSaveTelegramSettings} className="rounded-xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <label className="mb-1 block text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Bot username</label>
+                            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                              <input
+                                value={telegramBotUsername}
+                                onChange={(event) => setTelegramBotUsername(event.target.value)}
+                                placeholder="tiktrack_parent_bot"
+                                className="rounded-xl border px-3 py-2.5 text-sm font-semibold outline-none"
+                                style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                              />
+                              <button type="submit" disabled={telegramSettingsSaving} className="rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
+                                {telegramSettingsSaving ? 'Saving...' : 'Save'}
+                              </button>
+                            </div>
+                            {telegramBotUsername ? (
+                              <a
+                                href={`https://t.me/${telegramBotUsername.replace(/^@/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-3 inline-flex rounded-xl border px-3 py-2 text-sm font-bold"
+                                style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+                              >
+                                Open @{telegramBotUsername.replace(/^@/, '')}
+                              </a>
+                            ) : null}
+                          </form>
+
+                          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-sm font-bold mb-1">Link your Telegram account</p>
+                                <p className="text-xs opacity-70">Generate a short-lived code, then send it to the bot as /link CODE.</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void handleGenerateTelegramLinkCode()}
+                                disabled={telegramLinkGenerating}
+                                className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                              >
+                                {telegramLinkGenerating ? 'Generating...' : 'Generate Code'}
+                              </button>
+                            </div>
+                            {telegramLinkCode ? (
+                              <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                <p className="text-xs font-bold uppercase tracking-wide opacity-60">Send this to Telegram</p>
+                                <div className="mt-2 rounded-lg bg-black/10 p-3 text-center font-mono text-lg font-black tracking-wider dark:bg-black/30">
+                                  /link {telegramLinkCode}
+                                </div>
+                                <p className="mt-2 text-xs opacity-70">Expires at {telegramLinkExpiresAt || 'soon'}.</p>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
