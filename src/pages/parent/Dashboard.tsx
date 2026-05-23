@@ -328,10 +328,10 @@ function ParentDashboardContent() {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'family' | 'tasks' | 'approvals' | 'events' | 'rewards' | 'exams' | 'challenges' | 'automation' | 'communication' | 'settings' | 'planner' | 'routines'
   >('dashboard');
-  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation', 'rewards'] as const;
-  const topLevelActiveTab: 'dashboard' | 'planner' | 'routines' | 'approvals' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
+  const plannerTabIds = ['planner', 'family', 'tasks', 'exams', 'challenges', 'events', 'automation'] as const;
+  const topLevelActiveTab: 'dashboard' | 'planner' | 'routines' | 'approvals' | 'rewards' | 'communication' | 'settings' = plannerTabIds.includes(activeTab as (typeof plannerTabIds)[number])
     ? 'planner'
-    : (activeTab as 'dashboard' | 'routines' | 'approvals' | 'communication' | 'settings');
+    : (activeTab as 'dashboard' | 'routines' | 'approvals' | 'rewards' | 'communication' | 'settings');
   const [coParentCode, setCoParentCode] = useState('');
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
@@ -378,6 +378,7 @@ function ParentDashboardContent() {
     { id: 'planner', label: 'Planner' },
     { id: 'routines', label: 'Routines' },
     { id: 'approvals', label: 'Approvals' },
+    { id: 'rewards', label: 'Rewards' },
     { id: 'settings', label: 'Settings' }
   ] as const;
 
@@ -4082,15 +4083,12 @@ function ParentDashboardContent() {
                   <div className="space-y-4">
                     <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                       <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Settings</h2>
-                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                         <button onClick={() => setSettingsTab('create_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'create_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'create_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Create Child
                         </button>
                         <button onClick={() => setSettingsTab('edit_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'edit_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'edit_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Edit Child
-                        </button>
-                        <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
-                          Rewards
                         </button>
                         <button onClick={() => setSettingsTab('growth')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'growth' ? 'white' : 'var(--text-main)', background: settingsTab === 'growth' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Growth
@@ -4316,6 +4314,38 @@ function ParentDashboardContent() {
                           <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length}</span>
                         </div>
                         <div className="space-y-4">
+                          <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Cash Value Rules</h4>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Saved conversion from stars to real money.</p>
+                              </div>
+                              {rewards[0] ? (
+                                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">
+                                  1 star = {rewards[0].star_to_currency_rate}
+                                </span>
+                              ) : null}
+                            </div>
+                            {rewardsLoading ? (
+                              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading cash rules...</p>
+                            ) : rewards.length === 0 ? (
+                              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No cash value saved yet.</p>
+                            ) : (
+                              <div className="grid gap-2 md:grid-cols-2">
+                                {rewards.map((rewardRule) => (
+                                  <div key={rewardRule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                    <div>
+                                      <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>1 star = {rewardRule.star_to_currency_rate} cash value</p>
+                                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Weekly bonus: {rewardRule.weekly_bonus_enabled ? 'enabled' : 'disabled'}</p>
+                                    </div>
+                                    <button type="button" onClick={() => startEditReward(rewardRule)} className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-700">
+                                      Edit
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
                             <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star" type="number" min="0" step="0.01" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
@@ -4331,6 +4361,48 @@ function ParentDashboardContent() {
                               )}
                             </div>
                           </form>
+                          <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <div className="mb-3">
+                              <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Award Stars</h4>
+                              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Give stars directly for kindness, good choices, or anything outside activities.</p>
+                            </div>
+                            <form onSubmit={handleAwardStars} className="grid grid-cols-1 gap-2 xl:grid-cols-[1fr_120px_1.5fr_auto] xl:items-center">
+                              <select
+                                value={awardChildId}
+                                onChange={(event) => setAwardChildId(event.target.value)}
+                                className="rounded-xl py-2 px-3 border"
+                                style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                              >
+                                <option value="">Select child</option>
+                                {children.map((child) => (
+                                  <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                                ))}
+                              </select>
+                              <input
+                                value={awardStars as any}
+                                onChange={(event) => setAwardStars(event.target.value === '' ? '' : Number(event.target.value))}
+                                placeholder="Stars"
+                                type="number"
+                                min="1"
+                                className="rounded-xl py-2 px-3 border"
+                                style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                              />
+                              <input
+                                value={awardReason}
+                                onChange={(event) => setAwardReason(event.target.value)}
+                                placeholder="Reason"
+                                className="rounded-xl py-2 px-3 border"
+                                style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                              />
+                              <button disabled={awardSaving} type="submit" className="rounded-xl bg-pink-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                                {awardSaving ? 'Awarding...' : 'Award'}
+                              </button>
+                              <label className="inline-flex items-center gap-2 text-sm xl:col-span-4">
+                                <input type="checkbox" checked={awardSurprise} onChange={(event) => setAwardSurprise(event.target.checked)} className="h-4 w-4" />
+                                <span style={{ color: 'var(--text-muted)' }}>Send as surprise gift for child to open</span>
+                              </label>
+                            </form>
+                          </div>
                           <RewardManagement rewards={rewardItems} onCreateReward={createRewardForFamily} onUpdateReward={updateReward} onDeleteReward={deleteReward} loading={rewardItemsLoading} />
                         </div>
                       </div>

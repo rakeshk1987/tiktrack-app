@@ -42,6 +42,19 @@ function categoryLabel(category: string) {
   return category.replace('_', ' ');
 }
 
+function getPlannerEventTime(event: PlannerEvent, field: 'startAt' | 'endAt' = 'startAt') {
+  const value = field === 'startAt' ? event.startAt : event.endAt;
+  const timestamp = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortPlannerEventsByStart(events: PlannerEvent[], direction: 'asc' | 'desc' = 'asc') {
+  return [...events].sort((a, b) => {
+    const diff = getPlannerEventTime(a) - getPlannerEventTime(b);
+    return direction === 'asc' ? diff : -diff;
+  });
+}
+
 export default function ChildPlannerV2Page() {
   const { user } = useAuth();
   const childId = user?.id || '';
@@ -852,60 +865,78 @@ export default function ChildPlannerV2Page() {
                     );
                   }
 
+                  const now = Date.now();
                   const todayStart = new Date();
                   todayStart.setHours(0, 0, 0, 0);
                   const todayEnd = new Date(todayStart.getTime() + 86400000);
 
-                  const tToday: any[] = [];
-                  const tFuture: any[] = [];
-                  const tPast: any[] = [];
+                  const tToday: PlannerEvent[] = [];
+                  const tFuture: PlannerEvent[] = [];
+                  const tPast: PlannerEvent[] = [];
 
                   activityTasks.forEach(event => {
-                    const dTime = event.startAt ? new Date(event.startAt).getTime() : 0;
+                    const dTime = getPlannerEventTime(event);
+                    const endTime = getPlannerEventTime(event, 'endAt');
+                    const isActiveNow = dTime <= now && endTime >= now;
                     if (!event.startAt) {
+                      tToday.push(event);
+                    } else if (isActiveNow || (dTime >= todayStart.getTime() && dTime < todayEnd.getTime())) {
                       tToday.push(event);
                     } else if (dTime < todayStart.getTime()) {
                       tPast.push(event);
-                    } else if (dTime >= todayEnd.getTime()) {
-                      tFuture.push(event);
                     } else {
-                      tToday.push(event);
+                      tFuture.push(event);
                     }
                   });
 
-                  const renderTaskList = (title: string, list: any[]) => (
+                  const currentTasks = sortPlannerEventsByStart(tToday);
+                  const futureTasks = sortPlannerEventsByStart(tFuture);
+                  const pastTasks = sortPlannerEventsByStart(tPast, 'desc');
+
+                  const renderTaskList = (title: string, list: PlannerEvent[], tone: 'current' | 'future' | 'past') => (
                     <div className="mb-6">
                       <div className="flex items-center gap-3 mb-4">
                         <h4 className="text-xs font-black uppercase tracking-widest text-white/50">{title}</h4>
                         <div className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent" />
                         <span className="text-xs font-black text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-full">{list.length}</span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="relative space-y-4 before:absolute before:left-6 before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-cyan-300/50 before:via-white/10 before:to-transparent">
                         {list.length === 0 ? (
-                          <div className="col-span-full py-8 text-center bg-white/[0.02] border border-white/5 rounded-2xl">
+                          <div className="ml-14 py-8 text-center bg-white/[0.02] border border-white/5 rounded-2xl">
                             <p className="text-xs font-medium text-white/20 italic">No tasks in this category.</p>
                           </div>
                         ) : list.map((event) => (
-                          <div key={event.id} className="group flex items-center justify-between gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/10">
-                            <div className="flex items-center gap-4">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-xl group-hover:scale-110 transition-transform">
-                                {event.category === 'homework' ? '📝' : '⚡'}
-                              </div>
-                              <div>
-                                <p className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors">{event.title}</p>
-                                <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {activityPointsConfig?.taskPoints ? (
-                                <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
-                                  <span className="text-xs">⭐</span>
-                                  <span className="text-xs font-black text-amber-400">{activityPointsConfig.taskPoints}</span>
+                          <div key={event.id} className="relative pl-14">
+                            <div
+                              className={clsx(
+                                'absolute left-[17px] top-8 z-10 h-4 w-4 rounded-full border-2 shadow-[0_0_16px_currentColor]',
+                                tone === 'current' && 'border-cyan-200 bg-cyan-400 text-cyan-400',
+                                tone === 'future' && 'border-sky-200 bg-sky-400 text-sky-400',
+                                tone === 'past' && 'border-white/30 bg-slate-500 text-slate-500'
+                              )}
+                              aria-hidden="true"
+                            />
+                            <div className="group flex items-center justify-between gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/10">
+                              <div className="flex items-center gap-4 min-w-0">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/5 text-xl group-hover:scale-110 transition-transform">
+                                  {event.category === 'homework' ? '📝' : '⚡'}
                                 </div>
-                              ) : null}
-                              <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                                <div className="min-w-0">
+                                  <p className="truncate text-base font-bold text-white group-hover:text-cyan-300 transition-colors">{event.title}</p>
+                                  <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {activityPointsConfig?.taskPoints ? (
+                                  <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                                    <span className="text-xs">⭐</span>
+                                    <span className="text-xs font-black text-amber-400">{activityPointsConfig.taskPoints}</span>
+                                  </div>
+                                ) : null}
+                                <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                              </div>
+                              <button onClick={() => setSelectedTaskDetail(event)} className="ml-4 shrink-0 rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                             </div>
-                            <button onClick={() => setSelectedTaskDetail(event)} className="ml-4 rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                           </div>
                         ))}
                       </div>
@@ -914,9 +945,9 @@ export default function ChildPlannerV2Page() {
 
                   return (
                     <div className="space-y-4 mt-8">
-                      {renderTaskList('Today / Active', tToday)}
-                      {renderTaskList('Upcoming / Future', tFuture)}
-                      {renderTaskList('Past / Overdue', tPast)}
+                      {renderTaskList('Current / Today', currentTasks, 'current')}
+                      {renderTaskList('Upcoming / Future', futureTasks, 'future')}
+                      {renderTaskList('Past / Overdue', pastTasks, 'past')}
                     </div>
                   );
                 })()}
