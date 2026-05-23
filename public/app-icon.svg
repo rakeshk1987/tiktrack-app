@@ -1,27 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
   <title id="title">TikTrack app icon</title>
-  <desc id="desc">Rounded blue TikTrack icon with a white T shaped track.</desc>
+  <desc id="desc">Rounded TikTrack icon with a white T shaped track.</desc>
   <defs>
-    <linearGradient id="bg" x1="72" y1="56" x2="442" y2="460" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bg" x1="9" y1="7" x2="55" y2="58" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#22d3ee"/>
-      <stop offset="0.48" stop-color="#2563eb"/>
+      <stop offset="0.5" stop-color="#2563eb"/>
       <stop offset="1" stop-color="#7c3aed"/>
     </linearGradient>
-    <linearGradient id="track" x1="143" y1="137" x2="363" y2="384" gradientUnits="userSpaceOnUse">
+    <linearGradient id="track" x1="18" y1="16" x2="46" y2="49" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ffffff"/>
       <stop offset="1" stop-color="#dff7ff"/>
     </linearGradient>
-    <filter id="softShadow" x="88" y="92" width="336" height="340" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.28"/>
-    </filter>
   </defs>
-  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <circle cx="116" cy="104" r="76" fill="#ffffff" opacity="0.16"/>
-  <circle cx="412" cy="398" r="112" fill="#0f172a" opacity="0.16"/>
-  <g filter="url(#softShadow)">
-    <path fill="url(#track)" d="M144 132h224c18 0 32 14 32 32v26c0 18-14 32-32 32h-65v154c0 18-14 32-32 32h-30c-18 0-32-14-32-32V222h-65c-18 0-32-14-32-32v-26c0-18 14-32 32-32z"/>
-    <path fill="#0f172a" opacity="0.14" d="M303 222h65c18 0 32-14 32-32v-26c0-18-14-32-32-32h-20c-1 114-53 211-139 248 2 16 15 28 32 28h30c18 0 32-14 32-32V222z"/>
-  </g>
-  <path fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="18" opacity="0.34" d="M142 344c62 36 156 43 228 5"/>
-  <path fill="none" stroke="#ffffff" stroke-opacity="0.26" stroke-width="12" d="M256 48c142 0 208 66 208 208s-66 208-208 208S48 398 48 256 114 48 256 48z"/>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <path fill="url(#track)" d="M18 16h28a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4h-8v20a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V28h-8a4 4 0 0 1-4-4v-4a4 4 0 0 1 4-4z"/>
+  <path fill="none" stroke="#fff" stroke-linecap="round" stroke-width="4" opacity=".35" d="M18 44c8 5 20 6 29 1"/>
 </svg>

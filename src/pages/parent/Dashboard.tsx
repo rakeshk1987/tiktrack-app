@@ -350,7 +350,7 @@ function ParentDashboardContent() {
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
-  const [settingsTab, setSettingsTab] = useState<'create_child' | 'edit_child' | 'rewards' | 'growth' | 'telegram' | 'coparenting'>('create_child');
+  const [settingsTab, setSettingsTab] = useState<'manage_child' | 'rewards' | 'growth' | 'telegram' | 'coparenting'>('manage_child');
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
   const [childEditForm, setChildEditForm] = useState<ChildEditForm>({
     name: '',
@@ -2659,7 +2659,7 @@ function ParentDashboardContent() {
                   {isUsingFirebaseEmulators ? 'LOCAL EMULATOR' : `${activeFirebaseEnv.toUpperCase()} DB`}
                 </p>
               </div>
-              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:flex-wrap">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={openParentChat}
@@ -2678,9 +2678,6 @@ function ParentDashboardContent() {
                       {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                     </span>
                   ) : null}
-                </button>
-                <button onClick={() => setIsModaling(true)} className="inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
-                  <Plus size={16} /> Add Child
                 </button>
                 <button onClick={toggleTheme} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-semibold sm:h-auto sm:w-auto sm:px-3 sm:py-2" style={{ color: 'var(--text-main)', borderColor: 'var(--border-main)', background: 'var(--surface)' }} aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
                   <span className="sm:hidden">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</span>
@@ -3015,8 +3012,8 @@ function ParentDashboardContent() {
                     </div>
 
                     {showEventModal && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                        <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-6 border max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
+                      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+                        <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-4 sm:p-6 border max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>{editEventId ? 'Edit Event' : 'Create Event'}</h3>
                             <button onClick={() => setShowEventModal(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
@@ -3046,7 +3043,7 @@ function ParentDashboardContent() {
                             
                             <input value={evReminderDays as any} onChange={(ev) => setEvReminderDays(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Remind days before" type="number" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             
-                            <div className="col-span-1 sm:col-span-2 flex gap-3 mt-4">
+                            <div className="col-span-1 sm:col-span-2 flex flex-col gap-3 mt-4 sm:flex-row">
                               <button disabled={eventLoading} type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition-all" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{eventLoading ? 'Saving...' : (editEventId ? 'Save Changes' : 'Create Event')}</button>
                               <button type="button" onClick={() => setShowEventModal(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Cancel</button>
                             </div>
@@ -3488,8 +3485,8 @@ function ParentDashboardContent() {
                     </div>
 
                     {showTaskModal && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                        <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-6 border overflow-y-auto max-h-[90vh]" style={{ borderColor: 'var(--border-main)' }}>
+                      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+                        <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-4 sm:p-6 border overflow-y-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]" style={{ borderColor: 'var(--border-main)' }}>
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>{editTaskId ? 'Edit Task' : 'Create Task'}</h3>
                             <button onClick={() => setShowTaskModal(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
@@ -3575,7 +3572,7 @@ function ParentDashboardContent() {
                             ) : null}
                             <textarea value={tDesc} onChange={(e) => setTDesc(e.target.value)} placeholder="Short description" rows={3} className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             
-                            <div className="col-span-1 sm:col-span-2 flex gap-3 mt-2">
+                            <div className="col-span-1 sm:col-span-2 flex flex-col gap-3 mt-2 sm:flex-row">
                               <button disabled={taskLoading} type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition-all" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{taskLoading ? 'Saving...' : (editTaskId ? 'Save Changes' : 'Create Task')}</button>
                               <button type="button" onClick={() => setShowTaskModal(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Cancel</button>
                             </div>
@@ -3871,8 +3868,8 @@ function ParentDashboardContent() {
                       </div>
 
                       {showExamModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                          <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-6 border max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
+                        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+                          <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-4 sm:p-6 border max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
                             <div className="flex justify-between items-center mb-4">
                               <h3 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>{editExamId ? 'Edit Exam' : 'Create Exam'}</h3>
                               <button onClick={() => setShowExamModal(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
@@ -3965,13 +3962,13 @@ function ParentDashboardContent() {
 
                               <input value={eSyllabusScope} onChange={(ev) => setESyllabusScope(ev.target.value)} placeholder="Syllabus scope (optional)" className="md:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                               
-                              <div className="col-span-1 md:col-span-2 grid grid-cols-3 gap-2">
+                              <div className="col-span-1 md:col-span-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                                 <input value={eMarks as any} onChange={(ev) => setEMarks(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Marks scored" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                                 <input value={eTotal as any} onChange={(ev) => setETotal(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Total marks" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                                 <input value={ePoints as any} onChange={(ev) => setEPoints(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Max stars" type="number" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                               </div>
 
-                              <div className="md:col-span-2 flex gap-3 mt-4">
+                              <div className="md:col-span-2 flex flex-col gap-3 mt-4 sm:flex-row">
                                 <button disabled={examLoading} type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition-all" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{examLoading ? 'Saving...' : (editExamId ? 'Save Changes' : 'Save Exam')}</button>
                                 <button type="button" onClick={() => setShowExamModal(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Cancel</button>
                               </div>
@@ -4072,16 +4069,16 @@ function ParentDashboardContent() {
 
                 {activeTab === 'family' && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Kid Activities</h2>
-                      <select value={selectedActivityChildId} onChange={(e) => setActivityChildId(e.target.value)} className="rounded-xl py-2 px-3 border text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <select value={selectedActivityChildId} onChange={(e) => setActivityChildId(e.target.value)} className="w-full rounded-xl py-2 px-3 border text-sm sm:w-auto" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                         <option value="">Select child</option>
                         {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                       </select>
                     </div>
                     <p className="mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>Create root activities (School, Extra Curricular, etc.) and choose which branches appear on the child side.</p>
                     <div className="mb-4">
-                      <button type="button" onClick={() => { clearActivityForm(); setIsActivityModalOpen(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                      <button type="button" onClick={() => { clearActivityForm(); setIsActivityModalOpen(true); }} className="w-full py-2 px-4 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition sm:w-auto" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                         + Create New Activity
                       </button>
                     </div>
@@ -4092,15 +4089,15 @@ function ParentDashboardContent() {
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No activities yet for this child.</p>
                       ) : (
                         activityPrograms.map((program) => (
-                          <div key={program.id} className="rounded-2xl border p-4 flex items-center justify-between" style={{ borderColor: 'var(--border-main)', background: 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(6,182,212,0.1))' }}>
-                            <div>
+                          <div key={program.id} className="rounded-2xl border p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--border-main)', background: 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(6,182,212,0.1))' }}>
+                            <div className="min-w-0">
                               <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{program.name}</p>
                               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === program.childId)?.name || 'Child'} • Modules: {(program.modules || ['tasks']).join(', ')}</p>
                             </div>
-                            <div className="flex gap-2">
-                              <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>
-                              <button type="button" onClick={() => startEditActivity(program)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
-                              <button type="button" onClick={() => handleDeleteActivity(program.id)} className="py-1.5 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                            <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
+                              <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>
+                              <button type="button" onClick={() => startEditActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
+                              <button type="button" onClick={() => handleDeleteActivity(program.id)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
                             </div>
                           </div>
                         ))
@@ -4176,12 +4173,9 @@ function ParentDashboardContent() {
                   <div className="space-y-4">
                     <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                       <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Settings</h2>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                        <button onClick={() => setSettingsTab('create_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'create_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'create_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
-                          Create Child
-                        </button>
-                        <button onClick={() => setSettingsTab('edit_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'edit_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'edit_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
-                          Edit Child
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                        <button onClick={() => setSettingsTab('manage_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'manage_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'manage_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Manage Child
                         </button>
                         <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Rewards
@@ -4198,21 +4192,16 @@ function ParentDashboardContent() {
                       </div>
                     </div>
 
-                    {settingsTab === 'create_child' && (
+                    {settingsTab === 'manage_child' && (
                       <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                        <h3 className="text-base font-bold mb-3" style={{ color: 'var(--text-main)' }}>Create Child Account</h3>
-                        <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>Create a child profile under your family account.</p>
-                        <button onClick={() => setIsModaling(true)} className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
-                          + Create Child (Family)
-                        </button>
-                      </div>
-                    )}
-
-                    {settingsTab === 'edit_child' && (
-                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
-                        <h3 className="text-base font-bold mb-3 inline-flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-                          <Users2 size={18} /> Child Profiles
-                        </h3>
+                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <h3 className="inline-flex items-center gap-2 text-base font-bold" style={{ color: 'var(--text-main)' }}>
+                            <Users2 size={18} /> Manage Child
+                          </h3>
+                          <button onClick={() => setIsModaling(true)} className="inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
+                            <Plus size={16} /> Add Child
+                          </button>
+                        </div>
                         {childrenLoading ? (
                           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading child accounts...</p>
                         ) : children.length === 0 ? (
@@ -4682,8 +4671,8 @@ function ParentDashboardContent() {
                     </div>
 
                     {showChallengeModal && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                        <div className="bg-[var(--surface)] w-full max-w-xl rounded-2xl shadow-2xl p-6 border max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
+                      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+                        <div className="bg-[var(--surface)] w-full max-w-xl rounded-2xl shadow-2xl p-4 sm:p-6 border max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>Create Challenge</h3>
                             <button onClick={() => setShowChallengeModal(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
@@ -4715,7 +4704,7 @@ function ParentDashboardContent() {
                             <input required value={chTarget as any} onChange={(e) => setChTarget(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Target score" type="number" min="1" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             <textarea value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Description (optional)" rows={3} className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             
-                            <div className="col-span-1 sm:col-span-2 flex gap-3 mt-4">
+                            <div className="col-span-1 sm:col-span-2 flex flex-col gap-3 mt-4 sm:flex-row">
                               <button disabled={challengeLoading} type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition-all" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{challengeLoading ? 'Creating...' : 'Create Challenge'}</button>
                               <button type="button" onClick={() => setShowChallengeModal(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Cancel</button>
                             </div>
@@ -4794,8 +4783,8 @@ function ParentDashboardContent() {
       </div>
 
       {selectedActivity ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-4xl rounded-3xl border bg-[var(--surface)] p-5 shadow-2xl" style={{ borderColor: 'var(--border-main)' }}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4">
+          <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-3xl border bg-[var(--surface)] p-4 shadow-2xl sm:max-h-[90vh] sm:p-5" style={{ borderColor: 'var(--border-main)' }}>
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400">Activity</p>
@@ -5107,8 +5096,8 @@ function ParentDashboardContent() {
         const next = activityNextDate(kind, item);
         const status = activityExpiryStatus(kind, item);
         return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4">
-            <div className="w-full max-w-lg rounded-3xl border bg-[var(--surface)] p-5 shadow-2xl" style={{ borderColor: 'var(--border-main)' }}>
+          <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/65 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4">
+            <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-3xl border bg-[var(--surface)] p-4 shadow-2xl sm:max-h-[90vh] sm:p-5" style={{ borderColor: 'var(--border-main)' }}>
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400">{kind} details</p>
@@ -5151,8 +5140,8 @@ function ParentDashboardContent() {
       })() : null}
 
       {isActivityModalOpen && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="rounded-3xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50 sm:items-center sm:p-4">
+          <div className="rounded-3xl w-full max-w-2xl p-4 sm:p-7 shadow-2xl relative border bg-[var(--surface)] max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-h-[90vh]" style={{ borderColor: 'var(--border-main)' }}>
             <button onClick={() => { clearActivityForm(); setIsActivityModalOpen(false); }} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
             <p className="text-xs font-bold uppercase tracking-wider text-cyan-500 mb-2">Activities Hub</p>
             <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--text-main)' }}>{editingActivityId ? 'Edit Activity' : 'Create New Activity'}</h2>
@@ -5216,7 +5205,7 @@ function ParentDashboardContent() {
                   </div>
                 </div>
               )}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button type="submit" className="flex-1 text-white font-bold py-3.5 rounded-xl transition shadow-md hover:shadow-lg" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                   {editingActivityId ? 'Save Changes' : 'Create Activity'}
                 </button>
@@ -5230,8 +5219,8 @@ function ParentDashboardContent() {
       )}
 
       {isModaling && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="rounded-3xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl relative border bg-[var(--surface)]" style={{ borderColor: 'var(--border-main)' }}>
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50 sm:items-center sm:p-4">
+          <div className="rounded-3xl w-full max-w-2xl p-4 sm:p-7 shadow-2xl relative border bg-[var(--surface)] max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-h-[90vh]" style={{ borderColor: 'var(--border-main)' }}>
             <button onClick={() => setIsModaling(false)} className="absolute top-4 right-4" style={{ color: 'var(--text-muted)' }}><X size={24} /></button>
             <p className="text-xs font-bold uppercase tracking-wider text-cyan-500 mb-2">Family Hub</p>
             <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--text-main)' }}>Create Child Adventure Account</h2>
@@ -5381,8 +5370,8 @@ function ParentDashboardContent() {
       )}
 
       {isSickModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[var(--surface)] w-full max-w-md rounded-2xl shadow-2xl p-6 border" style={{ borderColor: 'var(--border-main)' }}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-black/60 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="bg-[var(--surface)] w-full max-w-md rounded-2xl shadow-2xl p-4 sm:p-6 border max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-h-[90vh]" style={{ borderColor: 'var(--border-main)' }}>
             <h3 className="text-xl font-bold mb-4" style={{ color: 'var(--text-main)' }}>Mark Child Sick 🤒</h3>
             <div className="space-y-4">
               <div>
@@ -5416,7 +5405,7 @@ function ParentDashboardContent() {
                   style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                 />
               </div>
-              <div className="flex gap-3 mt-6">
+              <div className="flex flex-col gap-3 mt-6 sm:flex-row">
                 <button
                   onClick={async () => {
                     try {
