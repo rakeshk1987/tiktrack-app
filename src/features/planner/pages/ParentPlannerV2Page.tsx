@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { DateSelectArg, EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core';
+import type { DateSelectArg, DatesSetArg, EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core';
+import { CalendarDays, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 
 import { PLANNER_EVENT_CATEGORIES } from '../constants/planner.constants';
 import type { PlannerEvent } from '../types/planner.types';
@@ -30,6 +31,42 @@ import { ParentPlannerSidebar } from '../components/parent/ParentPlannerSidebar'
 import { ParentSyncStatus } from '../components/parent/ParentSyncStatus';
 import { ParentWeeklyOverview } from '../components/parent/ParentWeeklyOverview';
 
+type ParentStatusPeriod = 'month';
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function shiftMonth(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1, 12, 0, 0, 0);
+}
+
+function formatMonthYear(date: Date) {
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function expandPlannerEventsAsPlannerEvents(events: PlannerEvent[], rangeStart: Date, rangeEnd: Date): PlannerEvent[] {
+  return events.flatMap((event) =>
+    expandRecurringEventForRange(event, rangeStart.toISOString(), rangeEnd.toISOString()).map((instance) => ({
+      ...event,
+      id: instance.instanceId,
+      startAt: instance.startAt,
+      endAt: instance.endAt
+    }))
+  );
+}
+
 function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: string }) {
   const { pushToast } = usePlannerToast();
   const { isOnline } = useNetworkStatus();
@@ -42,6 +79,8 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   const [editingEvent, setEditingEvent] = useState<PlannerEvent | null>(null);
   const [optimisticEvents, setOptimisticEvents] = useState<PlannerEvent[]>([]);
   const [insightFocus, setInsightFocus] = useState<'none' | 'workload' | 'conflicts' | 'burnout' | 'exams' | 'sync'>('none');
+  const [statusPeriod] = useState<ParentStatusPeriod>('month');
+  const [periodAnchor, setPeriodAnchor] = useState(() => startOfMonth(new Date()));
 
   useUnsavedChangesGuard(false, 'You have unsaved timetable changes. Leave anyway?');
 
@@ -58,6 +97,23 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   const filteredEvents = useMemo(() => mergedEvents.filter((event) => activeCategories.includes(event.category)), [mergedEvents, activeCategories]);
   const insights = usePlannerInsights(filteredEvents);
   const lightInsights = usePlannerLightInsights(filteredEvents);
+  const periodRange = useMemo(() => {
+    if (statusPeriod === 'month') {
+      return {
+        start: startOfMonth(periodAnchor),
+        end: endOfMonth(periodAnchor),
+        label: formatMonthYear(periodAnchor),
+        initialDate: toDateKey(startOfMonth(periodAnchor))
+      };
+    }
+
+    return {
+      start: startOfMonth(periodAnchor),
+      end: endOfMonth(periodAnchor),
+      label: formatMonthYear(periodAnchor),
+      initialDate: toDateKey(startOfMonth(periodAnchor))
+    };
+  }, [periodAnchor, statusPeriod]);
 
   const focusedEvents = useMemo(() => {
     if (insightFocus === 'none' || insightFocus === 'workload' || insightFocus === 'sync') return filteredEvents;
@@ -78,17 +134,12 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   }, [filteredEvents, insightFocus, insights.conflicts]);
 
   const calendarEvents = useMemo<EventInput[]>(() => {
-    const startRange = new Date();
-    startRange.setDate(startRange.getDate() - 30);
-    const endRange = new Date();
-    endRange.setDate(endRange.getDate() + 90);
-
     const expanded: EventInput[] = [];
     for (const event of focusedEvents) {
       const instances = expandRecurringEventForRange(
         event,
-        startRange.toISOString(),
-        endRange.toISOString()
+        periodRange.start.toISOString(),
+        periodRange.end.toISOString()
       );
       for (const inst of instances) {
         expanded.push({
@@ -105,9 +156,23 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
       }
     }
     return expanded;
-  }, [focusedEvents]);
+  }, [focusedEvents, periodRange.end, periodRange.start]);
 
-  const upcomingExamCount = filteredEvents.filter((event) => event.category === 'exam' && new Date(event.startAt).getTime() >= Date.now()).length;
+  const monthlyEvents = useMemo(() => {
+    return expandPlannerEventsAsPlannerEvents(filteredEvents, periodRange.start, periodRange.end);
+  }, [filteredEvents, periodRange.end, periodRange.start]);
+
+  const monthlyExamEvents = useMemo(() => monthlyEvents.filter((event) => event.category === 'exam'), [monthlyEvents]);
+  const upcomingExamCount = monthlyExamEvents.filter((event) => new Date(event.startAt).getTime() >= Date.now()).length;
+  const scheduledExamCount = monthlyExamEvents.filter((event) => event.marksScored == null || event.totalMarks == null || event.totalMarks <= 0).length;
+  const gradedExamEvents = monthlyExamEvents.filter((event) => event.marksScored != null && event.totalMarks != null && event.totalMarks > 0);
+  const marksScoredTotal = gradedExamEvents.reduce((total, event) => total + (event.marksScored || 0), 0);
+  const maxMarksTotal = gradedExamEvents.reduce((total, event) => total + (event.totalMarks || 0), 0);
+  const averageScore = gradedExamEvents.length
+    ? Math.round(gradedExamEvents.reduce((total, event) => total + (event.marksScored! / event.totalMarks!), 0) / gradedExamEvents.length * 100)
+    : 0;
+  const monthlyTaskCount = monthlyEvents.filter((event) => event.category === 'homework').length;
+  const monthlyEventCount = monthlyEvents.filter((event) => event.category !== 'homework' && event.category !== 'exam').length;
 
   function toggleFocus(mode: 'workload' | 'conflicts' | 'burnout' | 'exams' | 'sync') {
     setInsightFocus((prev) => {
@@ -131,6 +196,57 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   function toggleCategory(category: PlannerEvent['category']) {
     setActiveCategories((prev) => (prev.includes(category) ? prev.filter((x) => x !== category) : [...prev, category]));
   }
+
+  function onCalendarDatesSet(arg: DatesSetArg) {
+    const visibleStart = startOfMonth(arg.view.currentStart);
+    setPeriodAnchor((prev) => (
+      prev.getFullYear() === visibleStart.getFullYear() && prev.getMonth() === visibleStart.getMonth()
+        ? prev
+        : visibleStart
+    ));
+  }
+
+  const periodControl = (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">Monthly Status</p>
+        <p className="mt-1 text-sm font-semibold text-white/75">Showing tasks, exams, and events for this month only.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPeriodAnchor((prev) => shiftMonth(prev, -1))}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-400/10 text-cyan-200 transition hover:bg-cyan-400/15"
+          title="Previous month"
+          aria-label="Previous month"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <div className="flex h-10 min-w-[190px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-black text-white">
+          <CalendarDays size={16} className="text-cyan-300" />
+          <span>{periodRange.label}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPeriodAnchor((prev) => shiftMonth(prev, 1))}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-400/10 text-cyan-200 transition hover:bg-cyan-400/15"
+          title="Next month"
+          aria-label="Next month"
+        >
+          <ChevronRight size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setPeriodAnchor(startOfMonth(new Date()))}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/65 transition hover:bg-white/[0.08] hover:text-white"
+          title="Current month"
+          aria-label="Current month"
+        >
+          <RotateCcw size={15} />
+        </button>
+      </div>
+    </div>
+  );
 
   function onSelectSlot(slot: DateSelectArg) {
     setModalMode('create');
@@ -322,13 +438,36 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
         }
         main={
           <div className="space-y-4">
+            {periodControl}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Tasks</p>
+                <p className="mt-1 text-2xl font-black text-cyan-200">{monthlyTaskCount}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Exams</p>
+                <p className="mt-1 text-2xl font-black text-rose-200">{monthlyExamEvents.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Events</p>
+                <p className="mt-1 text-2xl font-black text-violet-200">{monthlyEventCount}</p>
+              </div>
+            </div>
             {eventsLoading ? <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70">Loading calendar events...</p> : null}
             {!eventsLoading && calendarEvents.length === 0 ? (
               <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
-                No events found for this range. <Link to="/parent/onboarding" className="text-cyan-300 underline">Create onboarding data</Link>.
+                No events found for {periodRange.label}. <Link to="/parent/onboarding" className="text-cyan-300 underline">Create onboarding data</Link>.
               </p>
             ) : null}
-            <ParentPlannerCalendarPanel events={calendarEvents} onSelectSlot={onSelectSlot} onClickEvent={onClickEvent} onEventDrop={(arg) => void handleEventMoveOrResize(arg)} onEventResize={(arg) => void handleEventMoveOrResize(arg)} />
+            <ParentPlannerCalendarPanel
+              events={calendarEvents}
+              initialDate={periodRange.initialDate}
+              onDatesSet={onCalendarDatesSet}
+              onSelectSlot={onSelectSlot}
+              onClickEvent={onClickEvent}
+              onEventDrop={(arg) => void handleEventMoveOrResize(arg)}
+              onEventResize={(arg) => void handleEventMoveOrResize(arg)}
+            />
             <p className="rounded-2xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-2 text-xs text-cyan-100">{calendarNote}</p>
 
             <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
@@ -341,7 +480,16 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
             <ParentWeeklyOverview weeklyScore={insights.burnout.weeklyScore} active={insightFocus === 'workload'} onClick={() => toggleFocus('workload')} />
             <ParentConflictPanel count={insights.conflicts.length} active={insightFocus === 'conflicts'} onClick={() => toggleFocus('conflicts')} />
             <ParentBurnoutPanel level={insights.burnout.level} recommendation={insights.burnout.recommendation} active={insightFocus === 'burnout'} onClick={() => toggleFocus('burnout')} />
-            <ParentExamTracker upcomingExamCount={upcomingExamCount} active={insightFocus === 'exams'} onClick={() => toggleFocus('exams')} />
+            <ParentExamTracker
+              upcomingExamCount={upcomingExamCount}
+              monthlyExamCount={monthlyExamEvents.length}
+              scheduledExamCount={scheduledExamCount}
+              marksLabel={`${marksScoredTotal}/${maxMarksTotal || 0}`}
+              averageScore={averageScore}
+              periodLabel={periodRange.label}
+              active={insightFocus === 'exams'}
+              onClick={() => toggleFocus('exams')}
+            />
             <ParentSyncStatus status="not_connected" active={insightFocus === 'sync'} onClick={() => toggleFocus('sync')} />
           </div>
         }

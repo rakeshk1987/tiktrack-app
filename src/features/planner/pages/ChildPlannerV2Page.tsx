@@ -20,12 +20,13 @@ import { usePlannerSubjects } from '../hooks/usePlannerSubjects';
 import { plannerTimetableCellSchema } from '../utils/planner.validation';
 import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
-import { Pencil, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 import { expandRecurringEventForRange, formatPlannerRecurrence, getNextPlannerOccurrence, getPlannerExpiryStatus } from '../utils/planner.recurrence';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
 type ActivitySubTab = PlannerActivityModule;
+type ActivityStatusPeriod = 'month';
 
 const ACTIVITY_PALETTE = [
   '#38bdf8',
@@ -53,6 +54,22 @@ function sortPlannerEventsByStart(events: PlannerEvent[], direction: 'asc' | 'de
     const diff = getPlannerEventTime(a) - getPlannerEventTime(b);
     return direction === 'asc' ? diff : -diff;
   });
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function shiftMonth(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1, 12, 0, 0, 0);
+}
+
+function formatMonthYear(date: Date) {
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 function expandPlannerEventsAsOccurrences(
@@ -85,6 +102,8 @@ export default function ChildPlannerV2Page() {
   const [schoolError, setSchoolError] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<PlannerEvent | null>(null);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
+  const [activityStatusPeriod] = useState<ActivityStatusPeriod>('month');
+  const [activityPeriodAnchor, setActivityPeriodAnchor] = useState(() => startOfMonth(new Date()));
 
   const { events, loading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
   const { programs } = usePlannerPrograms(childId);
@@ -128,6 +147,21 @@ export default function ChildPlannerV2Page() {
   const activeActivityLabel = activeActivity?.label || '';
   const activeActivityModules: PlannerActivityModule[] = activeActivity?.modules || ['tasks'];
   const isSchoolActivity = activeActivityLabel.toLowerCase() === 'school' || activeActivityId === 'school';
+  const activityPeriodRange = useMemo(() => {
+    if (activityStatusPeriod === 'month') {
+      return {
+        start: startOfMonth(activityPeriodAnchor),
+        end: endOfMonth(activityPeriodAnchor),
+        label: formatMonthYear(activityPeriodAnchor)
+      };
+    }
+
+    return {
+      start: startOfMonth(activityPeriodAnchor),
+      end: endOfMonth(activityPeriodAnchor),
+      label: formatMonthYear(activityPeriodAnchor)
+    };
+  }, [activityPeriodAnchor, activityStatusPeriod]);
   const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId, activityPointsConfig?.challengePoints);
   const { subjects, addSubject: addNewSubject, removeSubject, updateSubject } = usePlannerSubjects(childId, activeActivityId);
 
@@ -280,14 +314,6 @@ export default function ChildPlannerV2Page() {
     }
     return expanded;
   }, [filteredEvents, programs, activityColorById]);
-
-  const schoolRoutineItems = useMemo(() => {
-    return allEvents
-      .filter((event) => ['school', 'homework', 'tuition', 'exam', 'extracurricular'].includes(event.category))
-      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
-      .slice(0, 20);
-  }, [allEvents]);
-  const schoolExamItems = useMemo(() => schoolRoutineItems.filter((event) => event.category === 'exam'), [schoolRoutineItems]);
 
   useEffect(() => {
     if (!activeActivityModules.includes(activitySubTab)) {
@@ -605,6 +631,55 @@ export default function ChildPlannerV2Page() {
     });
   }
 
+  const renderActivityPeriodControl = (tone: 'cyan' | 'rose' | 'purple') => {
+    const toneClass = {
+      cyan: 'text-cyan-300 border-cyan-300/25 bg-cyan-400/10 hover:bg-cyan-400/15',
+      rose: 'text-rose-300 border-rose-300/25 bg-rose-400/10 hover:bg-rose-400/15',
+      purple: 'text-purple-300 border-purple-300/25 bg-purple-400/10 hover:bg-purple-400/15'
+    }[tone];
+    const iconClass = {
+      cyan: 'text-cyan-300',
+      rose: 'text-rose-300',
+      purple: 'text-purple-300'
+    }[tone];
+
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setActivityPeriodAnchor((prev) => shiftMonth(prev, -1))}
+          className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${toneClass}`}
+          title="Previous month"
+          aria-label="Previous month"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <div className="flex h-10 min-w-[190px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-black text-white">
+          <CalendarDays size={16} className={iconClass} />
+          <span>{activityPeriodRange.label}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setActivityPeriodAnchor((prev) => shiftMonth(prev, 1))}
+          className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${toneClass}`}
+          title="Next month"
+          aria-label="Next month"
+        >
+          <ChevronRight size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setActivityPeriodAnchor(startOfMonth(new Date()))}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/65 transition hover:bg-white/[0.08] hover:text-white"
+          title="Current month"
+          aria-label="Current month"
+        >
+          <RotateCcw size={15} />
+        </button>
+      </div>
+    );
+  };
+
     return (
     <div className="mx-auto mt-4 max-w-[1680px] space-y-6 pb-24 px-4">
       {/* Header & Top Navigation */}
@@ -786,17 +861,20 @@ export default function ChildPlannerV2Page() {
             
             {activitySubTab === 'tasks' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="mb-6 flex items-center justify-between">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Program Tasks</h3>
-                    <p className="text-xs text-white/40">Manage your workload for this activity.</p>
+                    <p className="text-xs text-white/40">Manage your workload for {activityPeriodRange.label}.</p>
                   </div>
-                  <button 
-                    onClick={() => setShowTaskForm(!showTaskForm)}
-                    className="rounded-full bg-cyan-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 hover:bg-cyan-400/20 transition-all"
-                  >
-                    {showTaskForm ? 'Cancel' : '+ New Task'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {renderActivityPeriodControl('cyan')}
+                    <button 
+                      onClick={() => setShowTaskForm(!showTaskForm)}
+                      className="rounded-full bg-cyan-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 hover:bg-cyan-400/20 transition-all"
+                    >
+                      {showTaskForm ? 'Cancel' : '+ New Task'}
+                    </button>
+                  </div>
                 </div>
 
                 {showTaskForm && (
@@ -870,19 +948,13 @@ export default function ChildPlannerV2Page() {
                 )}
 
                 {(() => {
-                  const activityTaskEvents = visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category)));
-                  const taskRangeStart = new Date();
-                  taskRangeStart.setHours(0, 0, 0, 0);
-                  taskRangeStart.setDate(taskRangeStart.getDate() - 30);
-                  const taskRangeEnd = new Date();
-                  taskRangeEnd.setHours(23, 59, 59, 999);
-                  taskRangeEnd.setDate(taskRangeEnd.getDate() + 90);
-                  const activityTasks = expandPlannerEventsAsOccurrences(activityTaskEvents, taskRangeStart, taskRangeEnd);
+                  const activityTaskEvents = visibleEvents.filter(e => e.category === 'homework' && (e.linkedProgramId === activeActivityId || isSchoolActivity));
+                  const activityTasks = expandPlannerEventsAsOccurrences(activityTaskEvents, activityPeriodRange.start, activityPeriodRange.end);
                   
                   if (activityTasks.length === 0) {
                     return (
                       <div className="col-span-full py-20 text-center border border-white/5 bg-white/[0.02] rounded-3xl">
-                        <p className="text-lg font-medium text-white/20">No tasks currently assigned to this protocol.</p>
+                        <p className="text-lg font-medium text-white/20">No tasks found for {activityPeriodRange.label}.</p>
                       </div>
                     );
                   }
@@ -978,17 +1050,20 @@ export default function ChildPlannerV2Page() {
 
             {activitySubTab === 'exams' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="mb-6 flex items-center justify-between">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Academic Assessments</h3>
-                    <p className="text-xs text-white/40">Track your performance and upcoming tests.</p>
+                    <p className="text-xs text-white/40">Track performance and upcoming tests for {activityPeriodRange.label}.</p>
                   </div>
-                  <button 
-                    onClick={() => setShowExamForm(!showExamForm)}
-                    className="rounded-full bg-rose-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 hover:bg-rose-400/20 transition-all"
-                  >
-                    {showExamForm ? 'Cancel' : '+ New Exam'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {renderActivityPeriodControl('rose')}
+                    <button 
+                      onClick={() => setShowExamForm(!showExamForm)}
+                      className="rounded-full bg-rose-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 hover:bg-rose-400/20 transition-all"
+                    >
+                      {showExamForm ? 'Cancel' : '+ New Exam'}
+                    </button>
+                  </div>
                 </div>
 
                 {showExamForm && (
@@ -1103,19 +1178,13 @@ export default function ChildPlannerV2Page() {
                 )}
 
                 {(() => {
-                  const activityExamEvents = isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam');
-                  const examRangeStart = new Date();
-                  examRangeStart.setHours(0, 0, 0, 0);
-                  examRangeStart.setDate(examRangeStart.getDate() - 30);
-                  const examRangeEnd = new Date();
-                  examRangeEnd.setHours(23, 59, 59, 999);
-                  examRangeEnd.setDate(examRangeEnd.getDate() + 90);
-                  const activityExams = expandPlannerEventsAsOccurrences(activityExamEvents, examRangeStart, examRangeEnd);
+                  const activityExamEvents = visibleEvents.filter((event) => event.category === 'exam' && (event.linkedProgramId === activeActivityId || isSchoolActivity));
+                  const activityExams = expandPlannerEventsAsOccurrences(activityExamEvents, activityPeriodRange.start, activityPeriodRange.end);
                   
                   if (activityExams.length === 0) {
                     return (
                       <div className="py-20 text-center border border-white/5 bg-white/[0.02] rounded-3xl mt-8">
-                        <p className="text-lg font-medium text-white/20">No active examinations detected.</p>
+                        <p className="text-lg font-medium text-white/20">No exams found for {activityPeriodRange.label}.</p>
                       </div>
                     );
                   }
@@ -1159,17 +1228,22 @@ export default function ChildPlannerV2Page() {
                           const bgBorderClass = isGreen ? 'border-emerald-500/20 bg-emerald-500/5' : isAmber ? 'border-amber-500/20 bg-amber-500/5' : 'border-rose-500/20 bg-rose-500/5';
                           const iconBgClass = isGreen ? 'bg-emerald-500/10' : isAmber ? 'bg-amber-500/10' : 'bg-rose-500/10';
                           const timeTextClass = isGreen ? 'text-emerald-400/80' : isAmber ? 'text-amber-400/80' : 'text-rose-400/80';
+                          const hasResult = event.marksScored != null && event.totalMarks != null && event.totalMarks > 0;
+                          const examStatus = event.taskStatus
+                            ? event.taskStatus.replace(/_/g, ' ')
+                            : hasResult ? 'Result recorded' : new Date(event.startAt).getTime() < Date.now() ? 'Awaiting result' : 'Scheduled';
                           
                           return (
-                            <div key={event.id} className={`flex items-center justify-between rounded-3xl border ${bgBorderClass} p-6 backdrop-blur-md`}>
-                              <div className="flex items-center gap-5">
+                            <div key={event.id} className={`flex flex-col gap-4 rounded-3xl border ${bgBorderClass} p-6 backdrop-blur-md lg:flex-row lg:items-center lg:justify-between`}>
+                              <div className="flex min-w-0 items-center gap-5">
                                 <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${iconBgClass} text-2xl`}>🎓</div>
-                                <div>
-                                  <p className="text-lg font-black text-white tracking-tight">{event.title}</p>
+                                <div className="min-w-0">
+                                  <p className="truncate text-lg font-black text-white tracking-tight">{event.title}</p>
                                   <p className={`text-sm font-semibold ${timeTextClass}`}>{new Date(event.startAt).toLocaleString()}</p>
+                                  <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-white/35">{examStatus}</p>
                                 </div>
                               </div>
-                              <div className="flex flex-col items-end gap-2">
+                              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                                 {activityPointsConfig?.examPoints ? (
                                   <div className="flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
                                     <span className="text-xs">⭐</span>
@@ -1178,7 +1252,7 @@ export default function ChildPlannerV2Page() {
                                 ) : null}
                                 {event.marksScored != null && event.totalMarks ? (
                                   <div className="flex items-center gap-1 rounded-xl bg-cyan-400/10 px-3 py-1.5 border border-cyan-400/20">
-                                    <span className="text-xs font-black text-cyan-400">{Math.round((event.marksScored / event.totalMarks) * 100)}%</span>
+                                    <span className="text-xs font-black text-cyan-400">{event.marksScored}/{event.totalMarks} ({Math.round((event.marksScored / event.totalMarks) * 100)}%)</span>
                                   </div>
                                 ) : null}
                                 <button onClick={() => setSelectedExamDetail(event)} className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
@@ -1190,32 +1264,31 @@ export default function ChildPlannerV2Page() {
                     </div>
                   );
 
-                  const thisMonthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1).getTime();
-                  const gradedExams = activityExams.filter(e => e.marksScored != null && e.totalMarks != null);
-                  const gradedThisMonth = gradedExams.filter(e => new Date(e.startAt).getTime() >= thisMonthStart);
-                  
-                  const avgPercentOverall = gradedExams.length ? Math.round(gradedExams.reduce((acc, e) => acc + (e.marksScored! / e.totalMarks!), 0) / gradedExams.length * 100) : 0;
-                  const avgPercentThisMonth = gradedThisMonth.length ? Math.round(gradedThisMonth.reduce((acc, e) => acc + (e.marksScored! / e.totalMarks!), 0) / gradedThisMonth.length * 100) : 0;
+                  const gradedExams = activityExams.filter(e => e.marksScored != null && e.totalMarks != null && e.totalMarks > 0);
+                  const scheduledExams = activityExams.filter(e => e.marksScored == null || e.totalMarks == null || e.totalMarks <= 0);
+                  const marksScoredTotal = gradedExams.reduce((acc, e) => acc + (e.marksScored || 0), 0);
+                  const maxMarksTotal = gradedExams.reduce((acc, e) => acc + (e.totalMarks || 0), 0);
+                  const avgPercent = gradedExams.length ? Math.round(gradedExams.reduce((acc, e) => acc + (e.marksScored! / e.totalMarks!), 0) / gradedExams.length * 100) : 0;
 
                   return (
                     <div className="space-y-4 mt-8">
                       {activityExams.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Total Exams</p>
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Monthly Exams</p>
                             <p className="text-3xl font-black text-white">{activityExams.length}</p>
                           </div>
                           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">This Month</p>
-                            <p className="text-3xl font-black text-cyan-400">{activityExams.filter(e => new Date(e.startAt).getTime() >= thisMonthStart).length}</p>
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Scheduled</p>
+                            <p className="text-3xl font-black text-cyan-400">{scheduledExams.length}</p>
                           </div>
                           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Avg Score (Overall)</p>
-                            <p className="text-3xl font-black text-emerald-400">{avgPercentOverall}%</p>
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Marks Recorded</p>
+                            <p className="text-3xl font-black text-emerald-400">{marksScoredTotal}/{maxMarksTotal || 0}</p>
                           </div>
                           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Avg Score (This Month)</p>
-                            <p className="text-3xl font-black text-rose-400">{avgPercentThisMonth}%</p>
+                            <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Avg Score</p>
+                            <p className="text-3xl font-black text-rose-400">{avgPercent}%</p>
                           </div>
                         </div>
                       )}
@@ -1563,17 +1636,20 @@ export default function ChildPlannerV2Page() {
             )}
             {activitySubTab === 'events' && (
               <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="mb-6 flex items-center justify-between">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Program Events</h3>
-                    <p className="text-xs text-white/40">Scheduled sessions and specialized protocols.</p>
+                    <p className="text-xs text-white/40">Scheduled sessions and specialized protocols for {activityPeriodRange.label}.</p>
                   </div>
-                  <button 
-                    onClick={() => setShowEventForm(!showEventForm)}
-                    className="rounded-full bg-purple-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-purple-400 hover:bg-purple-400/20 transition-all"
-                  >
-                    {showEventForm ? 'Cancel' : '+ New Event'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {renderActivityPeriodControl('purple')}
+                    <button 
+                      onClick={() => setShowEventForm(!showEventForm)}
+                      className="rounded-full bg-purple-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-purple-400 hover:bg-purple-400/20 transition-all"
+                    >
+                      {showEventForm ? 'Cancel' : '+ New Event'}
+                    </button>
+                  </div>
                 </div>
 
                 {showEventForm && (
@@ -1615,13 +1691,7 @@ export default function ChildPlannerV2Page() {
 
                 {(() => {
                   const activityEventRecords = visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam');
-                  const eventRangeStart = new Date();
-                  eventRangeStart.setHours(0, 0, 0, 0);
-                  eventRangeStart.setDate(eventRangeStart.getDate() - 30);
-                  const eventRangeEnd = new Date();
-                  eventRangeEnd.setHours(23, 59, 59, 999);
-                  eventRangeEnd.setDate(eventRangeEnd.getDate() + 90);
-                  const activityEvents = sortPlannerEventsByStart(expandPlannerEventsAsOccurrences(activityEventRecords, eventRangeStart, eventRangeEnd));
+                  const activityEvents = sortPlannerEventsByStart(expandPlannerEventsAsOccurrences(activityEventRecords, activityPeriodRange.start, activityPeriodRange.end));
 
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1641,7 +1711,7 @@ export default function ChildPlannerV2Page() {
                           <button onClick={() => setSelectedEvent(event)} className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                         </div>
                       )) : (
-                        <div className="col-span-full py-20 text-center text-white/20 font-medium">No specialized events found.</div>
+                        <div className="col-span-full py-20 text-center text-white/20 font-medium">No events found for {activityPeriodRange.label}.</div>
                       )}
                     </div>
                   );

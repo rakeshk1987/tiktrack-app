@@ -6,16 +6,6 @@ import { mapPlannerEvent } from '../services/planner.firestore';
 import type { PlannerDateRange, PlannerEvent } from '../types/planner.types';
 import { useAuth } from '../../../contexts/AuthContext';
 
-const DEFAULT_RANGE_DAYS = 30;
-
-function defaultRange(): PlannerDateRange {
-  const start = new Date();
-  start.setDate(start.getDate() - 7);
-  const end = new Date();
-  end.setDate(end.getDate() + DEFAULT_RANGE_DAYS);
-  return { startAt: start.toISOString(), endAt: end.toISOString() };
-}
-
 export function usePlannerEvents(childId: string, range?: PlannerDateRange, useMockFallback = true) {
   const { user } = useAuth();
   const familyId = user?.linked_family_id || user?.id || '';
@@ -23,7 +13,7 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
   const [taskEvents, setTaskEvents] = useState<PlannerEvent[]>([]);
   const [examEvents, setExamEvents] = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const effectiveRange = useMemo(() => range || defaultRange(), [range?.endAt, range?.startAt]);
+  const effectiveRange = useMemo(() => range || null, [range?.endAt, range?.startAt]);
 
   useEffect(() => {
     if (!childId || !familyId) {
@@ -34,13 +24,16 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
 
     setLoading(true);
 
-    // 1. Real-time events query by range
-    const eventsQuery = query(
-      collection(db, 'events'),
-      where('family_id', '==', familyId),
-      where('start_at', '>=', effectiveRange.startAt),
-      where('start_at', '<=', effectiveRange.endAt)
-    );
+    // 1. Real-time events query. When no range is supplied, keep all program
+    // events available so activity-level month navigation can look backward.
+    const eventsQuery = effectiveRange
+      ? query(
+          collection(db, 'events'),
+          where('family_id', '==', familyId),
+          where('start_at', '>=', effectiveRange.startAt),
+          where('start_at', '<=', effectiveRange.endAt)
+        )
+      : query(collection(db, 'events'), where('family_id', '==', familyId));
 
     const unsubEvents = onSnapshot(
       eventsQuery,
@@ -186,6 +179,7 @@ export function usePlannerEvents(childId: string, range?: PlannerDateRange, useM
               count: null,
               rrule: null
             },
+            taskStatus: (row.status as string) || 'scheduled',
             marksScored: marksScored,
             totalMarks: totalMarks,
             syllabusScope: (row.syllabus_scope as string) || '',
