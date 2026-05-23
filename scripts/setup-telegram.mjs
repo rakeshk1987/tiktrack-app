@@ -29,8 +29,16 @@ function run(command, args, options = {}) {
     });
     child.on('exit', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with ${code}`));
+      else reject(new Error(`${command} ${redactArgs(args).join(' ')} exited with ${code}`));
     });
+  });
+}
+
+function redactArgs(args) {
+  return args.map((arg) => {
+    if (arg.startsWith('telegram.bot_token=')) return 'telegram.bot_token=<redacted>';
+    if (arg.startsWith('telegram.webhook_secret=')) return 'telegram.webhook_secret=<redacted>';
+    return arg;
   });
 }
 
@@ -65,6 +73,24 @@ async function setMenuButton(token, miniAppUrl) {
   const body = await response.json().catch(() => null);
   if (!response.ok || !body?.ok) {
     throw new Error(`Telegram setChatMenuButton failed: ${JSON.stringify(body)}`);
+  }
+}
+
+async function setBotCommands(token) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      commands: [
+        { command: 'start', description: 'Open TikTrack parent menu' },
+        { command: 'menu', description: 'Show child and schedule actions' },
+        { command: 'link', description: 'Link Telegram to TikTrack with a code' },
+      ],
+    }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body?.ok) {
+    throw new Error(`Telegram setMyCommands failed: ${JSON.stringify(body)}`);
   }
 }
 
@@ -104,4 +130,5 @@ if (shouldDeploy) {
 
 await setWebhook(botToken, webhookUrl, webhookSecret);
 await setMenuButton(botToken, miniAppUrl);
-console.log('Telegram config, webhook, and Mini App menu button are ready.');
+await setBotCommands(botToken);
+console.log('Telegram config, webhook, Mini App menu button, and bot commands are ready.');

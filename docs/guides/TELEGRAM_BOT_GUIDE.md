@@ -31,7 +31,12 @@ The Telegram bot is a parent-only control surface for quick TikTrack actions. Ch
 
 ## Configure Secrets
 
-Create a new dedicated Telegram bot with BotFather, for example `TikTrack Parent`.
+Create a new dedicated Telegram bot with BotFather. The current prod bot is:
+
+```text
+@tikTrak_bot
+```
+
 Do not reuse a personal or unrelated bot.
 
 Save the public bot username in TikTrack:
@@ -40,44 +45,37 @@ Save the public bot username in TikTrack:
 2. Go to `Settings -> Telegram`.
 3. Enter the bot username without the token.
 
-Then set the private bot token, webhook secret, and Mini App URL in Firebase Functions config:
+Prod Telegram setup is deployed only through GitHub Actions. Do not run Firebase prod deploys from a local terminal.
 
-```bash
-firebase functions:config:set \
-  telegram.bot_token="YOUR_BOT_TOKEN" \
-  telegram.webhook_secret="A_LONG_RANDOM_SECRET" \
-  telegram.mini_app_url="https://YOUR_HOSTING_DOMAIN/telegram" \
-  telegram.mini_app_origin="https://YOUR_HOSTING_DOMAIN"
+Before running the workflow, enable Cloud Functions API once for prod if it is not already enabled:
+
+```text
+https://console.developers.google.com/apis/api/cloudfunctions.googleapis.com/overview?project=tiktrack-f112b
 ```
 
-Or use the repeatable setup helper from this repo:
+## GitHub Prod Route
 
-```bash
-export TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-export TELEGRAM_WEBHOOK_SECRET="A_LONG_RANDOM_SECRET"
-export TELEGRAM_MINI_APP_URL="https://YOUR_HOSTING_DOMAIN/telegram"
-npm run telegram:setup -- --deploy
+Use the manual GitHub workflow:
+
+```text
+Actions -> Telegram Prod Setup -> Run workflow
 ```
 
-The helper sets Functions config, optionally deploys functions/hosting/rules with `--deploy`, registers the Telegram webhook, and sets the bot menu button to open the TikTrack Mini App.
+Required GitHub repository secrets:
 
-Deploy functions:
-
-```bash
-firebase deploy --only functions
+```text
+FIREBASE_SERVICE_ACCOUNT_TIKTRACK_F112B
+TELEGRAM_BOT_TOKEN
+TELEGRAM_WEBHOOK_SECRET
 ```
 
-Set the Telegram webhook:
+`FIREBASE_SERVICE_ACCOUNT_TIKTRACK_F112B` already exists if Firebase Hosting deploys are working from GitHub. Add the two Telegram secrets in:
 
-```bash
-curl -X POST "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/telegramWebhook",
-    "secret_token": "A_LONG_RANDOM_SECRET",
-    "allowed_updates": ["message", "callback_query"]
-  }'
+```text
+GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret
 ```
+
+The workflow deploys Functions, Hosting, Firestore rules, sets Firebase Functions Telegram config, registers the Telegram webhook, sets the Telegram Mini App menu button, and registers `/start`, `/menu`, and `/link`. The workflow uses `scripts/setup-telegram.mjs`; that script is for CI/prod automation, not a required local setup step.
 
 Set the Mini App domain in BotFather:
 
@@ -88,10 +86,20 @@ Set the Mini App domain in BotFather:
 Use:
 
 ```text
-https://YOUR_HOSTING_DOMAIN/telegram
+https://tiktrack-f112b.web.app/telegram
 ```
 
 The setup helper also calls Telegram `setChatMenuButton`, so parents can open the custom TikTrack UI from the bot's menu button. The inline `Open TikTrack Mini App` button in bot messages uses the same URL from `telegram.mini_app_url`.
+
+Recommended BotFather text:
+
+```text
+Description:
+TikTrack parent assistant for adding schedules, viewing today/week, and managing child planner items.
+
+About:
+Parent-only TikTrack schedule helper.
+```
 
 ## Parent Linking Flow
 
