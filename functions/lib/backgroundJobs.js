@@ -442,7 +442,10 @@ exports.cleanupExpiredDataJob = functions
             .where('expires_at', '<', now.toISOString())
             .where('is_generated', '==', true)
             .get();
-        const generatedNonMandatoryTasks = expiredTasksQuery.docs.filter(doc => doc.data().is_mandatory !== true);
+        const generatedNonMandatoryTasks = expiredTasksQuery.docs.filter((doc) => {
+            const data = typeof doc.data === 'function' ? doc.data() : {};
+            return data.is_mandatory !== true;
+        });
         const deletePromises = generatedNonMandatoryTasks.map(doc => doc.ref.delete());
         await Promise.all(deletePromises);
         results.expiredTasksDeleted = generatedNonMandatoryTasks.length;
