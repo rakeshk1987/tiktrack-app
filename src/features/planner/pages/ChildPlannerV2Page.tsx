@@ -55,6 +55,21 @@ function sortPlannerEventsByStart(events: PlannerEvent[], direction: 'asc' | 'de
   });
 }
 
+function expandPlannerEventsAsOccurrences(
+  events: PlannerEvent[],
+  rangeStart: Date,
+  rangeEnd: Date
+): PlannerEvent[] {
+  return events.flatMap((event) =>
+    expandRecurringEventForRange(event, rangeStart.toISOString(), rangeEnd.toISOString()).map((instance) => ({
+      ...event,
+      id: instance.instanceId,
+      startAt: instance.startAt,
+      endAt: instance.endAt
+    }))
+  );
+}
+
 export default function ChildPlannerV2Page() {
   const { user } = useAuth();
   const childId = user?.id || '';
@@ -855,7 +870,14 @@ export default function ChildPlannerV2Page() {
                 )}
 
                 {(() => {
-                  const activityTasks = visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category)));
+                  const activityTaskEvents = visibleEvents.filter(e => e.linkedProgramId === activeActivityId || (isSchoolActivity && ['school', 'homework'].includes(e.category)));
+                  const taskRangeStart = new Date();
+                  taskRangeStart.setHours(0, 0, 0, 0);
+                  taskRangeStart.setDate(taskRangeStart.getDate() - 30);
+                  const taskRangeEnd = new Date();
+                  taskRangeEnd.setHours(23, 59, 59, 999);
+                  taskRangeEnd.setDate(taskRangeEnd.getDate() + 90);
+                  const activityTasks = expandPlannerEventsAsOccurrences(activityTaskEvents, taskRangeStart, taskRangeEnd);
                   
                   if (activityTasks.length === 0) {
                     return (
@@ -1081,7 +1103,14 @@ export default function ChildPlannerV2Page() {
                 )}
 
                 {(() => {
-                  const activityExams = isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam');
+                  const activityExamEvents = isSchoolActivity ? schoolExamItems : visibleEvents.filter((event) => event.category === 'exam');
+                  const examRangeStart = new Date();
+                  examRangeStart.setHours(0, 0, 0, 0);
+                  examRangeStart.setDate(examRangeStart.getDate() - 30);
+                  const examRangeEnd = new Date();
+                  examRangeEnd.setHours(23, 59, 59, 999);
+                  examRangeEnd.setDate(examRangeEnd.getDate() + 90);
+                  const activityExams = expandPlannerEventsAsOccurrences(activityExamEvents, examRangeStart, examRangeEnd);
                   
                   if (activityExams.length === 0) {
                     return (
@@ -1584,27 +1613,39 @@ export default function ChildPlannerV2Page() {
                   </form>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').length ? 
-                    visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam').map((event) => (
-                    <div key={event.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
-                      <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl">📅</div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-base font-bold text-white">{event.title}</p>
-                        <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleString()}</p>
-                      </div>
-                      {activityPointsConfig?.eventPoints ? (
-                        <div className="ml-auto flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
-                          <span className="text-xs">⭐</span>
-                          <span className="text-xs font-black text-amber-400">{activityPointsConfig.eventPoints}</span>
+                {(() => {
+                  const activityEventRecords = visibleEvents.filter(e => e.linkedProgramId === activeActivityId && e.category !== 'homework' && e.category !== 'exam');
+                  const eventRangeStart = new Date();
+                  eventRangeStart.setHours(0, 0, 0, 0);
+                  eventRangeStart.setDate(eventRangeStart.getDate() - 30);
+                  const eventRangeEnd = new Date();
+                  eventRangeEnd.setHours(23, 59, 59, 999);
+                  eventRangeEnd.setDate(eventRangeEnd.getDate() + 90);
+                  const activityEvents = sortPlannerEventsByStart(expandPlannerEventsAsOccurrences(activityEventRecords, eventRangeStart, eventRangeEnd));
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {activityEvents.length ? activityEvents.map((event) => (
+                        <div key={event.id} className="flex items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] p-5">
+                          <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl">📅</div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-base font-bold text-white">{event.title}</p>
+                            <p className="text-xs font-medium text-white/40">{new Date(event.startAt).toLocaleString()}</p>
+                          </div>
+                          {activityPointsConfig?.eventPoints ? (
+                            <div className="ml-auto flex items-center gap-1 rounded-xl bg-amber-400/10 px-3 py-1.5 border border-amber-400/20">
+                              <span className="text-xs">⭐</span>
+                              <span className="text-xs font-black text-amber-400">{activityPointsConfig.eventPoints}</span>
+                            </div>
+                          ) : null}
+                          <button onClick={() => setSelectedEvent(event)} className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
                         </div>
-                      ) : null}
-                      <button onClick={() => setSelectedEvent(event)} className="rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">Details</button>
+                      )) : (
+                        <div className="col-span-full py-20 text-center text-white/20 font-medium">No specialized events found.</div>
+                      )}
                     </div>
-                  )) : (
-                    <div className="col-span-full py-20 text-center text-white/20 font-medium">No specialized events found.</div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             )}
           </div>
