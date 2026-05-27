@@ -754,31 +754,30 @@ export default function ChildPlannerV2Page() {
                       key={option.id}
                       type="button"
                       onClick={() => toggleFilter(option.id)}
-                      className={`group relative w-full flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 transition-all duration-300 ${
+                      className={`group relative grid min-h-[56px] w-full grid-cols-[10px_minmax(0,1fr)_8px] items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition-all duration-300 ${
                         active 
                           ? 'border-white/20 bg-white/10 shadow-[0_4px_15px_rgba(0,0,0,0.2)]' 
                           : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${active ? 'ring-4' : ''}`} 
-                          style={{ 
-                            backgroundColor: color, 
-                            boxShadow: active ? `0 0 12px ${color}` : 'none'
-                          }} 
-                        />
-                        <span className={`text-sm font-bold transition-colors ${active ? 'text-white' : 'text-white/50 group-hover:text-white/80'}`}>
-                          {option.label}
-                        </span>
-                      </div>
-                      {option.id !== 'all' ? (
-                        <span
-                          className="h-6 w-1.5 rounded-full shadow-[0_0_12px_currentColor]"
-                          style={{ backgroundColor: color, color }}
-                          aria-hidden="true"
-                        />
-                      ) : null}
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${active ? 'ring-4 ring-white/10' : ''}`}
+                        style={{
+                          backgroundColor: color,
+                          boxShadow: active ? `0 0 12px ${color}` : 'none'
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span className={`min-w-0 text-sm font-bold leading-5 transition-colors ${active ? 'text-white' : 'text-white/50 group-hover:text-white/80'}`}>
+                        {option.label}
+                      </span>
+                      <span
+                        className={`h-6 w-1.5 justify-self-end rounded-full transition-opacity duration-300 ${
+                          option.id === 'all' ? 'opacity-0' : 'opacity-100 shadow-[0_0_12px_currentColor]'
+                        }`}
+                        style={{ backgroundColor: color, color }}
+                        aria-hidden="true"
+                      />
                       {active && (
                         <div className="absolute right-0 top-0 h-full w-1" style={{ background: `linear-gradient(180deg, ${color}, ${color}88)` }} />
                       )}

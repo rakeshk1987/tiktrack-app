@@ -30,7 +30,7 @@ import { computeLevelFromStars, evaluateBadges, applyTaskCompletionToProfile } f
 import { useMessages } from '../../hooks/useData';
 import { useChallenges } from '../../hooks/useChallenges';
 import { signOut } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { activeFirebaseEnv, auth, db, isUsingFirebaseEmulators } from '../../config/firebase';
 import { RealTimeProvider } from '../../contexts/RealTimeContext';
 import RealTimeNotifications from '../../components/RealTimeNotifications';
@@ -133,6 +133,61 @@ interface ChildEditForm {
   weightKg: string;
 }
 
+interface FirestoreBackupDocument {
+  collection: string;
+  id: string;
+  data: Record<string, unknown>;
+}
+
+interface FirestoreBackupPayload {
+  app: 'TikTrack';
+  schemaVersion: 1;
+  familyId: string;
+  exportedAt: string;
+  exportedBy: string;
+  documents: FirestoreBackupDocument[];
+}
+
+const FAMILY_BACKUP_COLLECTIONS = [
+  'achievements',
+  'approvals',
+  'challenges',
+  'diary_entries',
+  'events',
+  'exam_results',
+  'exams',
+  'growth_logs',
+  'messages',
+  'money_pot_entries',
+  'money_pot_targets',
+  'mood_logs',
+  'planner_subjects',
+  'programs',
+  'proof_logs',
+  'realtime_messages',
+  'redemptions',
+  'reminder_logs',
+  'reminders',
+  'reward_items',
+  'reward_ledger',
+  'reward_settings',
+  'routine_configurations',
+  'routine_logs',
+  'routines',
+  'school_timetables',
+  'scratch_reward_templates',
+  'scratch_rewards',
+  'settlements',
+  'sick_periods',
+  'special_dates',
+  'task_logs',
+  'tasks',
+  'telegram_link_codes',
+  'telegram_settings'
+];
+
+const BACKUP_QUERY_FIELDS = ['family_id', 'parent_id', 'child_id'];
+
 function activityItemTitle(kind: ActivityDetailKind, item: any): string {
   if (kind === 'exam') return String(item.subject || item.title || 'Exam');
   return String(item.title || 'Untitled');
@@ -215,6 +270,49 @@ function createTelegramLinkCode() {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+}
+
+function normalizeBackupValue(value: unknown): unknown {
+  if (value instanceof Timestamp) {
+    return { __type: 'timestamp', seconds: value.seconds, nanoseconds: value.nanoseconds };
+  }
+  if (value instanceof Date) {
+    return { __type: 'date', iso: value.toISOString() };
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeBackupValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, normalizeBackupValue(nested)]));
+  }
+  return value;
+}
+
+function restoreBackupValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(restoreBackupValue);
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (record.__type === 'timestamp' && typeof record.seconds === 'number') {
+      return new Timestamp(record.seconds, typeof record.nanoseconds === 'number' ? record.nanoseconds : 0);
+    }
+    if (record.__type === 'date' && typeof record.iso === 'string') {
+      return new Date(record.iso);
+    }
+    return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, restoreBackupValue(nested)]));
+  }
+  return value;
+}
+
+function downloadJsonFile(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function ParentDashboardContent() {
@@ -350,7 +448,10 @@ function ParentDashboardContent() {
   const [inboxMessage, setInboxMessage] = useState('');
   const [inboxSubject, setInboxSubject] = useState('');
   const [inboxChildId, setInboxChildId] = useState('');
-  const [settingsTab, setSettingsTab] = useState<'manage_child' | 'rewards' | 'growth' | 'telegram' | 'coparenting'>('manage_child');
+  const [settingsTab, setSettingsTab] = useState<'manage_child' | 'rewards' | 'growth' | 'telegram' | 'coparenting' | 'backup_restore'>('manage_child');
+  const [backupWorking, setBackupWorking] = useState(false);
+  const [restoreWorking, setRestoreWorking] = useState(false);
+  const [restoreFileName, setRestoreFileName] = useState('');
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
   const [childEditForm, setChildEditForm] = useState<ChildEditForm>({
     name: '',
@@ -2572,6 +2673,144 @@ function ParentDashboardContent() {
     }
   };
 
+  const buildFamilyBackup = async (): Promise<FirestoreBackupPayload> => {
+    if (!user || !familyId) {
+      throw new Error('Sign in as a parent before creating a backup.');
+    }
+
+    const byPath = new Map<string, FirestoreBackupDocument>();
+    const addDocument = (collectionName: string, id: string, data: Record<string, unknown>) => {
+      byPath.set(`${collectionName}/${id}`, {
+        collection: collectionName,
+        id,
+        data: normalizeBackupValue(data) as Record<string, unknown>
+      });
+    };
+
+    const parentUser = await getDoc(doc(db, 'users', familyId));
+    if (parentUser.exists()) {
+      addDocument('users', parentUser.id, parentUser.data() as Record<string, unknown>);
+    }
+
+    for (const child of children) {
+      const [childUser, childProfile] = await Promise.all([
+        getDoc(doc(db, 'users', child.id)),
+        getDoc(doc(db, 'child_profile', child.id))
+      ]);
+      if (childUser.exists()) {
+        addDocument('users', childUser.id, childUser.data() as Record<string, unknown>);
+      }
+      if (childProfile.exists()) {
+        addDocument('child_profile', childProfile.id, childProfile.data() as Record<string, unknown>);
+      }
+    }
+
+    for (const collectionName of FAMILY_BACKUP_COLLECTIONS) {
+      for (const field of BACKUP_QUERY_FIELDS) {
+        const values = field === 'child_id' ? children.map((child) => child.id) : [familyId];
+        for (const value of values) {
+          try {
+            const snapshot = await getDocs(query(collection(db, collectionName), where(field, '==', value)));
+            snapshot.docs.forEach((row) => addDocument(collectionName, row.id, row.data() as Record<string, unknown>));
+          } catch (err) {
+            console.warn(`Backup skipped ${collectionName}.${field}`, err);
+          }
+        }
+      }
+    }
+
+    return {
+      app: 'TikTrack',
+      schemaVersion: 1,
+      familyId,
+      exportedAt: new Date().toISOString(),
+      exportedBy: user.id,
+      documents: Array.from(byPath.values()).sort((a, b) => `${a.collection}/${a.id}`.localeCompare(`${b.collection}/${b.id}`))
+    };
+  };
+
+  const handleDownloadBackup = async () => {
+    if (backupWorking) return;
+    setBackupWorking(true);
+    setError('');
+    try {
+      const backup = await buildFamilyBackup();
+      const dateKey = new Date().toISOString().slice(0, 10);
+      downloadJsonFile(`tiktrack-backup-${familyId}-${dateKey}.json`, backup);
+      setSuccess(`Backup created with ${backup.documents.length} documents.`);
+    } catch (err: any) {
+      console.error('Backup failed:', err);
+      setError(err?.message || 'Could not create backup.');
+    } finally {
+      setBackupWorking(false);
+    }
+  };
+
+  const validateRestorePayload = (payload: FirestoreBackupPayload) => {
+    if (!payload || payload.app !== 'TikTrack' || payload.schemaVersion !== 1 || !Array.isArray(payload.documents)) {
+      throw new Error('This does not look like a TikTrack backup file.');
+    }
+    if (payload.familyId !== familyId) {
+      throw new Error('This backup belongs to a different family account.');
+    }
+    const allowedChildIds = new Set(children.map((child) => child.id));
+    for (const item of payload.documents) {
+      if (!item.collection || !item.id || !item.data || typeof item.data !== 'object') {
+        throw new Error('Backup contains an invalid document entry.');
+      }
+      const data = item.data as Record<string, unknown>;
+      if (typeof data.family_id === 'string' && data.family_id !== familyId) {
+        throw new Error(`Backup contains data for another family in ${item.collection}/${item.id}.`);
+      }
+      if (typeof data.parent_id === 'string' && data.parent_id !== familyId && data.parent_id !== user?.id) {
+        throw new Error(`Backup contains data for another parent in ${item.collection}/${item.id}.`);
+      }
+      if (typeof data.child_id === 'string' && !allowedChildIds.has(data.child_id)) {
+        throw new Error(`Backup contains an unknown child in ${item.collection}/${item.id}.`);
+      }
+    }
+  };
+
+  const restoreFamilyBackup = async (payload: FirestoreBackupPayload) => {
+    validateRestorePayload(payload);
+    const chunks: FirestoreBackupDocument[][] = [];
+    for (let index = 0; index < payload.documents.length; index += 400) {
+      chunks.push(payload.documents.slice(index, index + 400));
+    }
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      chunk.forEach((item) => {
+        batch.set(doc(db, item.collection, item.id), restoreBackupValue(item.data) as Record<string, unknown>);
+      });
+      await batch.commit();
+    }
+  };
+
+  const handleRestoreBackupFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || restoreWorking) return;
+
+    const confirmed = window.confirm('Restore will overwrite matching TikTrack documents from this backup. Create a fresh backup first, then continue only if you trust this file.');
+    if (!confirmed) return;
+
+    setRestoreFileName(file.name);
+    setRestoreWorking(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as FirestoreBackupPayload;
+      await restoreFamilyBackup(payload);
+      setSuccess(`Restore completed from ${file.name}.`);
+    } catch (err: any) {
+      console.error('Restore failed:', err);
+      setError(err?.message || 'Could not restore backup.');
+    } finally {
+      setRestoreWorking(false);
+    }
+  };
+
   const handleSendNudge = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!nudgeChildId || !nudgeMessage.trim()) {
@@ -4173,7 +4412,7 @@ function ParentDashboardContent() {
                   <div className="space-y-4">
                     <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                       <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Settings</h2>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         <button onClick={() => setSettingsTab('manage_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'manage_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'manage_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Manage Child
                         </button>
@@ -4188,6 +4427,9 @@ function ParentDashboardContent() {
                         </button>
                         <button onClick={() => setSettingsTab('coparenting')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'coparenting' ? 'white' : 'var(--text-main)', background: settingsTab === 'coparenting' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Co-Parenting
+                        </button>
+                        <button onClick={() => setSettingsTab('backup_restore')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'backup_restore' ? 'white' : 'var(--text-main)', background: settingsTab === 'backup_restore' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Backup Restore
                         </button>
                       </div>
                     </div>
@@ -4652,6 +4894,46 @@ function ParentDashboardContent() {
                               Link Account
                             </button>
                           </form>
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsTab === 'backup_restore' && (
+                      <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
+                        <h3 className="text-base font-bold mb-3" style={{ color: 'var(--text-main)' }}>Backup & Restore</h3>
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <p className="text-sm font-bold mb-1">Download family backup</p>
+                            <p className="text-xs opacity-70">Exports the current family data that this parent account can read into a JSON file.</p>
+                            <button
+                              type="button"
+                              onClick={() => void handleDownloadBackup()}
+                              disabled={backupWorking || childrenLoading}
+                              className="mt-4 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                              style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}
+                            >
+                              {backupWorking ? 'Creating backup...' : 'Download Backup'}
+                            </button>
+                          </div>
+
+                          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            <p className="text-sm font-bold mb-1">Restore from backup</p>
+                            <p className="text-xs opacity-70">Restores a TikTrack JSON backup for this same family account. Matching document IDs will be overwritten.</p>
+                            <label className="mt-4 inline-flex cursor-pointer rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white">
+                              {restoreWorking ? 'Restoring...' : 'Choose Backup File'}
+                              <input
+                                type="file"
+                                accept="application/json,.json"
+                                disabled={restoreWorking}
+                                onChange={(event) => void handleRestoreBackupFile(event)}
+                                className="hidden"
+                              />
+                            </label>
+                            {restoreFileName ? <p className="mt-3 text-xs opacity-70">Last selected: {restoreFileName}</p> : null}
+                          </div>
+                        </div>
+                        <div className="mt-4 rounded-xl border border-amber-300/50 bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-100">
+                          This is a family-scoped app backup, not a Firebase Admin project export. For production disaster recovery, keep scheduled Firebase backups enabled separately.
                         </div>
                       </div>
                     )}
