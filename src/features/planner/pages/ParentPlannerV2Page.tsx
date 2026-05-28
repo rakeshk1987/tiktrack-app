@@ -33,6 +33,17 @@ import { ParentWeeklyOverview } from '../components/parent/ParentWeeklyOverview'
 
 type ParentStatusPeriod = 'month';
 
+const ACTIVITY_PALETTE = [
+  '#38bdf8',
+  '#a78bfa',
+  '#34d399',
+  '#f59e0b',
+  '#fb7185',
+  '#22d3ee',
+  '#f472b6',
+  '#84cc16'
+];
+
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
 }
@@ -81,11 +92,19 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
   const [insightFocus, setInsightFocus] = useState<'none' | 'workload' | 'conflicts' | 'burnout' | 'exams' | 'sync'>('none');
   const [statusPeriod] = useState<ParentStatusPeriod>('month');
   const [periodAnchor, setPeriodAnchor] = useState(() => startOfMonth(new Date()));
+  const [activeActivityFilter, setActiveActivityFilter] = useState('all');
 
   useUnsavedChangesGuard(false, 'You have unsaved timetable changes. Leave anyway?');
 
   const { events: fetchedEvents, loading: eventsLoading, refresh: refreshEvents } = usePlannerEvents(childId, undefined, false);
   const { programs, loading: programsLoading } = usePlannerPrograms(childId);
+  const activityColorById = useMemo(() => {
+    const colorMap = new Map<string, string>();
+    programs.forEach((program, index) => {
+      colorMap.set(program.id, ACTIVITY_PALETTE[index % ACTIVITY_PALETTE.length]);
+    });
+    return colorMap;
+  }, [programs]);
 
   const mergedEvents = useMemo(() => {
     const byId = new Map<string, PlannerEvent>();
@@ -94,7 +113,13 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
     return Array.from(byId.values());
   }, [fetchedEvents, optimisticEvents]);
 
-  const filteredEvents = useMemo(() => mergedEvents.filter((event) => activeCategories.includes(event.category)), [mergedEvents, activeCategories]);
+  const filteredEvents = useMemo(() => {
+    return mergedEvents.filter((event) => {
+      const categoryVisible = activeCategories.includes(event.category);
+      const activityVisible = activeActivityFilter === 'all' || event.linkedProgramId === activeActivityFilter;
+      return categoryVisible && activityVisible;
+    });
+  }, [mergedEvents, activeCategories, activeActivityFilter]);
   const insights = usePlannerInsights(filteredEvents);
   const lightInsights = usePlannerLightInsights(filteredEvents);
   const periodRange = useMemo(() => {
@@ -195,6 +220,16 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
 
   function toggleCategory(category: PlannerEvent['category']) {
     setActiveCategories((prev) => (prev.includes(category) ? prev.filter((x) => x !== category) : [...prev, category]));
+  }
+
+  function selectActivityFilter(activityId: string) {
+    setActiveActivityFilter(activityId);
+    if (activityId === 'all') {
+      setCalendarNote('Showing all activities.');
+      return;
+    }
+    const activity = programs.find((program) => program.id === activityId);
+    setCalendarNote(`Showing ${activity?.name || 'selected activity'} only.`);
   }
 
   function onCalendarDatesSet(arg: DatesSetArg) {
@@ -414,7 +449,7 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
           <div className="space-y-4">
             <ParentPlannerSidebar>
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-white/85">Programs</p>
+                <p className="text-sm font-semibold text-white/85">Activities</p>
                 <button type="button" onClick={() => { setModalMode('create'); setEditingEvent(null); setModalOpen(true); }} className="min-h-[40px] rounded-lg border border-cyan-300/35 bg-cyan-400/15 px-2 py-1 text-xs text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">+ Event</button>
               </div>
               {programsLoading ? <p className="text-sm text-white/70">Loading programs...</p> : null}
@@ -424,8 +459,42 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
                 </p>
               ) : null}
               <div className="space-y-2 text-sm text-white/70">
+                <button
+                  type="button"
+                  onClick={() => selectActivityFilter('all')}
+                  className={`group relative flex min-h-[38px] w-full items-center gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition ${
+                    activeActivityFilter === 'all'
+                      ? 'border-cyan-300/35 bg-cyan-400/15 text-white'
+                      : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.75)]" aria-hidden="true" />
+                  <span className="min-w-0 truncate font-semibold">All</span>
+                  <span className="absolute right-0 top-0 h-full w-1 bg-cyan-300" aria-hidden="true" />
+                </button>
                 {programs.map((program) => (
-                  <div key={program.id} className="rounded-xl border border-white/10 px-3 py-2">{program.icon} {program.name}</div>
+                  <button
+                    key={program.id}
+                    type="button"
+                    onClick={() => selectActivityFilter(program.id)}
+                    className={`group relative flex min-h-[38px] w-full items-center gap-2 overflow-hidden rounded-xl border px-3 py-2 pr-4 text-left transition ${
+                      activeActivityFilter === program.id
+                        ? 'border-white/20 bg-white/10 text-white'
+                        : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shadow-[0_0_12px_currentColor]"
+                      style={{ backgroundColor: activityColorById.get(program.id) || '#38bdf8', color: activityColorById.get(program.id) || '#38bdf8' }}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 truncate">{program.name}</span>
+                    <span
+                      className={`absolute right-0 top-0 h-full w-1 transition-opacity ${activeActivityFilter === program.id ? 'opacity-100' : 'opacity-45'}`}
+                      style={{ background: `linear-gradient(180deg, ${activityColorById.get(program.id) || '#38bdf8'}, ${(activityColorById.get(program.id) || '#38bdf8')}88)` }}
+                      aria-hidden="true"
+                    />
+                  </button>
                 ))}
               </div>
             </ParentPlannerSidebar>

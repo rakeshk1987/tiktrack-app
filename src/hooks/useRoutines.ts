@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   collection, query, where, onSnapshot, addDoc,
-  updateDoc, doc, getDocs, orderBy, limit
+  updateDoc, doc, getDocs, orderBy, limit, setDoc, getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { Routine, RoutineLog } from '../types/schema';
@@ -11,6 +11,23 @@ import { useSickMode } from './useSickMode';
 export function getTodayDayRange(): 'weekday' | 'weekend' {
   const day = new Date().getDay(); // 0=Sun, 6=Sat
   return (day === 0 || day === 6) ? 'weekend' : 'weekday';
+}
+
+function getTodayKey() {
+  const today = new Date();
+  return (
+    today.getFullYear() +
+    '-' + String(today.getMonth() + 1).padStart(2, '0') +
+    '-' + String(today.getDate()).padStart(2, '0')
+  );
+}
+
+async function runRoutineSideEffect(label: string, work: () => Promise<void>) {
+  try {
+    await work();
+  } catch (error) {
+    console.warn(`${label} skipped:`, error);
+  }
 }
 
 export function useRoutines(familyId: string, childId?: string) {
@@ -114,16 +131,24 @@ export function useRoutines(familyId: string, childId?: string) {
   ) => {
     try {
       const today = new Date();
-      const dateStr =
-        today.getFullYear() +
-        '-' + String(today.getMonth() + 1).padStart(2, '0') +
-        '-' + String(today.getDate()).padStart(2, '0');
+      const dateStr = getTodayKey();
 
       // Sick mode override
       const sickPeriod = getActiveSickPeriod(targetChildId);
       if (sickPeriod) status = 'sick';
 
-      const logData: Omit<RoutineLog, 'id'> = {
+      const logId = `${targetChildId}_${routine.id}_${dateStr}`;
+      const logRef = doc(db, 'routine_logs', logId);
+      const existingLogSnap = await getDoc(logRef);
+      if (existingLogSnap.exists()) {
+        const existingLog = existingLogSnap.data() as RoutineLog;
+        if (existingLog.status === status || existingLog.status === 'completed' || existingLog.status === 'sick') {
+          return;
+        }
+      }
+
+      const logData: RoutineLog = {
+        id: logId,
         routine_id: routine.id,
         family_id: familyId,
         child_id: targetChildId,
@@ -132,67 +157,71 @@ export function useRoutines(familyId: string, childId?: string) {
         completed_at: status === 'completed' ? new Date().toISOString() : undefined,
       };
 
-      await addDoc(collection(db, 'routine_logs'), logData);
+      await setDoc(logRef, logData, { merge: true });
 
       if (status === 'completed') {
         // If approval required, create pending approval; otherwise grant stars directly
         if (routine.requires_approval) {
-          const pendingApprovalsQuery = query(
-            collection(db, 'approvals'),
-            where('family_id', '==', familyId)
-          );
-          const pendingApprovalsSnapshot = await getDocs(pendingApprovalsQuery);
-          const hasPendingApprovalToday = pendingApprovalsSnapshot.docs.some((approvalDoc) => {
-            const approval = approvalDoc.data();
-            const submittedDate = approval.created_at
-              ? new Date(approval.created_at).toISOString().slice(0, 10)
-              : '';
+          await runRoutineSideEffect('Routine approval creation', async () => {
+            const pendingApprovalsQuery = query(
+              collection(db, 'approvals'),
+              where('family_id', '==', familyId),
+              where('child_id', '==', targetChildId),
+              where('type', '==', 'routine'),
+              where('reference_id', '==', routine.id),
+              where('status', '==', 'pending')
+            );
+            const pendingApprovalsSnapshot = await getDocs(pendingApprovalsQuery);
+            const hasPendingApprovalToday = pendingApprovalsSnapshot.docs.some((approvalDoc) => {
+              const approval = approvalDoc.data();
+              const submittedDate = approval.created_at
+                ? new Date(approval.created_at).toISOString().slice(0, 10)
+                : '';
 
-            return approval.child_id === targetChildId
-              && approval.type === 'routine'
-              && approval.reference_id === routine.id
-              && approval.status === 'pending'
-              && submittedDate === dateStr;
-          });
-
-          if (!hasPendingApprovalToday) {
-            await addDoc(collection(db, 'approvals'), {
-              family_id: familyId,
-              child_id: targetChildId,
-              type: 'routine',
-              reference_id: routine.id,
-              title: routine.title,
-              points: Number(routine.points || 0),
-              status: 'pending',
-              created_at: new Date().toISOString(),
+              return submittedDate === dateStr;
             });
-          }
+
+            if (!hasPendingApprovalToday) {
+              await addDoc(collection(db, 'approvals'), {
+                family_id: familyId,
+                child_id: targetChildId,
+                type: 'routine',
+                reference_id: routine.id,
+                title: routine.title,
+                points: Number(routine.points || 0),
+                status: 'pending',
+                created_at: new Date().toISOString(),
+              });
+            }
+          });
         }
 
         // Evaluate and update streak
-        const qLogs = query(
-          collection(db, 'routine_logs'),
-          where('routine_id', '==', routine.id),
-          where('child_id', '==', targetChildId),
-          where('status', '==', 'completed'),
-          orderBy('date', 'desc'),
-          limit(2)
-        );
-        const snapshot = await getDocs(qLogs);
-        const completedLogs = snapshot.docs.map(d => d.data() as RoutineLog);
-
-        let newStreak = routine.streak || 0;
-        if (completedLogs.length > 1) {
-          const previousDate = new Date(completedLogs[1].date);
-          const diffDays = Math.floor(
-            (today.getTime() - previousDate.getTime()) / (1000 * 3600 * 24)
+        await runRoutineSideEffect('Routine streak update', async () => {
+          const qLogs = query(
+            collection(db, 'routine_logs'),
+            where('routine_id', '==', routine.id),
+            where('child_id', '==', targetChildId),
+            where('status', '==', 'completed'),
+            orderBy('date', 'desc'),
+            limit(2)
           );
-          newStreak = diffDays === 1 ? newStreak + 1 : 1;
-        } else {
-          newStreak = 1;
-        }
+          const snapshot = await getDocs(qLogs);
+          const completedLogs = snapshot.docs.map(d => d.data() as RoutineLog);
 
-        await updateRoutine(routine.id, { streak: newStreak });
+          let newStreak = routine.streak || 0;
+          if (completedLogs.length > 1) {
+            const previousDate = new Date(completedLogs[1].date);
+            const diffDays = Math.floor(
+              (today.getTime() - previousDate.getTime()) / (1000 * 3600 * 24)
+            );
+            newStreak = diffDays === 1 ? newStreak + 1 : 1;
+          } else {
+            newStreak = 1;
+          }
+
+          await updateRoutine(routine.id, { streak: newStreak });
+        });
       }
     } catch (err: any) {
       setError(err.message);

@@ -49,7 +49,7 @@ import { useApprovals } from '../../hooks/useApprovals';
 import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
 import { ParentPlannerV2Page } from '../../features/planner';
 import { usePlannerPrograms } from '../../features/planner/hooks/usePlannerPrograms';
-import { upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
+import { mapPlannerProgram, upsertPlannerProgram } from '../../features/planner/services/planner.firestore';
 import { useSickMode } from '../../hooks/useSickMode';
 import { RoutineManagement } from '../../components/parent/RoutineManagement';
 import { ApprovalsManagement } from '../../components/parent/ApprovalsManagement';
@@ -59,6 +59,17 @@ import { usePlannerSubjects } from '../../features/planner/hooks/usePlannerSubje
 import { usePlannerChallenges } from '../../features/planner/hooks/usePlannerChallenges';
 
 type ActivityDetailKind = 'task' | 'exam' | 'event';
+
+const ACTIVITY_FILTER_PALETTE = [
+  '#38bdf8',
+  '#a78bfa',
+  '#34d399',
+  '#f59e0b',
+  '#fb7185',
+  '#22d3ee',
+  '#f472b6',
+  '#84cc16'
+];
 
 interface ChildAccount {
   id: string;
@@ -487,6 +498,11 @@ function ParentDashboardContent() {
   const [selectedActivity, setSelectedActivity] = useState<PlannerProgram | null>(null);
   const [selectedActivityDetail, setSelectedActivityDetail] = useState<{ kind: ActivityDetailKind; item: any } | null>(null);
   const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
+  const [allPlannerPrograms, setAllPlannerPrograms] = useState<PlannerProgram[]>([]);
+  const [taskActivityFilter, setTaskActivityFilter] = useState('all');
+  const [examActivityFilter, setExamActivityFilter] = useState('all');
+  const [eventActivityFilter, setEventActivityFilter] = useState('all');
+  const [challengeActivityFilter, setChallengeActivityFilter] = useState('all');
 
   const parentTabs = [
     { id: 'dashboard', label: 'Dashboard', shortLabel: 'Home', icon: Home },
@@ -653,6 +669,38 @@ function ParentDashboardContent() {
       })();
     });
   }, [user, children, familyId]);
+
+  useEffect(() => {
+    if (!familyId) {
+      setAllPlannerPrograms([]);
+      return;
+    }
+
+    const programsQuery = query(collection(db, 'programs'), where('family_id', '==', familyId), limit(500));
+    const unsubscribe = onSnapshot(
+      programsQuery,
+      (snapshot) => {
+        const now = new Date();
+        const rows = snapshot.docs
+          .map((docRow) => mapPlannerProgram(docRow.id, docRow.data() as Record<string, unknown>))
+          .filter((program) => {
+            if (!program.isActive) return false;
+            if (!program.endDate) return true;
+            const end = new Date(program.endDate);
+            end.setHours(23, 59, 59, 999);
+            return end >= now;
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setAllPlannerPrograms(rows);
+      },
+      (error) => {
+        console.warn('Failed to fetch planner activities:', error);
+        setAllPlannerPrograms([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [familyId]);
 
   // Derived pending proofs visible to this parent (initialized before analytics reads it)
   const visiblePendingProofs = pendingProofs.filter((proof) => children.some((child) => child.id === proof.child_id));
@@ -2505,6 +2553,97 @@ function ParentDashboardContent() {
     setSuccess('Default reward marketplace added.');
   };
 
+  const activityFilterOptions = useMemo(() => {
+    const byId = new Map<string, { id: string; label: string; color: string }>();
+    allPlannerPrograms.forEach((program, index) => {
+      byId.set(program.id, {
+        id: program.id,
+        label: program.name || 'Activity',
+        color: program.color || ACTIVITY_FILTER_PALETTE[index % ACTIVITY_FILTER_PALETTE.length]
+      });
+    });
+
+    [...tasks, ...exams, ...events, ...activeChallenges, ...completedChallenges].forEach((item: any) => {
+      const activityId = item?.linked_program_id;
+      if (activityId && !byId.has(activityId)) {
+        byId.set(activityId, {
+          id: activityId,
+          label: String(activityId),
+          color: ACTIVITY_FILTER_PALETTE[byId.size % ACTIVITY_FILTER_PALETTE.length]
+        });
+      }
+    });
+
+    return Array.from(byId.values());
+  }, [activeChallenges, allPlannerPrograms, completedChallenges, events, exams, tasks]);
+
+  const matchesActivityFilter = (item: any, activityId: string) => (
+    activityId === 'all' || item?.linked_program_id === activityId
+  );
+
+  const renderActivityFilter = (
+    value: string,
+    onChange: (activityId: string) => void,
+    allCount: number
+  ) => {
+    const selectedLabel = value === 'all'
+      ? 'All'
+      : activityFilterOptions.find((activity) => activity.id === value)?.label || 'Selected activity';
+
+    return (
+      <div className="mt-4 rounded-2xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Activities</p>
+          <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>{selectedLabel}</span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => onChange('all')}
+            className={clsx(
+              'relative flex min-h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-xl border px-3 py-2 pr-5 text-left text-xs font-bold transition',
+              value === 'all' ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-900 dark:text-cyan-100' : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/[0.03] dark:text-white/65 dark:hover:bg-white/[0.06]'
+            )}
+          >
+            <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]" aria-hidden="true" />
+            <span>All</span>
+            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-white/10 dark:text-white/70">{allCount}</span>
+            <span className="absolute right-0 top-0 h-full w-1 bg-cyan-400" aria-hidden="true" />
+          </button>
+          {activityFilterOptions.map((activity) => (
+            <button
+              key={activity.id}
+              type="button"
+              onClick={() => onChange(activity.id)}
+              className={clsx(
+                'relative flex min-h-[38px] max-w-[240px] shrink-0 items-center gap-2 overflow-hidden rounded-xl border px-3 py-2 pr-5 text-left text-xs font-bold transition',
+                value === activity.id ? 'border-slate-300 bg-white text-slate-900 shadow-sm dark:border-white/20 dark:bg-white/10 dark:text-white' : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/[0.03] dark:text-white/65 dark:hover:bg-white/[0.06]'
+              )}
+            >
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_12px_currentColor]"
+                style={{ backgroundColor: activity.color, color: activity.color }}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 truncate">{activity.label}</span>
+              <span
+                className={clsx('absolute right-0 top-0 h-full w-1 transition-opacity', value === activity.id ? 'opacity-100' : 'opacity-45')}
+                style={{ background: `linear-gradient(180deg, ${activity.color}, ${activity.color}88)` }}
+                aria-hidden="true"
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const filteredTasks = tasks.filter((task) => matchesActivityFilter(task, taskActivityFilter));
+  const filteredExams = exams.filter((exam) => matchesActivityFilter(exam, examActivityFilter));
+  const filteredEvents = events.filter((event) => matchesActivityFilter(event, eventActivityFilter));
+  const filteredActiveChallenges = activeChallenges.filter((challenge) => matchesActivityFilter(challenge, challengeActivityFilter));
+  const filteredCompletedChallenges = completedChallenges.filter((challenge) => matchesActivityFilter(challenge, challengeActivityFilter));
+
   const automatedTasks = tasks.filter((task) => task.is_generated === true);
   const manualTasks = tasks.filter((task) => task.is_generated !== true);
   const selectedActivityTasks = selectedActivity
@@ -2524,7 +2663,7 @@ function ParentDashboardContent() {
     ? exams.filter((exam) => exam.child_id === selectedActivity.childId && !exam.linked_program_id)
     : [];
 
-  const visibleExams = (filterChild ? exams.filter((x) => x.child_id === filterChild) : exams);
+  const visibleExams = (filterChild ? filteredExams.filter((x) => x.child_id === filterChild) : filteredExams);
   const upcomingExamSchedules = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'scheduled');
   const pendingExamResults = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'completed_pending_result');
   const publishedExamResults = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'result_published');
@@ -3245,10 +3384,11 @@ function ParentDashboardContent() {
                     <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                       <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Events Planner</h2>
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{events.length}</span>
+                        <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{filteredEvents.length}</span>
                         <button onClick={() => { setEvChild(''); setEvTitle(''); setEvType('event'); setEvDate(''); setEvReminderDays(''); setEditEventId(null); setShowEventModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Event</button>
                       </div>
                     </div>
+                    {renderActivityFilter(eventActivityFilter, setEventActivityFilter, events.length)}
 
                     {showEventModal && (
                       <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
@@ -3294,15 +3434,13 @@ function ParentDashboardContent() {
                     <div className="space-y-6 mt-6">
                       {eventsLoading ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading events...</p>
-                      ) : (filterChild ? events.filter((x) => x.child_id === filterChild) : events).length === 0 ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No events planned yet.</p>
+                      ) : filteredEvents.length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{eventActivityFilter === 'all' ? 'No events planned yet.' : 'No events for this activity.'}</p>
                       ) : (
                         (() => {
                           const todayStart = new Date();
                           todayStart.setHours(0, 0, 0, 0);
                           const todayEnd = new Date(todayStart.getTime() + 86400000);
-
-                          const filteredEvents = filterChild ? events.filter((x) => x.child_id === filterChild) : events;
 
                           const evToday: any[] = [];
                           const evFuture: any[] = [];
@@ -3715,13 +3853,14 @@ function ParentDashboardContent() {
                       <div>
                         <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Manage Tasks</h2>
                         <div className="flex gap-2 mt-1">
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-800">Active: {tasks.filter(t => taskWindowState(t) === 'active').length}</span>
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800">Future: {tasks.filter(t => taskWindowState(t) === 'future').length}</span>
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700">Past: {tasks.filter(t => taskWindowState(t) === 'past').length}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-800">Active: {filteredTasks.filter(t => taskWindowState(t) === 'active').length}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800">Future: {filteredTasks.filter(t => taskWindowState(t) === 'future').length}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700">Past: {filteredTasks.filter(t => taskWindowState(t) === 'past').length}</span>
                         </div>
                       </div>
                       <button onClick={() => { clearTaskForm(); setShowTaskModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Create Task</button>
                     </div>
+                    {renderActivityFilter(taskActivityFilter, setTaskActivityFilter, tasks.length)}
 
                     {showTaskModal && (
                       <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
@@ -3823,8 +3962,8 @@ function ParentDashboardContent() {
                     <div className="space-y-6 mt-6">
                       {tasksLoading ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading tasks...</p>
-                      ) : tasks.length === 0 ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No tasks yet. Create one above.</p>
+                      ) : filteredTasks.length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{taskActivityFilter === 'all' ? 'No tasks yet. Create one above.' : 'No tasks for this activity.'}</p>
                       ) : (
                         (() => {
                           const todayStart = new Date();
@@ -3835,7 +3974,7 @@ function ParentDashboardContent() {
                           const tFuture: any[] = [];
                           const tPast: any[] = [];
 
-                          tasks.forEach((t) => {
+                          filteredTasks.forEach((t) => {
                             const state = taskWindowState(t);
                             if (state === 'past') {
                               tPast.push(t);
@@ -4101,10 +4240,11 @@ function ParentDashboardContent() {
                             <option value="">All Children</option>
                             {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                           </select>
-                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{exams.length}</span>
+                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{visibleExams.length}</span>
                           <button onClick={() => { setEChild(''); setEActivityId(''); setESubject(''); setESubjectId(''); setERecurrenceType('none'); setERecurrenceDays([]); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); setEditExamId(null); setShowExamModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Exam</button>
                         </div>
                       </div>
+                      {renderActivityFilter(examActivityFilter, setExamActivityFilter, exams.length)}
 
                       {showExamModal && (
                         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
@@ -4947,10 +5087,11 @@ function ParentDashboardContent() {
                         <Activity size={18} /> Challenges
                       </h2>
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{activeChallenges.length + completedChallenges.length}</span>
+                        <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{filteredActiveChallenges.length + filteredCompletedChallenges.length}</span>
                         <button onClick={() => { setChTitle(''); setChChild(''); setChActivityId(''); setChTarget(''); setChDesc(''); setShowChallengeModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Challenge</button>
                       </div>
                     </div>
+                    {renderActivityFilter(challengeActivityFilter, setChallengeActivityFilter, activeChallenges.length + completedChallenges.length)}
 
                     {showChallengeModal && (
                       <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
@@ -4996,13 +5137,13 @@ function ParentDashboardContent() {
                     )}
 
                     <div className="space-y-6 mt-4">
-                      {activeChallenges.length > 0 && (
+                      {filteredActiveChallenges.length > 0 && (
                         <div>
                           <h3 className="mb-3 text-sm font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
-                            Active Challenges <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{activeChallenges.length}</span>
+                            Active Challenges <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{filteredActiveChallenges.length}</span>
                           </h3>
                           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-                            {activeChallenges.map((ch) => (
+                            {filteredActiveChallenges.map((ch) => (
                               <div key={ch.id} className="rounded-xl border p-4 flex flex-col justify-between shadow-sm bg-[var(--surface-soft)]" style={{ borderColor: 'var(--border-main)' }}>
                                 <div>
                                   <div className="flex justify-between items-start mb-1">
@@ -5037,13 +5178,13 @@ function ParentDashboardContent() {
                         </div>
                       )}
                       
-                      {completedChallenges.length > 0 && (
+                      {filteredCompletedChallenges.length > 0 && (
                         <div>
                           <h3 className="mb-3 text-sm font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
-                            Completed Challenges <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{completedChallenges.length}</span>
+                            Completed Challenges <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{filteredCompletedChallenges.length}</span>
                           </h3>
                           <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                            {completedChallenges.map((ch) => (
+                            {filteredCompletedChallenges.map((ch) => (
                               <div key={ch.id} className="rounded-xl border p-3 opacity-80 bg-[var(--surface-soft)]" style={{ borderColor: 'var(--border-main)' }}>
                                 <p className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>{ch.title}</p>
                                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Winner: <span className="font-semibold text-amber-600">{ch.winner === 'parent' ? 'Parent' : ch.winner === 'child' ? getChildName(ch.child_id) : 'Draw'}</span> • {ch.parent_score} vs {ch.child_score}</p>
@@ -5053,8 +5194,8 @@ function ParentDashboardContent() {
                         </div>
                       )}
                       
-                      {activeChallenges.length === 0 && completedChallenges.length === 0 && (
-                        <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>No challenges yet. Create one to get started!</p>
+                      {filteredActiveChallenges.length === 0 && filteredCompletedChallenges.length === 0 && (
+                        <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>{challengeActivityFilter === 'all' ? 'No challenges yet. Create one to get started!' : 'No challenges for this activity.'}</p>
                       )}
                     </div>
                   </div>

@@ -754,7 +754,7 @@ export default function ChildPlannerV2Page() {
                       key={option.id}
                       type="button"
                       onClick={() => toggleFilter(option.id)}
-                      className={`group relative grid min-h-[56px] w-full grid-cols-[10px_minmax(0,1fr)_8px] items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition-all duration-300 ${
+                      className={`group relative grid min-h-[56px] w-full grid-cols-[10px_minmax(0,1fr)] items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3.5 pr-5 text-left transition-all duration-300 ${
                         active 
                           ? 'border-white/20 bg-white/10 shadow-[0_4px_15px_rgba(0,0,0,0.2)]' 
                           : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]'
@@ -772,15 +772,12 @@ export default function ChildPlannerV2Page() {
                         {option.label}
                       </span>
                       <span
-                        className={`h-6 w-1.5 justify-self-end rounded-full transition-opacity duration-300 ${
-                          option.id === 'all' ? 'opacity-0' : 'opacity-100 shadow-[0_0_12px_currentColor]'
+                        className={`absolute right-0 top-0 h-full w-1.5 transition-opacity duration-300 ${
+                          active ? 'opacity-100 shadow-[0_0_12px_currentColor]' : 'opacity-45'
                         }`}
-                        style={{ backgroundColor: color, color }}
+                        style={{ background: `linear-gradient(180deg, ${color}, ${color}88)`, color }}
                         aria-hidden="true"
                       />
-                      {active && (
-                        <div className="absolute right-0 top-0 h-full w-1" style={{ background: `linear-gradient(180deg, ${color}, ${color}88)` }} />
-                      )}
                     </button>
                   );
                 })}
