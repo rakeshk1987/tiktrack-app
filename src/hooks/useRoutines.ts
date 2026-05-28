@@ -6,6 +6,16 @@ import {
 import { db } from '../config/firebase';
 import type { Routine, RoutineLog } from '../types/schema';
 import { useSickMode } from './useSickMode';
+import { createRewardLedgerEntry } from './useRewardLedger';
+
+export interface RoutineLogResult {
+  status: 'completed' | 'missed' | 'sick';
+  inTimeWindow: boolean;
+  starsAwarded: number;
+  starsDelta: number;
+  requiresApproval: boolean;
+  alreadyLogged?: boolean;
+}
 
 /** Returns the effective day range key for today */
 export function getTodayDayRange(): 'weekday' | 'weekend' {
@@ -28,6 +38,47 @@ async function runRoutineSideEffect(label: string, work: () => Promise<void>) {
   } catch (error) {
     console.warn(`${label} skipped:`, error);
   }
+}
+
+function timeToMinutes(value: string | undefined | null) {
+  if (!value) return null;
+  const [hoursRaw, minutesRaw] = value.split(':');
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function isTimeInRange(actualTime: string | undefined, startTime: string, endTime: string) {
+  const actual = timeToMinutes(actualTime);
+  const start = timeToMinutes(startTime);
+  const end = timeToMinutes(endTime);
+  if (actual == null || start == null || end == null) return false;
+  if (start <= end) return actual >= start && actual <= end;
+  return actual >= start || actual <= end;
+}
+
+async function applyStarsDelta(childId: string, familyId: string, routine: Routine, starsDelta: number, reason: string) {
+  if (!starsDelta) return;
+  const profileRef = doc(db, 'child_profile', childId);
+  const profileSnap = await getDoc(profileRef);
+  const profile = profileSnap.exists() ? profileSnap.data() : null;
+  const currentStars = Number(profile?.total_stars || 0);
+  await updateDoc(profileRef, {
+    total_stars: Math.max(0, currentStars + starsDelta)
+  });
+  await createRewardLedgerEntry({
+    child_id: childId,
+    parent_id: familyId,
+    family_id: familyId,
+    type: starsDelta > 0 ? 'bonus' : 'adjustment',
+    stars_delta: starsDelta,
+    title: routine.title,
+    reason,
+    source_id: routine.id,
+    source_type: 'routine',
+    visible_to_child: true,
+  });
 }
 
 export function useRoutines(familyId: string, childId?: string) {
@@ -127,8 +178,9 @@ export function useRoutines(familyId: string, childId?: string) {
   const logRoutine = async (
     routine: Routine,
     targetChildId: string,
-    status: 'completed' | 'missed' | 'sick'
-  ) => {
+    status: 'completed' | 'missed' | 'sick',
+    actualCompletedTime?: string
+  ): Promise<RoutineLogResult> => {
     try {
       const today = new Date();
       const dateStr = getTodayKey();
@@ -143,9 +195,22 @@ export function useRoutines(familyId: string, childId?: string) {
       if (existingLogSnap.exists()) {
         const existingLog = existingLogSnap.data() as RoutineLog;
         if (existingLog.status === status || existingLog.status === 'completed' || existingLog.status === 'sick') {
-          return;
+          return {
+            status: existingLog.status,
+            inTimeWindow: existingLog.in_time_window ?? true,
+            starsAwarded: Number(existingLog.stars_awarded || 0),
+            starsDelta: Number(existingLog.stars_delta || 0),
+            requiresApproval: routine.requires_approval,
+            alreadyLogged: true
+          };
         }
       }
+
+      const routineStart = routine.start_time || routine.schedule_time || '00:00';
+      const routineEnd = routine.end_time || routine.schedule_time || routineStart;
+      const inTimeWindow = status === 'completed' ? isTimeInRange(actualCompletedTime, routineStart, routineEnd) : false;
+      const starsAwarded = status === 'completed' && inTimeWindow ? Number(routine.points || 0) : 0;
+      const starsDelta = status === 'missed' ? -Math.abs(Number(routine.points || 0)) : (routine.requires_approval ? 0 : starsAwarded);
 
       const logData: RoutineLog = {
         id: logId,
@@ -155,13 +220,23 @@ export function useRoutines(familyId: string, childId?: string) {
         date: dateStr,
         status,
         completed_at: status === 'completed' ? new Date().toISOString() : undefined,
+        actual_completed_time: status === 'completed' ? actualCompletedTime : undefined,
+        in_time_window: status === 'completed' ? inTimeWindow : undefined,
+        stars_awarded: starsAwarded,
+        stars_delta: starsDelta,
       };
 
       await setDoc(logRef, logData, { merge: true });
 
+      if (status === 'missed' && starsDelta < 0) {
+        await runRoutineSideEffect('Routine missed penalty', async () => {
+          await applyStarsDelta(targetChildId, familyId, routine, starsDelta, `Missed routine after daily lockout: ${routine.title}`);
+        });
+      }
+
       if (status === 'completed') {
         // If approval required, create pending approval; otherwise grant stars directly
-        if (routine.requires_approval) {
+        if (routine.requires_approval && starsAwarded > 0) {
           await runRoutineSideEffect('Routine approval creation', async () => {
             const pendingApprovalsQuery = query(
               collection(db, 'approvals'),
@@ -188,11 +263,15 @@ export function useRoutines(familyId: string, childId?: string) {
                 type: 'routine',
                 reference_id: routine.id,
                 title: routine.title,
-                points: Number(routine.points || 0),
+                points: starsAwarded,
                 status: 'pending',
                 created_at: new Date().toISOString(),
               });
             }
+          });
+        } else if (!routine.requires_approval && starsAwarded > 0) {
+          await runRoutineSideEffect('Routine star award', async () => {
+            await applyStarsDelta(targetChildId, familyId, routine, starsAwarded, `Completed routine on time: ${routine.title}`);
           });
         }
 
@@ -223,6 +302,14 @@ export function useRoutines(familyId: string, childId?: string) {
           await updateRoutine(routine.id, { streak: newStreak });
         });
       }
+
+      return {
+        status,
+        inTimeWindow,
+        starsAwarded,
+        starsDelta,
+        requiresApproval: routine.requires_approval
+      };
     } catch (err: any) {
       setError(err.message);
       throw err;

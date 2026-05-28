@@ -16,6 +16,16 @@ function fmtTime(t: string) {
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+function currentTimeInputValue() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 const EMPTY_FORM = {
   title: '',
   startTime: '07:00',
@@ -35,6 +45,10 @@ export default function RoutinePage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [completionRoutine, setCompletionRoutine] = useState<Routine | null>(null);
+  const [actualCompletionTime, setActualCompletionTime] = useState(currentTimeInputValue);
+  const [starCelebration, setStarCelebration] = useState<{ title: string; stars: number } | null>(null);
+  const [processedLockoutDate, setProcessedLockoutDate] = useState('');
 
   const todayRange = getTodayDayRange();
   const dayLabel = todayRange === 'weekday' ? 'Weekday' : 'Weekend';
@@ -71,30 +85,95 @@ export default function RoutinePage() {
       return;
     }
 
-    setLoggingId(routineId);
+    setActualCompletionTime(currentTimeInputValue());
+    setCompletionRoutine(routine);
+  };
+
+  const submitCompletionTime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!childId || !completionRoutine) return;
+    const routine = completionRoutine;
+    setLoggingId(routine.id);
     try {
-      await logRoutine(routine, childId, 'completed');
+      const result = await logRoutine(routine, childId, 'completed', actualCompletionTime);
       const newLog: RoutineLog = {
-        id: 'temp',
+        id: `${childId}_${routine.id}_${todayKey()}`,
         routine_id: routine.id,
         family_id: familyId || '',
         child_id: childId,
-        date: now.toISOString().slice(0, 10),
+        date: todayKey(),
         status: 'completed',
+        completed_at: new Date().toISOString(),
+        actual_completed_time: actualCompletionTime,
+        in_time_window: result.inTimeWindow,
+        stars_awarded: result.starsAwarded,
+        stars_delta: result.starsDelta,
       };
       setTodayLogs(prev => ({ ...prev, [routine.id]: newLog }));
 
-      if (routine.requires_approval) {
+      if (!result.inTimeWindow) {
+        addToast(`${routine.title} is marked done, but it was outside ${fmtTime(routine.start_time || routine.schedule_time || '')} - ${fmtTime(routine.end_time || '')}. No stars this time.`, 'warning');
+      } else if (routine.requires_approval) {
         addToast(`✅ ${routine.title} submitted for parent approval!`, 'info');
       } else {
-        addToast(`🌟 Awesome! ${routine.title} done — +${routine.points} stars!`, 'success');
+        addToast(`🌟 Awesome! ${routine.title} done — +${result.starsAwarded} stars!`, 'success');
+        if (result.starsAwarded > 0) {
+          setStarCelebration({ title: routine.title, stars: result.starsAwarded });
+          window.setTimeout(() => setStarCelebration(null), 2400);
+        }
       }
+      setCompletionRoutine(null);
     } catch {
       addToast('Failed to log routine. Please try again.', 'error');
     } finally {
       setLoggingId(null);
     }
   };
+
+  useEffect(() => {
+    if (!childId || !familyId || !isPastLockout || loading || timeline.length === 0) return;
+    const dateKey = todayKey();
+    if (processedLockoutDate === dateKey) return;
+
+    const pendingRoutines = timeline.filter((routine) => {
+      const log = todayLogs[routine.id];
+      return !log || (log.status !== 'completed' && log.status !== 'sick' && log.status !== 'missed');
+    });
+
+    if (pendingRoutines.length === 0) {
+      setProcessedLockoutDate(dateKey);
+      return;
+    }
+
+    setProcessedLockoutDate(dateKey);
+    void (async () => {
+      let deductedStars = 0;
+      for (const routine of pendingRoutines) {
+        try {
+          const result = await logRoutine(routine, childId, 'missed');
+          deductedStars += Math.abs(result.starsDelta);
+          setTodayLogs((prev) => ({
+            ...prev,
+            [routine.id]: {
+              id: `${childId}_${routine.id}_${dateKey}`,
+              routine_id: routine.id,
+              family_id: familyId,
+              child_id: childId,
+              date: dateKey,
+              status: 'missed',
+              stars_awarded: 0,
+              stars_delta: result.starsDelta,
+            }
+          }));
+        } catch (error) {
+          console.warn('Failed to apply missed routine penalty:', error);
+        }
+      }
+      if (deductedStars > 0) {
+        addToast(`Daily routine lockout applied. ${deductedStars} stars deducted for missed routines.`, 'warning');
+      }
+    })();
+  }, [addToast, childId, familyId, isPastLockout, loading, logRoutine, processedLockoutDate, timeline, todayLogs]);
 
   const handleAddRoutine = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,6 +296,7 @@ export default function RoutinePage() {
               const log = todayLogs[routine.id];
               const isCompleted = log?.status === 'completed';
               const isSick = log?.status === 'sick';
+              const isMissed = log?.status === 'missed';
               const isLocked = isPastLockout && !isCompleted;
 
               return (
@@ -231,11 +311,13 @@ export default function RoutinePage() {
                         ? 'bg-emerald-500 border-emerald-400 text-white'
                         : isSick
                         ? 'bg-amber-400 border-amber-300 text-white'
+                        : isMissed
+                        ? 'bg-rose-400 border-rose-300 text-white'
                         : isLocked
                         ? (isDark ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200')
                         : (isDark ? 'bg-white/10 border-white/20' : 'bg-white border-slate-300 shadow-sm')
                     )}>
-                      {isCompleted ? <CheckCircle2 size={16} /> : routine.icon || '📝'}
+                      {isCompleted ? <CheckCircle2 size={16} /> : isMissed ? <X size={15} /> : routine.icon || '📝'}
                     </div>
                     <p className={clsx('text-[10px] font-bold text-center leading-tight', isDark ? 'text-white/40' : 'text-slate-400')}>
                       {fmtTime(routine.start_time || routine.schedule_time || '')}
@@ -247,6 +329,8 @@ export default function RoutinePage() {
                     'flex-1 rounded-2xl border p-4 transition-all mb-1',
                     isCompleted
                       ? (isDark ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-emerald-50 border-emerald-200')
+                      : isMissed
+                      ? (isDark ? 'bg-rose-500/10 border-rose-500/25 opacity-70' : 'bg-rose-50 border-rose-200 opacity-80')
                       : isLocked
                       ? (isDark ? 'bg-white/3 border-white/5 opacity-50' : 'bg-slate-50 border-slate-100 opacity-60')
                       : (isDark ? 'bg-white/5 border-white/10 hover:bg-white/8' : 'bg-white border-slate-200 hover:shadow-md')
@@ -268,6 +352,12 @@ export default function RoutinePage() {
                         <span className={clsx('text-xs font-bold flex items-center gap-0.5', isDark ? 'text-emerald-400' : 'text-emerald-600')}>
                           <Star size={12} className="fill-current" /> {routine.points} stars
                         </span>
+                        {isCompleted && log?.stars_awarded === 0 && (
+                          <span className={clsx('text-[10px] font-bold', isDark ? 'text-amber-300' : 'text-amber-600')}>No stars</span>
+                        )}
+                        {isMissed && (
+                          <span className={clsx('text-[10px] font-bold', isDark ? 'text-rose-300' : 'text-rose-600')}>-{Math.abs(Number(log?.stars_delta || routine.points || 0))} stars</span>
+                        )}
                         {(routine.streak > 0) && (
                           <span className={clsx('text-xs font-bold flex items-center gap-0.5', isDark ? 'text-orange-400' : 'text-orange-600')}>
                             <Flame size={12} className="fill-current" /> {routine.streak}
@@ -283,16 +373,18 @@ export default function RoutinePage() {
                     )}
 
                     <button
-                      disabled={isCompleted || isSick || isLocked || loggingId === routine.id}
+                      disabled={isCompleted || isSick || isMissed || isLocked || loggingId === routine.id}
                       onClick={() => handleComplete(routine.id)}
                       className={clsx(
                         'w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2',
                         isCompleted
                           ? 'bg-emerald-500 text-white cursor-default'
-                          : isSick
-                          ? 'bg-amber-400 text-white cursor-default'
-                          : isLocked
-                          ? (isDark ? 'bg-white/5 text-white/30 cursor-not-allowed' : 'bg-slate-100 text-slate-300 cursor-not-allowed')
+                        : isSick
+                        ? 'bg-amber-400 text-white cursor-default'
+                        : isMissed
+                        ? 'bg-rose-400 text-white cursor-default'
+                        : isLocked
+                        ? (isDark ? 'bg-white/5 text-white/30 cursor-not-allowed' : 'bg-slate-100 text-slate-300 cursor-not-allowed')
                           : 'bg-cyan-500 text-white hover:bg-cyan-400 hover:scale-[1.02] shadow-md shadow-cyan-500/20'
                       )}
                     >
@@ -302,6 +394,8 @@ export default function RoutinePage() {
                         <><CheckCircle2 size={16} /> Done!</>
                       ) : isSick ? (
                         <>🤒 Sick Mode</>
+                      ) : isMissed ? (
+                        <>Missed</>
                       ) : isLocked ? (
                         <><Lock size={14} /> Locked (10 PM)</>
                       ) : (
@@ -313,6 +407,59 @@ export default function RoutinePage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {starCelebration && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/35 px-4 backdrop-blur-sm">
+          <div className={clsx('relative w-full max-w-sm overflow-hidden rounded-3xl border p-6 text-center shadow-2xl', isDark ? 'border-amber-300/30 bg-slate-950 text-white' : 'border-amber-200 bg-white text-slate-900')}>
+            <div className="absolute -left-8 top-4 h-20 w-20 rounded-full bg-amber-300/25 blur-2xl" />
+            <div className="absolute -right-8 bottom-4 h-24 w-24 rounded-full bg-cyan-300/25 blur-2xl" />
+            <div className="relative mx-auto grid h-20 w-20 animate-bounce place-items-center rounded-full bg-amber-300 text-4xl shadow-[0_0_35px_rgba(251,191,36,0.75)]">
+              <Star className="h-10 w-10 fill-white text-white" />
+            </div>
+            <p className="relative mt-4 text-3xl font-black text-amber-400">+{starCelebration.stars}</p>
+            <p className="relative mt-1 text-sm font-bold opacity-75">{starCelebration.title}</p>
+          </div>
+        </div>
+      )}
+
+      {completionRoutine && (
+        <div className="fixed inset-0 z-[65] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center">
+          <form
+            onSubmit={submitCompletionTime}
+            className={clsx('w-full max-w-md rounded-3xl border p-5 shadow-2xl', isDark ? 'border-white/10 bg-[#1a1f3c]' : 'border-slate-200 bg-white')}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className={clsx('text-xs font-black uppercase tracking-widest', isDark ? 'text-cyan-300' : 'text-cyan-600')}>Completion Time</p>
+                <h3 className={clsx('mt-1 text-lg font-black', isDark ? 'text-white' : 'text-slate-900')}>{completionRoutine.title}</h3>
+                <p className={clsx('mt-1 text-sm font-semibold', isDark ? 'text-white/55' : 'text-slate-500')}>
+                  Routine window: {fmtTime(completionRoutine.start_time || completionRoutine.schedule_time || '')} - {fmtTime(completionRoutine.end_time || '')}
+                </p>
+              </div>
+              <button type="button" onClick={() => setCompletionRoutine(null)} className={clsx('rounded-full p-2', isDark ? 'text-white/45 hover:bg-white/10 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700')}>
+                <X size={18} />
+              </button>
+            </div>
+            <label className={clsx('mb-1 block text-xs font-bold uppercase tracking-wider', isDark ? 'text-white/50' : 'text-slate-500')}>When did you actually finish?</label>
+            <input
+              required
+              type="time"
+              value={actualCompletionTime}
+              onChange={(event) => setActualCompletionTime(event.target.value)}
+              className={clsx('w-full rounded-2xl border px-4 py-3 text-lg font-black outline-none focus:ring-2 focus:ring-cyan-500/50', isDark ? 'border-white/10 bg-black/20 text-white' : 'border-slate-300 bg-white text-slate-900')}
+            />
+            <p className={clsx('mt-3 rounded-2xl border px-3 py-2 text-xs font-semibold', isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-700')}>
+              Stars are awarded only if this time is inside the routine window.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button type="button" onClick={() => setCompletionRoutine(null)} className={clsx('flex-1 rounded-xl border py-2.5 text-sm font-bold', isDark ? 'border-white/10 text-white/60' : 'border-slate-200 text-slate-600')}>Cancel</button>
+              <button type="submit" disabled={loggingId === completionRoutine.id} className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-500/30 transition hover:bg-cyan-400 disabled:opacity-60">
+                {loggingId === completionRoutine.id ? 'Saving...' : 'Save Done'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

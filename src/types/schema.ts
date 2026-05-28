@@ -116,6 +116,10 @@ export interface RoutineLog {
   date: string;
   status: 'completed' | 'missed' | 'sick';
   completed_at?: string;
+  actual_completed_time?: string;
+  in_time_window?: boolean;
+  stars_awarded?: number;
+  stars_delta?: number;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'failed' | 'skipped';
