@@ -176,7 +176,7 @@ export const generateTasksForSlot = (
     // Generate title
     const difficultyLabels = ['Easy', 'Normal', 'Hard', 'Expert'];
     const activityTypes = ['Sports', 'Dance', 'Art', 'Music', 'Games'];
-    let title = template.title_pattern
+    const title = template.title_pattern
       .replace('{difficulty}', difficultyLabels[Math.min(3, Math.floor(difficulty / 2))])
       .replace('{type}', activityTypes[Math.floor(Math.random() * activityTypes.length)])
       .replace('{subject}', weakSubjects[0] || 'General');
