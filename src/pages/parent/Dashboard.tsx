@@ -423,6 +423,8 @@ function ParentDashboardContent() {
   const [awardReason, setAwardReason] = useState('');
   const [awardSurprise, setAwardSurprise] = useState(true);
   const [awardSaving, setAwardSaving] = useState(false);
+  const [settleChildId, setSettleChildId] = useState('');
+  const [settleSaving, setSettleSaving] = useState(false);
   const [scratchChildId, setScratchChildId] = useState('');
   const [scratchTitle, setScratchTitle] = useState('Scratch surprise');
   const [scratchRevealType, setScratchRevealType] = useState<'scratch' | 'wheel'>('scratch');
@@ -2090,6 +2092,79 @@ function ParentDashboardContent() {
     }
   };
 
+  const handleSettleRewardBalance = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !settleChildId) {
+      setError('Choose a child before settling rewards.');
+      return;
+    }
+
+    const child = children.find((item) => item.id === settleChildId);
+    const childProfile = childProfiles.find((item) => item.id === settleChildId);
+    const currentBalance = Number(childProfile?.total_stars || 0);
+    if (currentBalance <= 0) {
+      setError('This child has no reward balance to settle.');
+      return;
+    }
+
+    if (!window.confirm(`Mark ${currentBalance} as paid and reset ${child?.name || 'this child'}'s reward balance to zero?`)) {
+      return;
+    }
+
+    setSettleSaving(true);
+    setError('');
+    try {
+      const now = new Date().toISOString();
+      const today = now.slice(0, 10);
+      const profileRef = doc(db, 'child_profile', settleChildId);
+
+      await updateDoc(profileRef, {
+        total_stars: 0,
+      });
+
+      await addDoc(collection(db, 'settlements'), {
+        family_id: familyId,
+        child_id: settleChildId,
+        period_start: today,
+        period_end: today,
+        total_points: currentBalance,
+        total_money: currentBalance,
+        status: 'paid',
+        created_at: now,
+        paid_at: now,
+      });
+
+      await createRewardLedgerEntry({
+        child_id: settleChildId,
+        parent_id: user.id,
+        family_id: familyId,
+        type: 'adjustment',
+        stars_delta: -currentBalance,
+        title: 'Reward balance settled',
+        reason: `Parent marked ${currentBalance} as paid and reset the reward balance.`,
+        source_type: 'system',
+        visible_to_child: true,
+      });
+
+      await sendMessage(
+        settleChildId,
+        familyId,
+        `Your reward balance of ${currentBalance} was paid and reset to zero.`,
+        'parent',
+        familyId,
+        'Reward paid'
+      );
+
+      setSuccess(`Settled ${currentBalance} for ${child?.name || 'child'} and reset balance to zero.`);
+      setSettleChildId('');
+    } catch (err) {
+      console.error('Failed to settle reward balance:', err);
+      setError('Could not settle reward balance.');
+    } finally {
+      setSettleSaving(false);
+    }
+  };
+
   const handleSendScratchReward = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user || !scratchChildId) {
@@ -3688,6 +3763,40 @@ function ParentDashboardContent() {
                           <input type="checkbox" checked={awardSurprise} onChange={(event) => setAwardSurprise(event.target.checked)} className="h-4 w-4" />
                           <span style={{ color: 'var(--text-muted)' }}>Send as surprise gift for child to open</span>
                         </label>
+                      </form>
+                    </div>
+
+                    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Settle Reward Balance</h3>
+                          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                            Mark the current reward balance as paid, create a paid settlement record, and reset the child balance to zero.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                          Paid reset
+                        </span>
+                      </div>
+
+                      <form onSubmit={handleSettleRewardBalance} className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr_auto] xl:items-center">
+                        <select
+                          value={settleChildId}
+                          onChange={(event) => setSettleChildId(event.target.value)}
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        >
+                          <option value="">Select child</option>
+                          {children.map((child) => (
+                            <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                          ))}
+                        </select>
+                        <div className="rounded-xl border px-4 py-2.5 text-sm font-bold" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                          Balance: {settleChildId ? Number(childProfiles.find((child) => child.id === settleChildId)?.total_stars || 0) : 0}
+                        </div>
+                        <button disabled={settleSaving || !settleChildId} type="submit" className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                          {settleSaving ? 'Settling...' : 'Mark Paid & Reset'}
+                        </button>
                       </form>
                     </div>
 
