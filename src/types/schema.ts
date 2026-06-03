@@ -195,6 +195,9 @@ export interface RewardSetting {
   parent_id: string;
   family_id?: string;
   star_to_currency_rate: number;
+  point_to_cash_rate?: number;
+  currency_symbol?: string;
+  star_payout_percentages?: Record<string, number>;
   weekly_bonus_enabled: boolean;
 }
 
@@ -336,9 +339,12 @@ export interface ScratchRewardCard {
   source_id?: string;
   source_type?: 'task' | 'routine' | 'approval' | 'manual';
   title: string;
+  reveal_type?: 'scratch' | 'wheel';
   prize_label: string;
-  prize_type: 'stars' | 'book' | 'toy' | 'treat' | 'custom';
+  prize_type: 'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom';
   stars_value?: number;
+  cash_value?: number;
+  wheel_segments?: string[];
   reason: string;
   status: 'available' | 'revealed';
   created_at: string;
@@ -351,9 +357,12 @@ export interface ScratchRewardTemplate {
   family_id?: string;
   child_id?: string;
   title: string;
+  reveal_type?: 'scratch' | 'wheel';
   prize_label: string;
-  prize_type: 'stars' | 'book' | 'toy' | 'treat' | 'custom';
+  prize_type: 'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom';
   stars_value?: number;
+  cash_value?: number;
+  wheel_segments?: string[];
   trigger: 'task_completion' | 'manual';
   is_active: boolean;
   created_at: string;

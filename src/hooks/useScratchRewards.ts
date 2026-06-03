@@ -69,9 +69,12 @@ export const awardScratchRewardForTrigger = async ({
     source_id: sourceId,
     source_type: sourceType,
     title: template.title,
+    reveal_type: template.reveal_type || 'scratch',
     prize_type: template.prize_type,
     prize_label: template.prize_label,
-    stars_value: template.prize_type === 'stars' ? Number(template.stars_value || 0) : 0,
+    stars_value: template.prize_type === 'stars' || template.prize_type === 'cash' ? Number(template.stars_value || template.cash_value || 0) : 0,
+    cash_value: template.prize_type === 'cash' ? Number(template.cash_value || template.stars_value || 0) : 0,
+    wheel_segments: template.wheel_segments,
     reason,
   });
 };
@@ -204,13 +207,13 @@ export function useScratchRewards(childId: string, familyId?: string) {
       revealed_at: revealedAt,
     });
 
-    if (card.prize_type === 'stars' && Number(card.stars_value || 0) > 0) {
+    if ((card.prize_type === 'stars' || card.prize_type === 'cash') && Number(card.stars_value || card.cash_value || 0) > 0) {
       const profileRef = doc(db, 'child_profile', card.child_id);
       const profileSnap = await getDoc(profileRef);
       if (profileSnap.exists()) {
         const currentStars = Number(profileSnap.data().total_stars || 0);
         await updateDoc(profileRef, {
-          total_stars: currentStars + Number(card.stars_value || 0),
+          total_stars: currentStars + Number(card.stars_value || card.cash_value || 0),
         });
       }
     } else {
@@ -222,9 +225,9 @@ export function useScratchRewards(childId: string, familyId?: string) {
       parent_id: card.parent_id,
       family_id: card.family_id,
       type: 'scratch_reward',
-      stars_delta: card.prize_type === 'stars' ? Number(card.stars_value || 0) : 0,
+      stars_delta: card.prize_type === 'stars' || card.prize_type === 'cash' ? Number(card.stars_value || card.cash_value || 0) : 0,
       title: card.title,
-      reason: `Scratch reward: ${card.prize_label}. ${card.reason}`,
+      reason: `${card.reveal_type === 'wheel' ? 'Wheel reward' : 'Scratch reward'}: ${card.prize_label}. ${card.reason}`,
       source_id: card.id,
       source_type: 'scratch',
       visible_to_child: true,

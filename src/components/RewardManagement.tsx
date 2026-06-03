@@ -98,7 +98,7 @@ const RewardManagement: React.FC<RewardManagementProps> = ({
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">🎁 Catalogue Items</h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-white/55">Each item has an emoji, category, and star cost visible to the child.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-white/55">Each item has an emoji, category, and cash cost visible to the child.</p>
         </div>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
@@ -145,7 +145,7 @@ const RewardManagement: React.FC<RewardManagementProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Reward Cost (Stars)
+                  Reward Cost (Cash)
                 </label>
                 <input
                   type="number"
@@ -294,7 +294,7 @@ const RewardManagement: React.FC<RewardManagementProps> = ({
 
               <div className="space-y-1">
                 <p className="text-sm">
-                  <span className="font-semibold">⭐ Cost:</span> {reward.star_cost} stars
+                  <span className="font-semibold">Cost:</span> {reward.star_cost}
                 </p>
                 <p className="text-sm">
                   <span className="font-semibold">📂 Category:</span> {reward.category}

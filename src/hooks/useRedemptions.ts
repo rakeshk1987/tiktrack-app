@@ -248,7 +248,7 @@ export const useRedemptions = (childId: string, parentId: string) => {
     currentStars: number
   ): Promise<Redemption> => {
     if (currentStars < rewardItem.star_cost) {
-      throw new Error('Not enough stars for this reward');
+      throw new Error('Not enough cash for this reward');
     }
 
     try {
@@ -316,7 +316,7 @@ export const useRedemptions = (childId: string, parentId: string) => {
             type: 'redemption',
             stars_delta: -Math.abs(existingRedemption.stars_spent),
             title: existingRedemption.reward_item.name,
-            reason: `Redeemed stars for ${existingRedemption.reward_item.name}`,
+            reason: `Redeemed cash for ${existingRedemption.reward_item.name}`,
             source_id: existingRedemption.id,
             source_type: 'redemption',
             visible_to_child: true,
@@ -339,7 +339,7 @@ export const useRedemptions = (childId: string, parentId: string) => {
             type: 'adjustment',
             stars_delta: Math.abs(existingRedemption.stars_spent),
             title: `${existingRedemption.reward_item.name} refunded`,
-            reason: `Stars returned after reward request was rejected`,
+            reason: `Cash returned after reward request was rejected`,
             source_id: existingRedemption.id,
             source_type: 'redemption',
             visible_to_child: true,

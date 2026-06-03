@@ -8,6 +8,7 @@ import { useRewardLedger } from '../../hooks/useRewardLedger';
 import { useScratchRewards } from '../../hooks/useScratchRewards';
 import { useChildLayout } from './ChildLayout';
 import { computeMonthlyStars, getChildBadges, getLevelProgress } from '../../utils/childProgression';
+import { DEFAULT_STAR_PAYOUT_PERCENTAGES, formatCash, normalizeRewardSettings } from '../../utils/rewards';
 import type { RewardItem, RewardLedgerEntry, ScratchRewardCard } from '../../types/schema';
 
 export default function ChildRewards() {
@@ -20,6 +21,8 @@ export default function ChildRewards() {
 
   const [monthlyEarnedStars, setMonthlyEarnedStars] = useState(0);
   const [conversionRate, setConversionRate] = useState(1);
+  const [currencySymbol, setCurrencySymbol] = useState('₹');
+  const [payoutPercentages, setPayoutPercentages] = useState({ ...DEFAULT_STAR_PAYOUT_PERCENTAGES });
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [redemptionMode, setRedemptionMode] = useState<'cash' | 'rewards'>('cash');
   const [cashStars, setCashStars] = useState<number | ''>('');
@@ -66,9 +69,10 @@ export default function ChildRewards() {
 
         const rewardSettingDoc = rewardSettingsByFamilySnap.docs[0] || rewardSettingsByParentSnap.docs[0];
         if (rewardSettingDoc) {
-          const raw = rewardSettingDoc.data() as any;
-          const savedRate = Number(raw.star_to_currency_rate);
-          setConversionRate(Number.isFinite(savedRate) ? Math.max(0, savedRate) : 1);
+          const settings = normalizeRewardSettings(rewardSettingDoc.data() as any);
+          setConversionRate(settings.point_to_cash_rate);
+          setCurrencySymbol(settings.currency_symbol);
+          setPayoutPercentages(settings.star_payout_percentages);
         }
       } finally {
         setLoadingSummary(false);
@@ -91,7 +95,7 @@ export default function ChildRewards() {
   const monthlyPayoutEstimate = useMemo(() => Number((monthlyEarnedStars * conversionRate).toFixed(2)), [conversionRate, monthlyEarnedStars]);
   const availableStars = Number(profile.total_stars || 0);
   const cashStarsValue = cashStars === '' ? 0 : Number(cashStars);
-  const cashEstimate = Number((cashStarsValue * conversionRate).toFixed(2));
+  const cashEstimate = Number(cashStarsValue.toFixed(2));
   const unlockedBadges = useMemo(() => badges.filter((badge) => badge.unlocked).length, [badges]);
   const nextBadge = useMemo(() => badges.find((badge) => !badge.unlocked) || null, [badges]);
   const openedGift = useMemo(
@@ -128,7 +132,7 @@ export default function ChildRewards() {
       family_id: parentId,
       child_id: profile.id,
       name: 'Cash payout',
-      description: `${cashStarsValue} stars at ${conversionRate} cash value per star = ${cashEstimate}`,
+      description: `${formatCash(cashStarsValue, currencySymbol)} cash payout request`,
       star_cost: cashStarsValue,
       icon: '💰',
       category: 'cash',
@@ -174,16 +178,16 @@ export default function ChildRewards() {
   return (
     <div className="mt-6 space-y-5 pb-20">
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h2 className="text-3xl font-display font-bold">Stars & Rewards</h2>
-        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Earn stars, request cash, or spend stars on rewards.</p>
+        <h2 className="text-3xl font-display font-bold">Cash Rewards</h2>
+        <p className={clsx('mt-1 text-sm', mutedTextClass)}>Points become cash. Star ratings decide how much of the amount you earn.</p>
 
         {loadingSummary ? <p className={clsx('mt-3 text-sm', mutedTextClass)}>Loading progress summary...</p> : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Total Stars</p><p className="mt-1 text-2xl font-black">{profile.total_stars || 0}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Monthly Stars</p><p className="mt-1 text-2xl font-black">{monthlyEarnedStars}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Estimate</p><p className="mt-1 text-2xl font-black">{monthlyPayoutEstimate}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Stars Spent</p><p className="mt-1 text-2xl font-black">{monthlySpentStars}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Balance</p><p className="mt-1 text-2xl font-black">{formatCash(profile.total_stars || 0, currencySymbol)}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Monthly Cash</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyEarnedStars, currencySymbol)}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Base Estimate</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyPayoutEstimate, currencySymbol)}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Spent</p><p className="mt-1 text-2xl font-black">{formatCash(monthlySpentStars, currencySymbol)}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Streak / Shields</p><p className="mt-1 text-2xl font-black">{profile.streak_count || 0} / {profile.streak_shields || 0}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Pending Rewards</p><p className="mt-1 text-2xl font-black">{pendingRewards}</p></div>
         </div>
@@ -206,7 +210,7 @@ export default function ChildRewards() {
       </div>
 
       <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
-        <h3 className="text-2xl font-display font-bold">Redeem Stars</h3>
+        <h3 className="text-2xl font-display font-bold">Redeem Cash</h3>
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-1">
           <button
             type="button"
@@ -227,9 +231,16 @@ export default function ChildRewards() {
         {redemptionMode === 'cash' ? (
           <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-500/10 p-4">
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Available Stars</p><p className="mt-1 text-lg font-black">{availableStars}</p></div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Rate</p><p className="mt-1 text-lg font-black">1 star = {conversionRate}</p></div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Estimate</p><p className="mt-1 text-lg font-black">{cashEstimate}</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Available Cash</p><p className="mt-1 text-lg font-black">{formatCash(availableStars, currencySymbol)}</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Base Rate</p><p className="mt-1 text-lg font-black">1 point = {formatCash(conversionRate, currencySymbol)}</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>You'll Get</p><p className="mt-1 text-lg font-black">{formatCash(cashEstimate, currencySymbol)}</p></div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {([5, 4, 3, 2, 1] as const).map((star) => (
+                <span key={star} className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-black">
+                  {star}★ = {payoutPercentages[star]}%
+                </span>
+              ))}
             </div>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -239,7 +250,7 @@ export default function ChildRewards() {
                 max={availableStars}
                 value={cashStars as any}
                 onChange={(event) => setCashStars(event.target.value === '' ? '' : Number(event.target.value))}
-                placeholder="Stars to redeem as cash"
+                placeholder="Cash amount to request"
                 className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.08] px-4 py-3 text-sm font-bold outline-none"
               />
               <button
@@ -263,6 +274,7 @@ export default function ChildRewards() {
             <RewardMarketplace
               rewards={rewards}
               childProfile={profile}
+              currencySymbol={currencySymbol}
               onRedeemReward={async (rewardId, reward) => {
                 await requestRedemption(rewardId, reward, profile.total_stars || 0);
               }}
@@ -301,7 +313,7 @@ export default function ChildRewards() {
         </div>
       ) : null}
 
-      {availableCards.length > 0 || scratchLoading ? (
+      {availableCards.some((card) => (card.reveal_type || 'scratch') === 'scratch') || scratchLoading ? (
         <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -317,7 +329,7 @@ export default function ChildRewards() {
             {scratchLoading ? (
               <p className={mutedTextClass}>Loading scratch rewards...</p>
             ) : (
-              availableCards.map((card) => (
+              availableCards.filter((card) => (card.reveal_type || 'scratch') === 'scratch').map((card) => (
                 <button
                   key={card.id}
                   type="button"
@@ -330,6 +342,35 @@ export default function ChildRewards() {
                 </button>
               ))
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {availableCards.some((card) => card.reveal_type === 'wheel') ? (
+        <div className={clsx('rounded-[1.75rem] border p-5 shadow-[0_18px_45px_rgba(0,0,0,0.16)]', panelClass)}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-2xl font-display font-bold">Spin Wheel</h3>
+              <p className={clsx('mt-1 text-sm', mutedTextClass)}>Spin to reveal the prize parent configured for you.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {availableCards.filter((card) => card.reveal_type === 'wheel').map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => void openScratchReward(card.id)}
+                className="group rounded-2xl border border-cyan-300/25 bg-[conic-gradient(from_45deg,#22d3ee,#818cf8,#f472b6,#facc15,#22d3ee)] p-[1px] text-left transition hover:scale-[1.01]"
+              >
+                <div className="rounded-2xl bg-slate-950/80 px-4 py-4">
+                  <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border-4 border-white/30 bg-[conic-gradient(#facc15,#22d3ee,#a78bfa,#fb7185,#34d399,#facc15)] text-3xl transition duration-700 group-hover:rotate-[540deg]">
+                    🎡
+                  </div>
+                  <p className="mt-3 text-lg font-black">{card.title}</p>
+                  <p className={clsx('mt-1 text-sm', mutedTextClass)}>{card.reason}</p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       ) : null}
@@ -442,7 +483,7 @@ export default function ChildRewards() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4">
           <div className="w-full max-w-md rounded-[1.5rem] border border-violet-300/30 bg-slate-950 p-6 text-center shadow-2xl">
             <p className="text-5xl">🎟️</p>
-            <h3 className="mt-3 text-2xl font-display font-black">Scratch reward</h3>
+            <h3 className="mt-3 text-2xl font-display font-black">{openedScratch.reveal_type === 'wheel' ? 'Wheel reward' : 'Scratch reward'}</h3>
             <p className="mt-2 text-3xl font-black text-violet-200">{openedScratch.prize_label}</p>
             <p className={clsx('mt-3 text-sm', mutedTextClass)}>{openedScratch.reason}</p>
             <button

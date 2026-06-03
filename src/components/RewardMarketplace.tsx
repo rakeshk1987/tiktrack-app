@@ -6,6 +6,7 @@ interface RewardMarketplaceProps {
   childProfile: ChildProfile;
   onRedeemReward: (rewardId: string, reward: RewardItem) => Promise<void>;
   loading?: boolean;
+  currencySymbol?: string;
 }
 
 const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
@@ -13,6 +14,7 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
   childProfile,
   onRedeemReward,
   loading = false,
+  currencySymbol = '₹',
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [redeeming, setRedeeming] = useState<string | null>(null);
@@ -38,7 +40,7 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
     if (childProfile.total_stars < reward.star_cost) {
       setMessage({
         type: 'error',
-        text: `Not enough stars! You need ${reward.star_cost} stars but have ${childProfile.total_stars}.`,
+        text: `Not enough cash! You need ${currencySymbol}${reward.star_cost} but have ${currencySymbol}${childProfile.total_stars}.`,
       });
       return;
     }
@@ -64,12 +66,12 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">🎁 Star Rewards</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">🎁 Reward Items</h2>
         <div className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-100 to-yellow-50 dark:from-yellow-900 dark:to-yellow-800 rounded-lg">
           <div>
-            <p className="text-sm text-gray-600 dark:text-gray-300">Your Stars</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Cash Balance</p>
             <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-300">
-              ⭐ {childProfile.total_stars}
+              {currencySymbol}{childProfile.total_stars}
             </p>
           </div>
           <div className="text-right">
@@ -156,7 +158,7 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
 
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded">
-                    ⭐ {reward.star_cost}
+                    {currencySymbol}{reward.star_cost}
                   </span>
                   <span className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded">
                     {reward.category}
@@ -172,12 +174,12 @@ const RewardMarketplace: React.FC<RewardMarketplaceProps> = ({
                       : 'bg-gray-400 text-gray-600 cursor-not-allowed'
                   } disabled:opacity-50`}
                 >
-                  {isRedeeming ? 'Requesting...' : canRedeem ? '🎉 Redeem' : '💫 Not Enough Stars'}
+                  {isRedeeming ? 'Requesting...' : canRedeem ? '🎉 Redeem' : '💫 Not Enough Cash'}
                 </button>
 
                 {!canRedeem && (
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 text-center">
-                    Need {reward.star_cost - childProfile.total_stars} more stars
+                    Need {currencySymbol}{reward.star_cost - childProfile.total_stars} more
                   </p>
                 )}
               </div>

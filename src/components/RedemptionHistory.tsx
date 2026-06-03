@@ -100,7 +100,7 @@ const RedemptionHistory: React.FC<RedemptionHistoryProps> = ({
                         </div>
                       </div>
                       <div className="flex gap-4 text-sm flex-wrap">
-                        <span>⭐ {redemption.stars_spent} stars</span>
+                        <span>Cash {redemption.stars_spent}</span>
                         <span>📅 {new Date(redemption.requested_at).toLocaleDateString()}</span>
                         <span className={`px-2 py-1 rounded ${statusColors[redemption.status]}`}>
                           {statusIcons[redemption.status]} {redemption.status}

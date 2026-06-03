@@ -19,6 +19,7 @@ import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import { createRewardLedgerEntry } from './useRewardLedger';
 import { awardScratchRewardForTrigger } from './useScratchRewards';
+import { calculateCashReward, fetchCashRewardSettings } from '../utils/rewards';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
 const MAX_CHILD_VISIBLE_TASKS = 7;
@@ -507,8 +508,13 @@ export function useQuestActions(childId: string) {
         const currentMins = new Date().getMinutes();
         const isEarlyBird = data.last_task_date !== today && (currentHour < 8 || (currentHour === 8 && currentMins <= 30));
 
-        const { updatedProfile } = applyTaskCompletionToProfile(data, task.star_value, true, today, isEarlyBird);
-        const earnedStars = Math.max(0, Number(updatedProfile.total_stars || 0) - Number(data.total_stars || 0));
+        const rewardSettings = await fetchCashRewardSettings(task.family_id || data.family_id, task.parent_id || data.parent_id);
+        const baseCashValue = Number((task as any).base_cash_value ?? task.points ?? task.star_value ?? 0);
+        const performanceStars = Number((task as any).performance_stars ?? (task as any).rating_stars ?? 5);
+        const cashReward = calculateCashReward(baseCashValue, performanceStars, rewardSettings);
+        const earlyBirdBonus = isEarlyBird ? 5 : 0;
+        const earnedStars = cashReward.amount + earlyBirdBonus;
+        const { updatedProfile } = applyTaskCompletionToProfile(data, earnedStars, true, today, false);
         const badgeText = `${task.title || ''} ${task.description || ''} ${task.category || ''}`.toLowerCase();
         const isReadingTask = /\b(read|reading|book|comic)\b/.test(badgeText);
         const isStudyTask = /\b(study|homework|math|science|english|practice|exam)\b/.test(badgeText);
@@ -532,8 +538,8 @@ export function useQuestActions(childId: string) {
             stars_delta: earnedStars,
             title: task.title || 'Task completed',
             reason: isEarlyBird
-              ? `Completed task "${task.title || 'Task'}" with early bird bonus`
-              : `Completed task "${task.title || 'Task'}"`,
+              ? `Completed task "${task.title || 'Task'}" at ${cashReward.stars} stars (${cashReward.percentage}%) with early bird bonus`
+              : `Completed task "${task.title || 'Task'}" at ${cashReward.stars} stars (${cashReward.percentage}%)`,
             source_id: task.id,
             source_type: 'task',
             visible_to_child: true,

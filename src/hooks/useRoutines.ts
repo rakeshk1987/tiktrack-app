@@ -7,6 +7,7 @@ import { db } from '../config/firebase';
 import type { Routine, RoutineLog } from '../types/schema';
 import { useSickMode } from './useSickMode';
 import { createRewardLedgerEntry } from './useRewardLedger';
+import { calculateCashReward, fetchCashRewardSettings } from '../utils/rewards';
 
 export interface RoutineLogResult {
   status: 'completed' | 'missed' | 'sick';
@@ -209,7 +210,9 @@ export function useRoutines(familyId: string, childId?: string) {
       const routineStart = routine.start_time || routine.schedule_time || '00:00';
       const routineEnd = routine.end_time || routine.schedule_time || routineStart;
       const inTimeWindow = status === 'completed' ? isTimeInRange(actualCompletedTime, routineStart, routineEnd) : false;
-      const starsAwarded = status === 'completed' && inTimeWindow ? Number(routine.points || 0) : 0;
+      const rewardSettings = await fetchCashRewardSettings(familyId, familyId);
+      const routineCashReward = calculateCashReward(Number((routine as any).base_cash_value ?? routine.points ?? 0), Number((routine as any).performance_stars || 5), rewardSettings);
+      const starsAwarded = status === 'completed' && inTimeWindow ? routineCashReward.amount : 0;
       const starsDelta = status === 'missed' ? -Math.abs(Number(routine.points || 0)) : (routine.requires_approval ? 0 : starsAwarded);
 
       const logData: RoutineLog = {

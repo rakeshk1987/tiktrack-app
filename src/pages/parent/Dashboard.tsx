@@ -57,6 +57,7 @@ import type { PlannerActivityModule, PlannerProgram } from '../../features/plann
 import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTimetable';
 import { usePlannerSubjects } from '../../features/planner/hooks/usePlannerSubjects';
 import { usePlannerChallenges } from '../../features/planner/hooks/usePlannerChallenges';
+import { calculateCashReward, DEFAULT_STAR_PAYOUT_PERCENTAGES, fetchCashRewardSettings, normalizeRewardSettings } from '../../utils/rewards';
 
 type ActivityDetailKind = 'task' | 'exam' | 'event';
 
@@ -360,6 +361,7 @@ function ParentDashboardContent() {
   const [tTitle, setTTitle] = useState('');
   const [tDesc, setTDesc] = useState('');
   const [tPoints, setTPoints] = useState<number | ''>('');
+  const [tPerformanceStars, setTPerformanceStars] = useState<1 | 2 | 3 | 4 | 5>(5);
   const [tDue, setTDue] = useState('');
   const [tRecurrenceType, setTRecurrenceType] = useState<'none' | 'daily' | 'weekly'>('none');
   const [tRecurrenceDays, setTRecurrenceDays] = useState<number[]>([]);
@@ -412,6 +414,8 @@ function ParentDashboardContent() {
   const [rewards, setRewards] = useState<Array<any>>([]);
   const [rewardsLoading, setRewardsLoading] = useState(true);
   const [rStarRate, setRStarRate] = useState<number | ''>('');
+  const [rCurrencySymbol, setRCurrencySymbol] = useState('₹');
+  const [rPayoutPercentages, setRPayoutPercentages] = useState<Record<1 | 2 | 3 | 4 | 5, number>>({ ...DEFAULT_STAR_PAYOUT_PERCENTAGES });
   const [rWeeklyBonus, setRWeeklyBonus] = useState(false);
   const [editRewardId, setEditRewardId] = useState<string | null>(null);
   const [awardChildId, setAwardChildId] = useState('');
@@ -421,16 +425,18 @@ function ParentDashboardContent() {
   const [awardSaving, setAwardSaving] = useState(false);
   const [scratchChildId, setScratchChildId] = useState('');
   const [scratchTitle, setScratchTitle] = useState('Scratch surprise');
-  const [scratchPrizeType, setScratchPrizeType] = useState<'stars' | 'book' | 'toy' | 'treat' | 'custom'>('stars');
+  const [scratchRevealType, setScratchRevealType] = useState<'scratch' | 'wheel'>('scratch');
+  const [scratchPrizeType, setScratchPrizeType] = useState<'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom'>('cash');
   const [scratchStars, setScratchStars] = useState<number | ''>(10);
-  const [scratchPrizeLabel, setScratchPrizeLabel] = useState('10 stars');
+  const [scratchPrizeLabel, setScratchPrizeLabel] = useState('₹10');
   const [scratchReason, setScratchReason] = useState('');
   const [scratchSaving, setScratchSaving] = useState(false);
   const [scratchTemplateChildId, setScratchTemplateChildId] = useState('');
   const [scratchTemplateTitle, setScratchTemplateTitle] = useState('Task completion scratch');
-  const [scratchTemplatePrizeType, setScratchTemplatePrizeType] = useState<'stars' | 'book' | 'toy' | 'treat' | 'custom'>('stars');
+  const [scratchTemplateRevealType, setScratchTemplateRevealType] = useState<'scratch' | 'wheel'>('scratch');
+  const [scratchTemplatePrizeType, setScratchTemplatePrizeType] = useState<'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom'>('cash');
   const [scratchTemplateStars, setScratchTemplateStars] = useState<number | ''>(10);
-  const [scratchTemplatePrizeLabel, setScratchTemplatePrizeLabel] = useState('10 stars');
+  const [scratchTemplatePrizeLabel, setScratchTemplatePrizeLabel] = useState('₹10');
   const [scratchTemplateSaving, setScratchTemplateSaving] = useState(false);
 
   const { initiateSickPeriod, getActiveSickPeriod } = useSickMode(user?.id || '');
@@ -752,6 +758,7 @@ function ParentDashboardContent() {
     setTTitle('');
     setTDesc('');
     setTPoints('');
+    setTPerformanceStars(5);
     setTDue('');
     setTEndDate('');
     setTRecurrenceType('none');
@@ -773,6 +780,7 @@ function ParentDashboardContent() {
     setTTitle(task.title || '');
     setTDesc(task.description || '');
     setTPoints(task.points ?? task.star_value ?? '');
+    setTPerformanceStars((Number(task.performance_stars || task.rating_stars || 5) as 1 | 2 | 3 | 4 | 5));
     setTDue(task.due_date ? toInputDateTimeLocal(task.due_date) : '');
     setTEndDate(task.end_date ? toInputDateTimeLocal(task.end_date) : '');
     setTRecurrenceType((task.recurrence_type as 'none' | 'daily' | 'weekly') || 'none');
@@ -822,6 +830,8 @@ function ParentDashboardContent() {
         description: tDesc,
         points: starValue,
         star_value: starValue,
+        base_cash_value: starValue,
+        performance_stars: tPerformanceStars,
         category: 'General',
         priority: 'medium',
         energy_level: 'medium',
@@ -1617,8 +1627,11 @@ function ParentDashboardContent() {
       };
 
       if (editExamId) {
-        const newPointsEarned = hasResult && ePoints !== '' 
-          ? Math.round(Number(ePoints) * (Number(eMarks) / Number(eTotal))) 
+        const examScorePct = hasResult && Number(eTotal) > 0 ? (Number(eMarks) / Number(eTotal)) * 100 : 0;
+        const examPerformanceStars = examScorePct >= 90 ? 5 : examScorePct >= 75 ? 4 : examScorePct >= 50 ? 3 : examScorePct >= 35 ? 2 : 1;
+        const examRewardSettings = await fetchCashRewardSettings(familyId, user?.id);
+        const newPointsEarned = hasResult && ePoints !== ''
+          ? calculateCashReward(Number(ePoints), examPerformanceStars, examRewardSettings).amount
           : null;
 
         // Fetch old exam to compute points delta
@@ -1661,8 +1674,11 @@ function ParentDashboardContent() {
         
         setSuccess('Exam updated.');
       } else {
-        const newPointsEarned = hasResult && ePoints !== '' 
-          ? Math.round(Number(ePoints) * (Number(eMarks) / Number(eTotal))) 
+        const examScorePct = hasResult && Number(eTotal) > 0 ? (Number(eMarks) / Number(eTotal)) * 100 : 0;
+        const examPerformanceStars = examScorePct >= 90 ? 5 : examScorePct >= 75 ? 4 : examScorePct >= 50 ? 3 : examScorePct >= 35 ? 2 : 1;
+        const examRewardSettings = await fetchCashRewardSettings(familyId, user?.id);
+        const newPointsEarned = hasResult && ePoints !== ''
+          ? calculateCashReward(Number(ePoints), examPerformanceStars, examRewardSettings).amount
           : null;
 
         const createdRef = await addDoc(collection(db, 'exams'), {
@@ -1949,6 +1965,9 @@ function ParentDashboardContent() {
         parent_id: user.id,
         family_id: familyId,
         star_to_currency_rate: Number(rStarRate) || 0,
+        point_to_cash_rate: Number(rStarRate) || 0,
+        currency_symbol: rCurrencySymbol.trim() || '₹',
+        star_payout_percentages: rPayoutPercentages,
         weekly_bonus_enabled: Boolean(rWeeklyBonus),
         updated_at: new Date().toISOString()
       };
@@ -1962,6 +1981,8 @@ function ParentDashboardContent() {
       }
 
       setRStarRate('');
+      setRCurrencySymbol('₹');
+      setRPayoutPercentages({ ...DEFAULT_STAR_PAYOUT_PERCENTAGES });
       setRWeeklyBonus(false);
       setEditRewardId(null);
     } catch (err) {
@@ -1986,7 +2007,10 @@ function ParentDashboardContent() {
   const startEditReward = (r: any) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditRewardId(r.id);
-    setRStarRate(r.star_to_currency_rate ?? '');
+    const normalized = normalizeRewardSettings(r);
+    setRStarRate(normalized.point_to_cash_rate ?? '');
+    setRCurrencySymbol(normalized.currency_symbol);
+    setRPayoutPercentages(normalized.star_payout_percentages);
     setRWeeklyBonus(Boolean(r.weekly_bonus_enabled));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1994,6 +2018,8 @@ function ParentDashboardContent() {
   const cancelEditReward = () => {
     setEditRewardId(null);
     setRStarRate('');
+    setRCurrencySymbol('₹');
+    setRPayoutPercentages({ ...DEFAULT_STAR_PAYOUT_PERCENTAGES });
     setRWeeklyBonus(false);
   };
 
@@ -2072,17 +2098,19 @@ function ParentDashboardContent() {
     }
 
     const stars = Number(scratchStars);
-    if (scratchPrizeType === 'stars' && (!Number.isFinite(stars) || stars <= 0)) {
-      setError('Enter the star value for this scratch reward.');
+    if ((scratchPrizeType === 'stars' || scratchPrizeType === 'cash') && (!Number.isFinite(stars) || stars <= 0)) {
+      setError(`Enter the ${scratchPrizeType === 'cash' ? 'cash' : 'star'} value for this surprise reward.`);
       return;
     }
 
     const prizeLabel = scratchPrizeType === 'stars'
       ? `${stars} stars`
+      : scratchPrizeType === 'cash'
+        ? `${rCurrencySymbol || '₹'}${stars}`
       : scratchPrizeLabel.trim();
 
     if (!prizeLabel) {
-      setError('Add the scratch reward prize.');
+      setError('Add the surprise reward prize.');
       return;
     }
 
@@ -2093,25 +2121,28 @@ function ParentDashboardContent() {
         child_id: scratchChildId,
         parent_id: user.id,
         family_id: familyId,
-        title: scratchTitle.trim() || 'Scratch surprise',
+        title: scratchTitle.trim() || (scratchRevealType === 'wheel' ? 'Spin surprise' : 'Scratch surprise'),
+        reveal_type: scratchRevealType,
         prize_type: scratchPrizeType,
         prize_label: prizeLabel,
-        stars_value: scratchPrizeType === 'stars' ? stars : 0,
+        stars_value: scratchPrizeType === 'stars' || scratchPrizeType === 'cash' ? stars : 0,
+        cash_value: scratchPrizeType === 'cash' ? stars : 0,
+        wheel_segments: scratchRevealType === 'wheel' ? ['₹5', 'Treat', prizeLabel, 'Bonus', 'Try again', 'Mystery'] : undefined,
         reason: scratchReason.trim() || 'Completed something special',
       });
 
       await sendMessage(
         scratchChildId,
         familyId,
-        'You received a scratch reward. Open it in Rewards.',
+        scratchRevealType === 'wheel' ? 'You received a spin wheel reward. Open it in Rewards.' : 'You received a scratch reward. Open it in Rewards.',
         'parent',
         familyId,
-        'Scratch reward'
+        scratchRevealType === 'wheel' ? 'Spin wheel reward' : 'Scratch reward'
       );
 
-      setSuccess('Scratch reward sent.');
+      setSuccess(scratchRevealType === 'wheel' ? 'Wheel reward sent.' : 'Scratch reward sent.');
       setScratchReason('');
-      setScratchPrizeLabel(scratchPrizeType === 'stars' ? `${stars} stars` : '');
+      setScratchPrizeLabel(scratchPrizeType === 'stars' ? `${stars} stars` : scratchPrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${stars}` : '');
     } catch (err) {
       console.error('Failed to send scratch reward:', err);
       setError('Could not send scratch reward.');
@@ -2125,17 +2156,19 @@ function ParentDashboardContent() {
     if (!user) return;
 
     const stars = Number(scratchTemplateStars);
-    if (scratchTemplatePrizeType === 'stars' && (!Number.isFinite(stars) || stars <= 0)) {
-      setError('Enter the star value for this scratch template.');
+    if ((scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash') && (!Number.isFinite(stars) || stars <= 0)) {
+      setError(`Enter the ${scratchTemplatePrizeType === 'cash' ? 'cash' : 'star'} value for this surprise template.`);
       return;
     }
 
     const prizeLabel = scratchTemplatePrizeType === 'stars'
       ? `${stars} stars`
+      : scratchTemplatePrizeType === 'cash'
+        ? `${rCurrencySymbol || '₹'}${stars}`
       : scratchTemplatePrizeLabel.trim();
 
     if (!prizeLabel) {
-      setError('Add the scratch template prize.');
+      setError('Add the surprise template prize.');
       return;
     }
 
@@ -2146,14 +2179,17 @@ function ParentDashboardContent() {
         parent_id: user.id,
         family_id: familyId,
         child_id: scratchTemplateChildId || '',
-        title: scratchTemplateTitle.trim() || 'Task completion scratch',
+        title: scratchTemplateTitle.trim() || (scratchTemplateRevealType === 'wheel' ? 'Task completion spin' : 'Task completion scratch'),
+        reveal_type: scratchTemplateRevealType,
         prize_type: scratchTemplatePrizeType,
         prize_label: prizeLabel,
-        stars_value: scratchTemplatePrizeType === 'stars' ? stars : 0,
+        stars_value: scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? stars : 0,
+        cash_value: scratchTemplatePrizeType === 'cash' ? stars : 0,
+        wheel_segments: scratchTemplateRevealType === 'wheel' ? ['₹5', 'Treat', prizeLabel, 'Bonus', 'Try again', 'Mystery'] : undefined,
         trigger: 'task_completion',
         is_active: true,
       });
-      setSuccess('Scratch template saved. Future completed tasks can award this card.');
+      setSuccess('Surprise template saved. Future completed tasks can award it.');
     } catch (err) {
       console.error('Failed to save scratch template:', err);
       setError('Could not save scratch template.');
@@ -2496,12 +2532,14 @@ function ParentDashboardContent() {
           const itemData = itemSnap.data();
           if (itemData.points_allocated && itemData.points_allocated > 0 && itemData.child_id && !itemData.attendance_approved) {
             updates.attendance_approved = true;
+            const rewardSettings = await fetchCashRewardSettings(familyId, user?.id);
+            const eventCashReward = calculateCashReward(itemData.points_allocated, Number(itemData.performance_stars || 5), rewardSettings);
             const profileRef = doc(db, 'child_profile', itemData.child_id);
             const profileSnap = await getDoc(profileRef);
             if (profileSnap.exists()) {
               const currentStars = profileSnap.data().total_stars || 0;
               await updateDoc(profileRef, {
-                total_stars: currentStars + itemData.points_allocated
+                total_stars: currentStars + eventCashReward.amount
               });
             }
           }
@@ -3536,17 +3574,37 @@ function ParentDashboardContent() {
                         {rewards[0] ? (
                           <div className="rounded-xl border px-3 py-2 text-sm font-bold" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Current rate: </span>
-                            <span style={{ color: 'var(--text-main)' }}>1 star = {rewards[0].star_to_currency_rate}</span>
+                            <span style={{ color: 'var(--text-main)' }}>1 point = {normalizeRewardSettings(rewards[0]).currency_symbol}{normalizeRewardSettings(rewards[0]).point_to_cash_rate}</span>
                           </div>
                         ) : null}
                       </div>
 
-                      <form onSubmit={handleSaveReward} className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
-                        <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star, e.g. 0.5" type="number" min="0" step="0.01" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                      <form onSubmit={handleSaveReward} className="grid grid-cols-1 gap-3">
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[120px_1fr_auto] lg:items-center">
+                          <input required value={rCurrencySymbol} onChange={(ev) => setRCurrencySymbol(ev.target.value)} placeholder="₹" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                          <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per point, e.g. 1" type="number" min="0" step="0.01" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
                         <label className="inline-flex items-center gap-2 text-sm">
                           <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
                           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
                         </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                          {([5, 4, 3, 2, 1] as const).map((star) => (
+                            <label key={star} className="rounded-xl border p-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>
+                              {star}★ payout %
+                              <input
+                                value={rPayoutPercentages[star]}
+                                onChange={(event) => setRPayoutPercentages((current) => ({ ...current, [star]: Number(event.target.value) || 0 }))}
+                                type="number"
+                                min="0"
+                                max="100"
+                                className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm"
+                                style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                              />
+                            </label>
+                          ))}
+                        </div>
 
                         <div className="flex gap-2">
                           <button disabled={rewardLoading} type="submit" className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : '+ Save Rule')}</button>
@@ -3562,13 +3620,13 @@ function ParentDashboardContent() {
 	                    {rewardsLoading ? (
                           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading cash rules...</p>
                         ) : rewards.length === 0 ? (
-                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No cash rule saved yet. Add a cash value per star to enable cash requests.</p>
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No cash rule saved yet. Add a cash value per point to enable cash requests.</p>
                         ) : (
                           <div className="grid gap-2 md:grid-cols-2">
                             {rewards.map((r) => (
                               <div key={r.id} className="rounded-xl p-3 border flex items-center justify-between gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
                                 <div>
-                                  <p className="font-semibold" style={{ color: 'var(--text-main)' }}>1 star = {r.star_to_currency_rate} cash value</p>
+                                  <p className="font-semibold" style={{ color: 'var(--text-main)' }}>1 point = {normalizeRewardSettings(r).currency_symbol}{normalizeRewardSettings(r).point_to_cash_rate}</p>
                                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Weekly bonus: {r.weekly_bonus_enabled ? 'enabled' : 'disabled'}</p>
                                 </div>
                                 <div className="flex gap-2">
@@ -3646,7 +3704,7 @@ function ParentDashboardContent() {
                           <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Award Template</h4>
                           <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">after task completion</span>
                         </div>
-                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-5 xl:items-center">
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-6 xl:items-center">
                           <select
                             value={scratchTemplateChildId}
                             onChange={(event) => setScratchTemplateChildId(event.target.value)}
@@ -3666,30 +3724,40 @@ function ParentDashboardContent() {
                             style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                           />
                           <select
+                            value={scratchTemplateRevealType}
+                            onChange={(event) => setScratchTemplateRevealType(event.target.value as 'scratch' | 'wheel')}
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                          >
+                            <option value="scratch">Scratch Card</option>
+                            <option value="wheel">Spin Wheel</option>
+                          </select>
+                          <select
                             value={scratchTemplatePrizeType}
                             onChange={(event) => {
                               const nextType = event.target.value as typeof scratchTemplatePrizeType;
                               setScratchTemplatePrizeType(nextType);
-                              setScratchTemplatePrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'stars' ? `${scratchTemplateStars || 10} stars` : '');
+                              setScratchTemplatePrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'cash' ? `${rCurrencySymbol || '₹'}${scratchTemplateStars || 10}` : nextType === 'stars' ? `${scratchTemplateStars || 10} stars` : '');
                             }}
                             className="rounded-xl py-2.5 px-3 border"
                             style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                           >
+                            <option value="cash">Cash</option>
                             <option value="stars">Stars</option>
                             <option value="book">Book</option>
                             <option value="toy">Toy</option>
                             <option value="treat">Treat</option>
                             <option value="custom">Custom</option>
                           </select>
-                          {scratchTemplatePrizeType === 'stars' ? (
+                          {scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? (
                             <input
                               value={scratchTemplateStars as any}
                               onChange={(event) => {
                                 const value = event.target.value === '' ? '' : Number(event.target.value);
                                 setScratchTemplateStars(value);
-                                setScratchTemplatePrizeLabel(value === '' ? '' : `${value} stars`);
+                                setScratchTemplatePrizeLabel(value === '' ? '' : scratchTemplatePrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${value}` : `${value} stars`);
                               }}
-                              placeholder="Stars"
+                              placeholder={scratchTemplatePrizeType === 'cash' ? 'Cash' : 'Stars'}
                               type="number"
                               min="1"
                               className="rounded-xl py-2.5 px-3 border"
@@ -3736,7 +3804,7 @@ function ParentDashboardContent() {
                         )}
                       </div>
 
-                      <form onSubmit={handleSendScratchReward} className="grid grid-cols-1 gap-3 xl:grid-cols-5 xl:items-center">
+                      <form onSubmit={handleSendScratchReward} className="grid grid-cols-1 gap-3 xl:grid-cols-6 xl:items-center">
                         <select
                           value={scratchChildId}
                           onChange={(event) => setScratchChildId(event.target.value)}
@@ -3756,30 +3824,40 @@ function ParentDashboardContent() {
                           style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
                         />
                         <select
+                          value={scratchRevealType}
+                          onChange={(event) => setScratchRevealType(event.target.value as 'scratch' | 'wheel')}
+                          className="rounded-xl py-2.5 px-3 border"
+                          style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        >
+                          <option value="scratch">Scratch Card</option>
+                          <option value="wheel">Spin Wheel</option>
+                        </select>
+                        <select
                           value={scratchPrizeType}
                           onChange={(event) => {
                             const nextType = event.target.value as typeof scratchPrizeType;
                             setScratchPrizeType(nextType);
-                            setScratchPrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'stars' ? `${scratchStars || 10} stars` : '');
+                            setScratchPrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'cash' ? `${rCurrencySymbol || '₹'}${scratchStars || 10}` : nextType === 'stars' ? `${scratchStars || 10} stars` : '');
                           }}
                           className="rounded-xl py-2.5 px-3 border"
                           style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
                         >
+                          <option value="cash">Cash</option>
                           <option value="stars">Stars</option>
                           <option value="book">Book</option>
                           <option value="toy">Toy</option>
                           <option value="treat">Treat</option>
                           <option value="custom">Custom</option>
                         </select>
-                        {scratchPrizeType === 'stars' ? (
+                        {scratchPrizeType === 'stars' || scratchPrizeType === 'cash' ? (
                           <input
                             value={scratchStars as any}
                             onChange={(event) => {
                               const value = event.target.value === '' ? '' : Number(event.target.value);
                               setScratchStars(value);
-                              setScratchPrizeLabel(value === '' ? '' : `${value} stars`);
+                              setScratchPrizeLabel(value === '' ? '' : scratchPrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${value}` : `${value} stars`);
                             }}
-                            placeholder="Stars"
+                            placeholder={scratchPrizeType === 'cash' ? 'Cash' : 'Stars'}
                             type="number"
                             min="1"
                             className="rounded-xl py-2.5 px-3 border"
@@ -3811,7 +3889,7 @@ function ParentDashboardContent() {
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Catalogue</h3>
-                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Set the star cost for screen time, treats, items, experiences, privileges, and learning rewards.</p>
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Set the cash cost for screen time, treats, items, experiences, privileges, and learning rewards.</p>
                         </div>
                         <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
                           Add Starter Catalogue
@@ -3891,7 +3969,14 @@ function ParentDashboardContent() {
                               </select>
                             )}
 
-                            <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Stars earned" type="number" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input value={tPoints as any} onChange={(e) => setTPoints(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Base cash value" type="number" min="0" step="0.01" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <select value={tPerformanceStars} onChange={(e) => setTPerformanceStars(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <option value={5}>5 stars - full amount</option>
+                              <option value={4}>4 stars - strong effort</option>
+                              <option value={3}>3 stars - half reward</option>
+                              <option value={2}>2 stars - partial reward</option>
+                              <option value={1}>1 star - token reward</option>
+                            </select>
                             <select value={tRecurrenceType} onChange={(e) => setTRecurrenceType(e.target.value as 'none' | 'daily' | 'weekly')} className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                               <option value="none">One-time</option>
                               <option value="daily">Daily quest</option>
@@ -4792,7 +4877,7 @@ function ParentDashboardContent() {
                               </div>
                               {rewards[0] ? (
                                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">
-                                  1 star = {rewards[0].star_to_currency_rate}
+                                  1 point = {normalizeRewardSettings(rewards[0]).currency_symbol}{normalizeRewardSettings(rewards[0]).point_to_cash_rate}
                                 </span>
                               ) : null}
                             </div>
@@ -4805,7 +4890,7 @@ function ParentDashboardContent() {
                                 {rewards.map((rewardRule) => (
                                   <div key={rewardRule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
                                     <div>
-                                      <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>1 star = {rewardRule.star_to_currency_rate} cash value</p>
+                                      <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>1 point = {normalizeRewardSettings(rewardRule).currency_symbol}{normalizeRewardSettings(rewardRule).point_to_cash_rate}</p>
                                       <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Weekly bonus: {rewardRule.weekly_bonus_enabled ? 'enabled' : 'disabled'}</p>
                                     </div>
                                     <button type="button" onClick={() => startEditReward(rewardRule)} className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-700">
@@ -4817,11 +4902,28 @@ function ParentDashboardContent() {
                             )}
                           </div>
                           <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
-                            <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per star" type="number" min="0" step="0.01" className="col-span-1 sm:col-span-2 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input required value={rCurrencySymbol} onChange={(ev) => setRCurrencySymbol(ev.target.value)} placeholder="₹" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                            <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per point" type="number" min="0" step="0.01" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
                             <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
                               <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
                               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
                             </label>
+                            <div className="col-span-1 sm:col-span-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                              {([5, 4, 3, 2, 1] as const).map((star) => (
+                                <label key={star} className="rounded-xl border p-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>
+                                  {star}★ %
+                                  <input
+                                    value={rPayoutPercentages[star]}
+                                    onChange={(event) => setRPayoutPercentages((current) => ({ ...current, [star]: Number(event.target.value) || 0 }))}
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm"
+                                    style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                                  />
+                                </label>
+                              ))}
+                            </div>
                             <div className="col-span-1 sm:col-span-3 flex gap-2">
                               <button disabled={rewardLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : '+ Save Setting')}</button>
                               {editRewardId ? (
