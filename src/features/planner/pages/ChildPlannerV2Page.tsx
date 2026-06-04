@@ -1590,41 +1590,6 @@ export default function ChildPlannerV2Page() {
                   </table>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <h4 className="text-sm font-black uppercase tracking-widest text-white">Subject Hours</h4>
-                      <p className="text-xs font-semibold text-white/40">{activityPeriodRange.label} • longest to shortest</p>
-                    </div>
-                    <p className="text-xs font-bold text-white/50">{monthlySubjectHours.length} subjects</p>
-                  </div>
-
-                  {monthlySubjectHours.length ? (
-                    <div className="mt-4 space-y-2">
-                      {monthlySubjectHours.map((item, index) => {
-                        const maxMinutes = monthlySubjectHours[0]?.minutes || 1;
-                        const width = `${Math.max(8, Math.round((item.minutes / maxMinutes) * 100))}%`;
-                        return (
-                          <div key={item.subject} className="grid grid-cols-[minmax(92px,160px)_1fr_auto] items-center gap-3">
-                            <div>
-                              <p className="truncate text-sm font-black text-white">{index + 1}. {item.subject}</p>
-                              <p className="text-[11px] font-bold text-white/40">{item.periods} periods</p>
-                            </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                              <div className="h-full rounded-full bg-cyan-400" style={{ width }} />
-                            </div>
-                            <p className="w-16 text-right text-sm font-black text-cyan-100">{item.hours}h</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="mt-4 rounded-xl border border-dashed border-white/10 px-4 py-5 text-center text-xs font-bold text-white/35">
-                      Add subjects into the timetable to see monthly hours.
-                    </p>
-                  )}
-                </div>
-
               </div>
             )}
 
@@ -1695,7 +1660,7 @@ export default function ChildPlannerV2Page() {
                   </form>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-3">
                   {subjectsByTimetableHours.length ? subjectsByTimetableHours.map((sub) => {
                     const subjectTasks = allEvents.filter(t => t.category === 'homework' && t.linkedProgramId === activeActivityId && t.subjectId === sub.id);
                     const subjectExams = allEvents.filter(e => e.category === 'exam' && e.linkedProgramId === activeActivityId && (e.subjectId === sub.id || e.subject === sub.name));
@@ -1705,25 +1670,29 @@ export default function ChildPlannerV2Page() {
                     <div 
                       key={sub.id} 
                       onClick={() => setExpandedSubjectId(expandedSubjectId === sub.id ? null : sub.id)}
-                      className={`relative group overflow-hidden flex flex-col justify-between rounded-3xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:bg-white/[0.05] cursor-pointer ${expandedSubjectId === sub.id ? 'ring-2 ring-indigo-500/50' : ''}`}
+                      className={`relative overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] transition-all hover:bg-white/[0.05] cursor-pointer ${expandedSubjectId === sub.id ? 'ring-2 ring-indigo-500/50' : ''}`}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      
-                      <div className="flex items-center gap-4 w-full">
-                        <div className="relative z-10 h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-xl shadow-inner">📚</div>
-                        <div className="relative z-10 flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-base font-bold text-white truncate">{sub.name}</p>
-                            {sub.includeInExams && (
-                              <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" title="Included in Exams" />
-                            )}
-                            {subjectHourInsight ? (
-                              <span className="flex-shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-black text-cyan-300">{subjectHourInsight.hours}h</span>
+                      <div className="grid grid-cols-1 items-center gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_120px_110px_auto]">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <p className="truncate text-base font-bold text-white">{sub.name}</p>
+                            {sub.includeInExams ? (
+                              <span className="rounded-full bg-rose-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-300">Exams</span>
                             ) : null}
                           </div>
-                          <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
+                          <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">
+                            {subjectHourInsight ? `${subjectHourInsight.periods} periods • ` : ''}{sub.teacherName || 'Independent Study'}
+                          </p>
                         </div>
-                        <div className="flex gap-1.5 opacity-100 transition-opacity z-20">
+                        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-white/35">Hours</p>
+                          <p className="mt-0.5 text-sm font-black text-cyan-300">{subjectHourInsight ? `${subjectHourInsight.hours}h` : '0h'}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-white/35">Tasks</p>
+                          <p className="mt-0.5 text-sm font-black text-white">{subjectTasks.length}</p>
+                        </div>
+                        <div className="flex justify-end gap-1.5 z-20">
                           <button 
                             onClick={(e) => { e.stopPropagation(); startEditSubject(sub); }}
                             className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"
@@ -1742,8 +1711,8 @@ export default function ChildPlannerV2Page() {
                       </div>
 
                       {expandedSubjectId === sub.id && (
-                        <div className="mt-4 pt-4 border-t border-white/10 space-y-3 z-10 relative w-full">
-                          <div>
+                        <div className="border-t border-white/10 p-4 pt-3 space-y-3 z-10 relative w-full">
+                          <div className="rounded-xl bg-black/20 p-3">
                             <p className="text-[10px] font-black uppercase tracking-wider text-cyan-400 mb-1.5">Tasks ({subjectTasks.length})</p>
                             {subjectTasks.length > 0 ? (
                               <div className="space-y-1 max-h-[120px] overflow-y-auto pr-1 custom-scrollbar">
@@ -1760,7 +1729,7 @@ export default function ChildPlannerV2Page() {
                           </div>
 
                           {sub.includeInExams && (
-                            <div>
+                            <div className="rounded-xl bg-black/20 p-3">
                               <p className="text-[10px] font-black uppercase tracking-wider text-rose-400 mb-1.5">Exams ({subjectExams.length})</p>
                               {subjectExams.length > 0 ? (
                                 <div className="space-y-1 max-h-[120px] overflow-y-auto pr-1 custom-scrollbar">
@@ -1782,7 +1751,7 @@ export default function ChildPlannerV2Page() {
                       )}
                     </div>
                   )}) : (
-                    <div className="col-span-full py-20 text-center text-white/20 font-medium">No subjects registered in this protocol.</div>
+                    <div className="py-20 text-center text-white/20 font-medium">No subjects registered in this protocol.</div>
                   )}
                 </div>
               </div>
