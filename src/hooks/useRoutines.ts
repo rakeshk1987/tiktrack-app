@@ -210,9 +210,13 @@ export function useRoutines(familyId: string, childId?: string) {
       const routineStart = routine.start_time || routine.schedule_time || '00:00';
       const routineEnd = routine.end_time || routine.schedule_time || routineStart;
       const inTimeWindow = status === 'completed' ? isTimeInRange(actualCompletedTime, routineStart, routineEnd) : false;
-      const rewardSettings = await fetchCashRewardSettings(familyId, familyId);
-      const routineCashReward = calculateCashReward(Number((routine as any).base_cash_value ?? routine.points ?? 0), Number((routine as any).performance_stars || 5), rewardSettings);
-      const starsAwarded = status === 'completed' && inTimeWindow ? routineCashReward.amount : 0;
+      const rewardSettings = status === 'completed' && inTimeWindow
+        ? await fetchCashRewardSettings(familyId, familyId)
+        : undefined;
+      const routineCashReward = status === 'completed' && inTimeWindow
+        ? calculateCashReward(Number((routine as any).base_cash_value ?? routine.points ?? 0), Number((routine as any).performance_stars || 5), rewardSettings)
+        : { amount: 0 };
+      const starsAwarded = routineCashReward.amount;
       const starsDelta = status === 'missed' ? -Math.abs(Number(routine.points || 0)) : (routine.requires_approval ? 0 : starsAwarded);
 
       const logData: RoutineLog = {

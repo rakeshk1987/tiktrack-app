@@ -77,13 +77,22 @@ export const fetchCashRewardSettings = async (familyId?: string, parentId?: stri
   if (ids.length === 0) return DEFAULT_CASH_REWARD_SETTINGS;
 
   for (const id of ids) {
-    const [familySnap, parentSnap] = await Promise.all([
-      getDocs(query(collection(db, 'reward_settings'), where('family_id', '==', id))),
-      getDocs(query(collection(db, 'reward_settings'), where('parent_id', '==', id))),
-    ]);
-    const docSnap = familySnap.docs[0] || parentSnap.docs[0];
+    const familySnap = await getDocs(query(collection(db, 'reward_settings'), where('family_id', '==', id))).catch((error) => {
+      console.warn('Reward settings family lookup skipped:', error);
+      return null;
+    });
+    const docSnap = familySnap?.docs[0];
     if (docSnap) {
       return normalizeRewardSettings(docSnap.data() as Record<string, unknown>);
+    }
+
+    const parentSnap = await getDocs(query(collection(db, 'reward_settings'), where('parent_id', '==', id))).catch((error) => {
+      console.warn('Reward settings parent lookup skipped:', error);
+      return null;
+    });
+    const parentDocSnap = parentSnap?.docs[0];
+    if (parentDocSnap) {
+      return normalizeRewardSettings(parentDocSnap.data() as Record<string, unknown>);
     }
   }
 

@@ -36,6 +36,9 @@ export function getTimetableClassPeriods(timetable: PlannerTimetable | null | un
 export function normalizePlannerTimetable(raw: Record<string, unknown>): PlannerTimetable {
   const periods = Array.isArray(raw.periods) ? (raw.periods as string[]) : [];
   const days = Array.isArray(raw.days) ? (raw.days as string[]) : [];
+  const rawDayPeriodCounts = raw.dayPeriodCounts && typeof raw.dayPeriodCounts === 'object'
+    ? (raw.dayPeriodCounts as Record<string, unknown>)
+    : {};
   const rawSlots = Array.isArray(raw.slots) ? raw.slots : [];
   const parsedSlots = rawSlots
     .filter((slot): slot is PlannerTimetableSlot => {
@@ -62,13 +65,36 @@ export function normalizePlannerTimetable(raw: Record<string, unknown>): Planner
     ? periods
     : slots.filter((slot) => slot.type === 'class').map((slot) => slot.id);
   const slotClassPeriods = slots.filter((slot) => slot.type === 'class').map((slot) => slot.id);
+  const nextDays = days.length ? days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const activeWeeks = typeof raw.activeWeeks === 'number' && Number.isFinite(raw.activeWeeks)
+    ? Math.max(1, Math.round(raw.activeWeeks))
+    : 4;
+  const maxPeriodCount = Math.max(1, slotClassPeriods.length || nextPeriods.length || 1);
+  const dayPeriodCounts = Object.fromEntries(
+    nextDays.map((day) => {
+      const count = Number(rawDayPeriodCounts[day]);
+      return [day, Number.isFinite(count) ? Math.max(0, Math.round(count)) : maxPeriodCount];
+    })
+  );
 
   return {
     periods: Array.from(new Set([...nextPeriods, ...slotClassPeriods])),
     slots,
-    days: days.length ? days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    days: nextDays,
+    activeWeeks,
+    dayPeriodCounts,
     data: (raw.data as PlannerTimetable['data']) || {}
   };
+}
+
+export function buildGeneratedTimetableSlots(maxPeriods: number, durationMinutes = 40) {
+  return Array.from({ length: Math.max(1, Math.round(maxPeriods)) }, (_, index) => ({
+    id: `Period ${index + 1}`,
+    label: String(index + 1),
+    type: 'class' as const,
+    session: index < 5 ? 'morning' as const : 'afternoon' as const,
+    durationMinutes
+  }));
 }
 
 export function getDefaultKidsTimetableSlots() {
@@ -102,9 +128,13 @@ export function buildTimetableSubjectMonthlyInsights(timetable: PlannerTimetable
     const weekday = DAY_TO_WEEKDAY.get(day.trim().toLowerCase());
     if (weekday === undefined) continue;
 
-    const dayOccurrences = countWeekdayInMonth(monthAnchor, weekday);
+    const dayOccurrences = timetable.activeWeeks || countWeekdayInMonth(monthAnchor, weekday);
+    const periodCount = timetable.dayPeriodCounts?.[day] ?? slots.filter((slot) => slot.type === 'class').length;
+    let classIndex = 0;
     for (const slot of slots) {
       if (slot.type !== 'class') continue;
+      if (classIndex >= periodCount) break;
+      classIndex += 1;
       const subject = normalizeSubject(timetable.data[slot.id]?.[day]?.subject || '');
       if (!subject) continue;
 

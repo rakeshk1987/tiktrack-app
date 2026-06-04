@@ -156,6 +156,8 @@ export interface PlannerTimetable {
   periods: string[];
   slots?: PlannerTimetableSlot[];
   days: string[];
+  activeWeeks?: number;
+  dayPeriodCounts?: Record<string, number>;
   data: Record<string, Record<string, PlannerTimetableCell | undefined>>;
 }
 

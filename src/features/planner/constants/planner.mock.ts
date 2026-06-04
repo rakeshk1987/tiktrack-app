@@ -105,6 +105,15 @@ export const DEFAULT_KIDS_TIMETABLE: PlannerTimetable = {
   periods: DEFAULT_KIDS_TIMETABLE_SLOTS.filter((slot) => slot.type === 'class').map((slot) => slot.id),
   slots: DEFAULT_KIDS_TIMETABLE_SLOTS,
   days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  activeWeeks: 4,
+  dayPeriodCounts: {
+    Mon: 8,
+    Tue: 8,
+    Wed: 8,
+    Thu: 8,
+    Fri: 8,
+    Sat: 8
+  },
   data: {}
 };
 

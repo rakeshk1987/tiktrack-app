@@ -9,7 +9,7 @@ import { addDoc, collection, query, serverTimestamp, where, doc, getDoc, updateD
 import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/core';
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../config/firebase';
-import { saveSchoolTimetableConfig, upsertSchoolTimetableCell } from '../services/planner.firestore';
+import { saveSchoolTimetableConfig } from '../services/planner.firestore';
 import { DEFAULT_KIDS_TIMETABLE } from '../constants/planner.mock';
 import { useChildProofs, useQuestActions } from '../../../hooks/useData';
 import { usePlannerEvents } from '../hooks/usePlannerEvents';
@@ -18,12 +18,10 @@ import { usePlannerTimetable } from '../hooks/usePlannerTimetable';
 import { usePlannerInsights } from '../hooks/usePlannerInsights';
 import { usePlannerChallenges } from '../hooks/usePlannerChallenges';
 import { usePlannerSubjects } from '../hooks/usePlannerSubjects';
-import { plannerTimetableCellSchema } from '../utils/planner.validation';
-import { buildTimetableSubjectMonthlyInsights, getTimetableClassPeriods } from '../utils/planner.timetable';
-import { SchoolTimetableTable } from '../components/parent/SchoolTimetableTable';
+import { buildGeneratedTimetableSlots, buildTimetableSubjectMonthlyInsights, getTimetableClassPeriods } from '../utils/planner.timetable';
 import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanner';
 import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
-import type { PlannerActivityModule, PlannerEvent, PlannerTimetableSlot } from '../types/planner.types';
+import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 import { expandRecurringEventForRange, formatPlannerRecurrence, getNextPlannerOccurrence, getPlannerExpiryStatus } from '../utils/planner.recurrence';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
@@ -74,22 +72,13 @@ function formatMonthYear(date: Date) {
   return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-function makeSlotId(label: string, existingSlots: PlannerTimetableSlot[]) {
-  const base = label.trim().replace(/[^a-z0-9]+/gi, ' ').trim() || 'Slot';
-  const existingIds = new Set(existingSlots.map((slot) => slot.id));
-  let id = base;
-  let index = 2;
-
-  while (existingIds.has(id)) {
-    id = `${base} ${index}`;
-    index += 1;
-  }
-
-  return id;
-}
-
 function sanitizeDayLabel(label: string) {
   return label.trim().slice(0, 16);
+}
+
+function toNonNegativeInteger(value: unknown, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric)) : fallback;
 }
 
 function expandPlannerEventsAsOccurrences(
@@ -113,21 +102,14 @@ export default function ChildPlannerV2Page() {
   const familyId = user?.linked_family_id || user?.id || '';
   const [activeTab, setActiveTab] = useState<ChildPlannerTab>('calendar');
   const [activitySubTab, setActivitySubTab] = useState<ActivitySubTab>('tasks');
-  const [period, setPeriod] = useState('Period 1');
-  const [day, setDay] = useState('Mon');
-  const [subject, setSubject] = useState('');
-  const [room, setRoom] = useState('');
-  const [teacher, setTeacher] = useState('');
   const [savingCell, setSavingCell] = useState(false);
   const [schoolError, setSchoolError] = useState('');
   const [showTimetableConfig, setShowTimetableConfig] = useState(false);
   const [timetableDaysDraft, setTimetableDaysDraft] = useState<string[]>(DEFAULT_KIDS_TIMETABLE.days);
-  const [timetableSlotsDraft, setTimetableSlotsDraft] = useState<PlannerTimetableSlot[]>(DEFAULT_KIDS_TIMETABLE.slots || []);
+  const [timetableActiveWeeksDraft, setTimetableActiveWeeksDraft] = useState(DEFAULT_KIDS_TIMETABLE.activeWeeks || 4);
+  const [timetableDayPeriodCountsDraft, setTimetableDayPeriodCountsDraft] = useState<Record<string, number>>(DEFAULT_KIDS_TIMETABLE.dayPeriodCounts || {});
+  const [periodDurationDraft, setPeriodDurationDraft] = useState(40);
   const [newTimetableDay, setNewTimetableDay] = useState('');
-  const [newSlotLabel, setNewSlotLabel] = useState('');
-  const [newSlotType, setNewSlotType] = useState<'class' | 'break'>('class');
-  const [newSlotSession, setNewSlotSession] = useState<'morning' | 'afternoon'>('morning');
-  const [newSlotDuration, setNewSlotDuration] = useState(40);
   const [savingTimetableConfig, setSavingTimetableConfig] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<PlannerEvent | null>(null);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(['all']);
@@ -139,6 +121,10 @@ export default function ChildPlannerV2Page() {
   const { timetable, refresh: refreshTimetable } = usePlannerTimetable(childId, false);
   const editableTimetable = timetable || DEFAULT_KIDS_TIMETABLE;
   const editablePeriods = useMemo(() => getTimetableClassPeriods(editableTimetable), [editableTimetable]);
+  const timetableMaxPeriods = useMemo(() => {
+    const counts = Object.values(editableTimetable.dayPeriodCounts || {});
+    return Math.max(1, ...counts, editablePeriods.length || 1);
+  }, [editablePeriods.length, editableTimetable.dayPeriodCounts]);
   const insights = usePlannerInsights(events);
 
   const activeActivityId = activeTab.startsWith('activity_') ? activeTab.replace('activity_', '') : '';
@@ -357,13 +343,10 @@ export default function ChildPlannerV2Page() {
   }, [activeActivityModules, activitySubTab]);
 
   useEffect(() => {
-    if (!editablePeriods.includes(period)) setPeriod(editablePeriods[0] || 'Period 1');
-    if (!editableTimetable.days.includes(day)) setDay(editableTimetable.days[0] || 'Mon');
-  }, [editableTimetable, editablePeriods, period, day]);
-
-  useEffect(() => {
     setTimetableDaysDraft(editableTimetable.days);
-    setTimetableSlotsDraft(editableTimetable.slots || []);
+    setTimetableActiveWeeksDraft(editableTimetable.activeWeeks || 4);
+    setTimetableDayPeriodCountsDraft(editableTimetable.dayPeriodCounts || {});
+    setPeriodDurationDraft(editableTimetable.slots?.find((slot) => slot.type === 'class')?.durationMinutes || 40);
   }, [editableTimetable]);
 
   async function handleCreateTask(e: React.FormEvent) {
@@ -535,6 +518,14 @@ export default function ChildPlannerV2Page() {
     }
   };
 
+  const resetSubjectForm = () => {
+    setNewSubjectName('');
+    setNewSubjectTeacher('');
+    setNewSubjectIncludeInExam(true);
+    setEditingSubjectId(null);
+    setShowSubjectForm(false);
+  };
+
   const startEditSubject = (sub: any) => {
     setEditingSubjectId(sub.id);
     setNewSubjectName(sub.name);
@@ -580,21 +571,42 @@ export default function ChildPlannerV2Page() {
     }
   }
 
-  async function saveSchoolCell() {
+  async function saveTimetableCellSubject(nextPeriod: string, nextDay: string, nextSubjectName: string) {
     setSchoolError('');
-    const parsed = plannerTimetableCellSchema.safeParse({ period, day, subject, room, teacher });
-    if (!parsed.success) {
-      setSchoolError(parsed.error.issues[0]?.message || 'Invalid timetable entry');
+    const selectedSubject = subjects.find((item) => item.name === nextSubjectName);
+    if (nextSubjectName && !selectedSubject) {
+      setSchoolError(subjects.length ? 'Select a subject from the Subjects section' : 'Add subjects in the Subjects section before filling the timetable');
       return;
     }
     if (!childId || !familyId) return;
     setSavingCell(true);
+
+    const nextData = {
+      ...editableTimetable.data,
+      [nextPeriod]: {
+        ...(editableTimetable.data[nextPeriod] || {})
+      }
+    };
+
+    if (nextSubjectName && selectedSubject) {
+      nextData[nextPeriod][nextDay] = {
+        subject: selectedSubject.name,
+        teacher: selectedSubject.teacherName || '',
+        room: editableTimetable.data[nextPeriod]?.[nextDay]?.room || ''
+      };
+    } else {
+      delete nextData[nextPeriod][nextDay];
+    }
+
     try {
-      await upsertSchoolTimetableCell(childId, familyId, parsed.data);
+      await saveSchoolTimetableConfig(childId, familyId, {
+        days: editableTimetable.days,
+        slots: editableTimetable.slots || [],
+        activeWeeks: editableTimetable.activeWeeks || 4,
+        dayPeriodCounts: editableTimetable.dayPeriodCounts || {},
+        data: nextData
+      });
       await refreshTimetable();
-      setSubject('');
-      setRoom('');
-      setTeacher('');
     } catch (error) {
       setSchoolError(error instanceof Error ? error.message : 'Failed to save timetable entry');
     } finally {
@@ -602,49 +614,21 @@ export default function ChildPlannerV2Page() {
     }
   }
 
-  function updateTimetableSlot(slotId: string, patch: Partial<PlannerTimetableSlot>) {
-    setTimetableSlotsDraft((current) =>
-      current.map((slot) =>
-        slot.id === slotId
-          ? { ...slot, ...patch, durationMinutes: Math.max(0, Math.round(Number(patch.durationMinutes ?? slot.durationMinutes ?? 40))) }
-          : slot
-      )
-    );
-  }
-
   function addTimetableDay() {
     const nextDay = sanitizeDayLabel(newTimetableDay);
     if (!nextDay || timetableDaysDraft.some((existingDay) => existingDay.toLowerCase() === nextDay.toLowerCase())) return;
     setTimetableDaysDraft((current) => [...current, nextDay]);
+    setTimetableDayPeriodCountsDraft((current) => ({ ...current, [nextDay]: 6 }));
     setNewTimetableDay('');
   }
 
   function removeTimetableDay(dayToRemove: string) {
     setTimetableDaysDraft((current) => current.filter((draftDay) => draftDay !== dayToRemove));
-  }
-
-  function addTimetableSlot() {
-    const label = newSlotLabel.trim();
-    if (!label) return;
-
-    const id = makeSlotId(newSlotType === 'class' ? `Period ${label}` : label, timetableSlotsDraft);
-    setTimetableSlotsDraft((current) => [
-      ...current,
-      {
-        id,
-        label,
-        type: newSlotType,
-        session: newSlotSession,
-        durationMinutes: Math.max(0, Math.round(newSlotDuration || 0))
-      }
-    ]);
-    setNewSlotLabel('');
-    setNewSlotType('class');
-    setNewSlotDuration(40);
-  }
-
-  function removeTimetableSlot(slotId: string) {
-    setTimetableSlotsDraft((current) => current.filter((slot) => slot.id !== slotId));
+    setTimetableDayPeriodCountsDraft((current) => {
+      const next = { ...current };
+      delete next[dayToRemove];
+      return next;
+    });
   }
 
   async function saveTimetableConfig() {
@@ -652,20 +636,18 @@ export default function ChildPlannerV2Page() {
     if (!childId || !familyId) return;
 
     const nextDays = timetableDaysDraft.map(sanitizeDayLabel).filter(Boolean);
-    const nextSlots = timetableSlotsDraft
-      .filter((slot) => slot.id && slot.label)
-      .map((slot) => ({
-        ...slot,
-        label: slot.label.trim(),
-        durationMinutes: Math.max(0, Math.round(slot.durationMinutes || 0))
-      }));
+    const nextDayPeriodCounts = Object.fromEntries(
+      nextDays.map((draftDay) => [draftDay, toNonNegativeInteger(timetableDayPeriodCountsDraft[draftDay])])
+    );
+    const maxPeriods = Math.max(1, ...Object.values(nextDayPeriodCounts));
+    const nextSlots = buildGeneratedTimetableSlots(maxPeriods, periodDurationDraft);
 
     if (nextDays.length === 0) {
       setSchoolError('Add at least one timetable day');
       return;
     }
-    if (!nextSlots.some((slot) => slot.type === 'class')) {
-      setSchoolError('Add at least one class period');
+    if (!Object.values(nextDayPeriodCounts).some((count) => count > 0)) {
+      setSchoolError('Set at least one period for one day');
       return;
     }
 
@@ -682,7 +664,13 @@ export default function ChildPlannerV2Page() {
 
     setSavingTimetableConfig(true);
     try {
-      await saveSchoolTimetableConfig(childId, familyId, { days: nextDays, slots: nextSlots, data: nextData });
+      await saveSchoolTimetableConfig(childId, familyId, {
+        days: nextDays,
+        slots: nextSlots,
+        activeWeeks: timetableActiveWeeksDraft,
+        dayPeriodCounts: nextDayPeriodCounts,
+        data: nextData
+      });
       await refreshTimetable();
       setShowTimetableConfig(false);
     } catch (error) {
@@ -1432,15 +1420,9 @@ export default function ChildPlannerV2Page() {
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Class Matrix</h3>
-                    <p className="text-sm font-medium text-white/40 italic">Editing: {day} // {period}</p>
+                    <p className="text-sm font-medium text-white/40 italic">{editableTimetable.activeWeeks || 4} active weeks // {timetableMaxPeriods} generated periods</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <select value={period} onChange={(e) => setPeriod(e.target.value)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 ring-cyan-500/50">
-                      {editablePeriods.map((p) => <option key={p} value={p} className="bg-slate-900">{p}</option>)}
-                    </select>
-                    <select value={day} onChange={(e) => setDay(e.target.value)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 ring-cyan-500/50">
-                      {editableTimetable.days.map((d) => <option key={d} value={d} className="bg-slate-900">{d}</option>)}
-                    </select>
                     <button
                       type="button"
                       onClick={() => setShowTimetableConfig((value) => !value)}
@@ -1457,7 +1439,7 @@ export default function ChildPlannerV2Page() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <h4 className="text-sm font-black uppercase tracking-widest text-white">Timetable Structure</h4>
-                        <p className="text-xs font-semibold text-white/40">Days, periods, breaks, sessions, and duration per slot.</p>
+                        <p className="text-xs font-semibold text-white/40">Active weeks, school days, and period count for each day.</p>
                       </div>
                       <button
                         type="button"
@@ -1472,7 +1454,26 @@ export default function ChildPlannerV2Page() {
 
                     <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
                       <div>
-                        <p className="mb-2 text-xs font-black uppercase tracking-widest text-white/50">School Days</p>
+                        <p className="mb-2 text-xs font-black uppercase tracking-widest text-white/50">Active Weeks</p>
+                        <input
+                          type="number"
+                          min={1}
+                          value={timetableActiveWeeksDraft}
+                          onChange={(e) => setTimetableActiveWeeksDraft(Math.max(1, toNonNegativeInteger(e.target.value, 1)))}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white outline-none"
+                        />
+
+                        <p className="mb-2 mt-4 text-xs font-black uppercase tracking-widest text-white/50">Period Duration</p>
+                        <input
+                          type="number"
+                          min={1}
+                          value={periodDurationDraft}
+                          onChange={(e) => setPeriodDurationDraft(Math.max(1, toNonNegativeInteger(e.target.value, 40)))}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white outline-none"
+                          aria-label="Period duration minutes"
+                        />
+
+                        <p className="mb-2 mt-4 text-xs font-black uppercase tracking-widest text-white/50">School Days</p>
                         <div className="flex flex-wrap gap-2">
                           {timetableDaysDraft.map((draftDay) => (
                             <button
@@ -1495,79 +1496,45 @@ export default function ChildPlannerV2Page() {
                       </div>
 
                       <div>
-                        <p className="mb-2 text-xs font-black uppercase tracking-widest text-white/50">Slots</p>
-                        <div className="space-y-2">
-                          {timetableSlotsDraft.map((slot) => (
-                            <div key={slot.id} className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-black/10 p-2 md:grid-cols-[1fr_120px_140px_120px_40px]">
-                              <input value={slot.label} onChange={(e) => updateTimetableSlot(slot.id, { label: e.target.value })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none" />
-                              <select value={slot.type} onChange={(e) => updateTimetableSlot(slot.id, { type: e.target.value as PlannerTimetableSlot['type'] })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none">
-                                <option value="class" className="bg-slate-900">Class</option>
-                                <option value="break" className="bg-slate-900">Break</option>
-                              </select>
-                              <select value={slot.session || 'morning'} onChange={(e) => updateTimetableSlot(slot.id, { session: e.target.value as PlannerTimetableSlot['session'] })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none">
-                                <option value="morning" className="bg-slate-900">Morning</option>
-                                <option value="afternoon" className="bg-slate-900">Afternoon</option>
-                              </select>
-                              <input type="number" min={0} value={slot.durationMinutes || 0} onChange={(e) => updateTimetableSlot(slot.id, { durationMinutes: Number(e.target.value) })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none" aria-label={`${slot.label} duration minutes`} />
-                              <button type="button" onClick={() => removeTimetableSlot(slot.id)} className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-rose-200 hover:bg-rose-500/10" aria-label={`Remove ${slot.label}`}>
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
+                        <p className="mb-2 text-xs font-black uppercase tracking-widest text-white/50">Periods Per Day</p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {timetableDaysDraft.map((draftDay) => (
+                            <label key={draftDay} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                              <span className="text-sm font-black text-white">{draftDay}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={timetableDayPeriodCountsDraft[draftDay] ?? 0}
+                                onChange={(e) => {
+                                  const count = toNonNegativeInteger(e.target.value);
+                                  setTimetableDayPeriodCountsDraft((current) => ({ ...current, [draftDay]: count }));
+                                }}
+                                className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-right text-xs font-bold text-white outline-none"
+                                aria-label={`${draftDay} period count`}
+                              />
+                            </label>
                           ))}
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_140px_120px_40px]">
-                          <input value={newSlotLabel} onChange={(e) => setNewSlotLabel(e.target.value)} placeholder={newSlotType === 'class' ? '9' : 'Tea Break'} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white placeholder:text-white/25 outline-none" />
-                          <select value={newSlotType} onChange={(e) => setNewSlotType(e.target.value as 'class' | 'break')} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none">
-                            <option value="class" className="bg-slate-900">Class</option>
-                            <option value="break" className="bg-slate-900">Break</option>
-                          </select>
-                          <select value={newSlotSession} onChange={(e) => setNewSlotSession(e.target.value as 'morning' | 'afternoon')} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none">
-                            <option value="morning" className="bg-slate-900">Morning</option>
-                            <option value="afternoon" className="bg-slate-900">Afternoon</option>
-                          </select>
-                          <input type="number" min={0} value={newSlotDuration} onChange={(e) => setNewSlotDuration(Number(e.target.value))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none" aria-label="New slot duration minutes" />
-                          <button type="button" onClick={addTimetableSlot} className="inline-flex items-center justify-center rounded-xl bg-cyan-500 text-white hover:bg-cyan-400" aria-label="Add timetable slot">
-                            <Plus size={16} />
-                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {subjects.length > 0 ? (
-                    <select 
-                      value={subject} 
-                      onChange={(e) => {
-                        const subName = e.target.value;
-                        setSubject(subName);
-                        const subObj = subjects.find(s => s.name === subName);
-                        if (subObj?.teacherName) setTeacher(subObj.teacherName);
-                      }} 
-                      className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white focus:bg-white/10 transition-all outline-none"
+                {subjects.length === 0 && (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-xs font-bold text-amber-100">
+                    Add subjects in the Subjects section before filling the timetable.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActivitySubTab('subjects');
+                        setShowSubjectForm(true);
+                      }}
+                      className="ml-3 rounded-lg bg-amber-300 px-3 py-1.5 font-black uppercase tracking-widest text-slate-950"
                     >
-                      <option value="" className="bg-slate-900">Select Subject</option>
-                      {subjects.map(s => <option key={s.id} value={s.name} className="bg-slate-900">{s.name}</option>)}
-                    </select>
-                  ) : (
-                    <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Core Subject" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
-                  )}
-                  <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Facility/Room" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
-                  <input value={teacher} onChange={(e) => setTeacher(e.target.value)} placeholder="Lead Instructor" className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white placeholder:text-white/20 focus:bg-white/10 transition-all outline-none" />
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <button 
-                    type="button" 
-                    onClick={() => void saveSchoolCell()} 
-                    disabled={savingCell} 
-                    className="flex-1 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 py-4 text-sm font-black uppercase tracking-widest text-white shadow-xl shadow-cyan-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                  >
-                    {savingCell ? 'Updating Matrix...' : 'Commit Changes to Timetable'}
-                  </button>
-                </div>
+                      Add Subject
+                    </button>
+                  </div>
+                )}
 
                 {schoolError && (
                   <div className="rounded-2xl bg-rose-500/10 border border-rose-500/20 p-4 text-xs font-bold text-rose-400 animate-bounce">
@@ -1575,11 +1542,60 @@ export default function ChildPlannerV2Page() {
                   </div>
                 )}
 
+                <div className="rounded-[2rem] border border-white/5 bg-black/20 p-4 overflow-x-auto custom-scrollbar">
+                  <table className="min-w-[820px] w-full border-collapse text-xs text-white/80">
+                    <thead>
+                      <tr>
+                        <th className="sticky left-0 z-20 border border-white/10 bg-slate-950 px-3 py-3 text-left font-black uppercase tracking-widest text-white">Day</th>
+                        {Array.from({ length: timetableMaxPeriods }, (_, index) => (
+                          <th key={index} className="border border-white/10 bg-cyan-500/10 px-3 py-3 text-center font-black text-white">
+                            Period {index + 1}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editableTimetable.days.map((tableDay) => {
+                        const periodCount = editableTimetable.dayPeriodCounts?.[tableDay] ?? timetableMaxPeriods;
+                        return (
+                          <tr key={tableDay}>
+                            <td className="sticky left-0 z-10 border border-white/10 bg-slate-950 px-3 py-3 font-black uppercase tracking-widest text-white">{tableDay}</td>
+                            {Array.from({ length: timetableMaxPeriods }, (_, index) => {
+                              const periodId = `Period ${index + 1}`;
+                              const isActiveCell = index < periodCount;
+                              const cell = editableTimetable.data[periodId]?.[tableDay];
+                              return (
+                                <td key={`${tableDay}-${periodId}`} className="border border-white/10 p-2">
+                                  {isActiveCell ? (
+                                    <select
+                                      value={subjects.some((item) => item.name === cell?.subject) ? cell?.subject || '' : ''}
+                                      disabled={subjects.length === 0 || savingCell}
+                                      onChange={(e) => void saveTimetableCellSubject(periodId, tableDay, e.target.value)}
+                                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <option value="" className="bg-slate-900">Select</option>
+                                      {subjects.map((sub) => (
+                                        <option key={sub.id} value={sub.name} className="bg-slate-900">{sub.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <div className="rounded-lg border border-dashed border-white/10 px-3 py-2 text-center font-bold text-white/20">Off</div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
                 <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h4 className="text-sm font-black uppercase tracking-widest text-white">Subject Hours</h4>
-                      <p className="text-xs font-semibold text-white/40">{activityPeriodRange.label} • longest to shortest</p>
+                      <p className="text-xs font-semibold text-white/40">{editableTimetable.activeWeeks || 4} active weeks • longest to shortest</p>
                     </div>
                     <p className="text-xs font-bold text-white/50">{monthlySubjectHours.length} subjects</p>
                   </div>
@@ -1610,24 +1626,6 @@ export default function ChildPlannerV2Page() {
                   )}
                 </div>
 
-                <div className="rounded-[2rem] border border-white/5 bg-black/20 p-4 overflow-x-auto custom-scrollbar">
-                  <SchoolTimetableTable
-                    periods={editableTimetable.periods}
-                    slots={editableTimetable.slots}
-                    days={editableTimetable.days}
-                    data={editableTimetable.data}
-                    selectedDay={day}
-                    selectedPeriod={period}
-                    onCellSelect={(nextPeriod, nextDay) => {
-                      setPeriod(nextPeriod);
-                      setDay(nextDay);
-                      const existing = editableTimetable.data[nextPeriod]?.[nextDay];
-                      setSubject(existing?.subject || '');
-                      setRoom(existing?.room || '');
-                      setTeacher(existing?.teacher || '');
-                    }}
-                  />
-                </div>
               </div>
             )}
 
@@ -1639,7 +1637,18 @@ export default function ChildPlannerV2Page() {
                     <p className="text-xs text-white/40">{editingSubjectId ? 'Refine the subject details below.' : 'Define the core subjects for this program.'}</p>
                   </div>
                   <button 
-                    onClick={() => setShowSubjectForm(!showSubjectForm)}
+                    type="button"
+                    onClick={() => {
+                      if (showSubjectForm) {
+                        resetSubjectForm();
+                      } else {
+                        setEditingSubjectId(null);
+                        setNewSubjectName('');
+                        setNewSubjectTeacher('');
+                        setNewSubjectIncludeInExam(true);
+                        setShowSubjectForm(true);
+                      }
+                    }}
                     className="rounded-full bg-indigo-400/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 hover:bg-indigo-400/20 transition-all"
                   >
                     {showSubjectForm ? 'Cancel' : '+ New Subject'}
@@ -1711,7 +1720,7 @@ export default function ChildPlannerV2Page() {
                           </div>
                           <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
                         </div>
-                        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                        <div className="flex gap-1.5 opacity-100 transition-opacity z-20">
                           <button 
                             onClick={(e) => { e.stopPropagation(); startEditSubject(sub); }}
                             className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"

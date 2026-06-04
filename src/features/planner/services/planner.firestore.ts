@@ -265,6 +265,7 @@ export async function upsertSchoolTimetableCell(childId: string, familyId: strin
   const classPeriods = slots.filter((slot) => slot.type === 'class').map((slot) => slot.id);
   const periods = existing?.periods?.length ? existing.periods : classPeriods;
   const days = existing?.days?.length ? existing.days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayPeriodCounts = existing?.dayPeriodCounts || Object.fromEntries(days.map((timetableDay) => [timetableDay, periods.length]));
   const data = existing?.data || {};
 
   const nextPeriods = periods.includes(input.period) ? periods : [...periods, input.period];
@@ -290,6 +291,8 @@ export async function upsertSchoolTimetableCell(childId: string, familyId: strin
     periods: nextPeriods,
     slots,
     days: nextDays,
+    activeWeeks: existing?.activeWeeks || 4,
+    dayPeriodCounts,
     data: nextData,
     updated_at: new Date().toISOString(),
     updated_ts: serverTimestamp(),
@@ -300,7 +303,7 @@ export async function upsertSchoolTimetableCell(childId: string, familyId: strin
 export async function saveSchoolTimetableConfig(
   childId: string,
   familyId: string,
-  input: { days: string[]; slots: PlannerTimetableSlot[]; data: PlannerTimetable['data'] }
+  input: { days: string[]; slots: PlannerTimetableSlot[]; data: PlannerTimetable['data']; activeWeeks?: number; dayPeriodCounts?: Record<string, number> }
 ): Promise<void> {
   const timetableRef = doc(db, 'school_timetables', `${childId}_active`);
   const slots = input.slots.filter((slot) => slot.id && slot.label);
@@ -313,6 +316,8 @@ export async function saveSchoolTimetableConfig(
     periods,
     slots,
     days: input.days.filter(Boolean),
+    activeWeeks: Math.max(1, Math.round(input.activeWeeks || 4)),
+    dayPeriodCounts: input.dayPeriodCounts || {},
     data: input.data,
     updated_at: new Date().toISOString(),
     updated_ts: serverTimestamp(),
