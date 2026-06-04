@@ -1,8 +1,9 @@
 import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { PLANNER_CATEGORY_COLORS } from '../constants/planner.constants';
-import type { PlannerActivityModule, PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable } from '../types/planner.types';
+import type { PlannerActivityModule, PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable, PlannerTimetableSlot } from '../types/planner.types';
 import type { PlannerEventInput, PlannerQuickAddInput, PlannerTimetableCellInput } from '../utils/planner.validation';
+import { getDefaultKidsTimetableSlots, normalizePlannerTimetable } from '../utils/planner.timetable';
 
 export function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEvent {
   return {
@@ -169,11 +170,7 @@ export async function fetchSchoolTimetable(childId: string): Promise<PlannerTime
   if (snap.empty) return null;
 
   const raw = snap.docs[0].data() as Record<string, unknown>;
-  return {
-    periods: Array.isArray(raw.periods) ? (raw.periods as string[]) : [],
-    days: Array.isArray(raw.days) ? (raw.days as string[]) : [],
-    data: (raw.data as PlannerTimetable['data']) || {}
-  };
+  return normalizePlannerTimetable(raw);
 }
 
 export async function createParentPlannerEvent(parentId: string, familyId: string, childId: string, input: PlannerEventInput): Promise<string> {
@@ -263,8 +260,11 @@ export async function createChildQuickPlannerEvent(childId: string, familyId: st
 export async function upsertSchoolTimetableCell(childId: string, familyId: string, input: PlannerTimetableCellInput): Promise<void> {
   const timetableRef = doc(db, 'school_timetables', `${childId}_active`);
   const existing = await fetchSchoolTimetable(childId);
-  const periods = existing?.periods || [];
-  const days = existing?.days || [];
+  const defaultSlots = getDefaultKidsTimetableSlots();
+  const slots = existing?.slots?.length ? existing.slots : defaultSlots;
+  const classPeriods = slots.filter((slot) => slot.type === 'class').map((slot) => slot.id);
+  const periods = existing?.periods?.length ? existing.periods : classPeriods;
+  const days = existing?.days?.length ? existing.days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const data = existing?.data || {};
 
   const nextPeriods = periods.includes(input.period) ? periods : [...periods, input.period];
@@ -288,8 +288,32 @@ export async function upsertSchoolTimetableCell(childId: string, familyId: strin
     child_id: childId,
     is_active: true,
     periods: nextPeriods,
+    slots,
     days: nextDays,
     data: nextData,
+    updated_at: new Date().toISOString(),
+    updated_ts: serverTimestamp(),
+    created_ts: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function saveSchoolTimetableConfig(
+  childId: string,
+  familyId: string,
+  input: { days: string[]; slots: PlannerTimetableSlot[]; data: PlannerTimetable['data'] }
+): Promise<void> {
+  const timetableRef = doc(db, 'school_timetables', `${childId}_active`);
+  const slots = input.slots.filter((slot) => slot.id && slot.label);
+  const periods = slots.filter((slot) => slot.type === 'class').map((slot) => slot.id);
+
+  await setDoc(timetableRef, {
+    family_id: familyId,
+    child_id: childId,
+    is_active: true,
+    periods,
+    slots,
+    days: input.days.filter(Boolean),
+    data: input.data,
     updated_at: new Date().toISOString(),
     updated_ts: serverTimestamp(),
     created_ts: serverTimestamp()

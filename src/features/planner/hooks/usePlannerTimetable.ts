@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where, limit } from 'firebase/firestore'
 import { db } from '../../../config/firebase';
 import { MOCK_PLANNER_TIMETABLE } from '../constants/planner.mock';
 import type { PlannerTimetable } from '../types/planner.types';
+import { normalizePlannerTimetable } from '../utils/planner.timetable';
 
 export function usePlannerTimetable(childId: string, useMockFallback = true) {
   const [timetable, setTimetable] = useState<PlannerTimetable | null>(null);
@@ -30,11 +31,7 @@ export function usePlannerTimetable(childId: string, useMockFallback = true) {
           setTimetable(useMockFallback ? MOCK_PLANNER_TIMETABLE : null);
         } else {
           const raw = snap.docs[0].data() as Record<string, unknown>;
-          setTimetable({
-            periods: Array.isArray(raw.periods) ? (raw.periods as string[]) : [],
-            days: Array.isArray(raw.days) ? (raw.days as string[]) : [],
-            data: (raw.data as PlannerTimetable['data']) || {}
-          });
+          setTimetable(normalizePlannerTimetable(raw));
         }
         setLoading(false);
       },
@@ -50,4 +47,3 @@ export function usePlannerTimetable(childId: string, useMockFallback = true) {
 
   return { timetable, loading, refresh: () => {} };
 }
-

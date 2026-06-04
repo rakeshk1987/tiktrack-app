@@ -86,9 +86,30 @@ export const MOCK_PLANNER_PROGRAMS: PlannerProgram[] = [
   }
 ];
 
+export const DEFAULT_KIDS_TIMETABLE_SLOTS: PlannerTimetable['slots'] = [
+  { id: 'Assembly', label: 'Assembly', type: 'break', session: 'morning', durationMinutes: 15 },
+  { id: 'Period 1', label: '1', type: 'class', session: 'morning', durationMinutes: 40 },
+  { id: 'Period 2', label: '2', type: 'class', session: 'morning', durationMinutes: 40 },
+  { id: 'Snacks Break', label: 'Snacks Break', type: 'break', session: 'morning', durationMinutes: 10 },
+  { id: 'Period 3', label: '3', type: 'class', session: 'morning', durationMinutes: 40 },
+  { id: 'Period 4', label: '4', type: 'class', session: 'morning', durationMinutes: 40 },
+  { id: 'Period 5', label: '5', type: 'class', session: 'morning', durationMinutes: 40 },
+  { id: 'Lunch Break', label: 'Lunch Break', type: 'break', session: 'afternoon', durationMinutes: 40 },
+  { id: 'Period 6', label: '6', type: 'class', session: 'afternoon', durationMinutes: 40 },
+  { id: 'Period 7', label: '7', type: 'class', session: 'afternoon', durationMinutes: 40 },
+  { id: 'Short Break', label: 'Short Break', type: 'break', session: 'afternoon', durationMinutes: 10 },
+  { id: 'Period 8', label: '8', type: 'class', session: 'afternoon', durationMinutes: 40 }
+];
+
+export const DEFAULT_KIDS_TIMETABLE: PlannerTimetable = {
+  periods: DEFAULT_KIDS_TIMETABLE_SLOTS.filter((slot) => slot.type === 'class').map((slot) => slot.id),
+  slots: DEFAULT_KIDS_TIMETABLE_SLOTS,
+  days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  data: {}
+};
+
 export const MOCK_PLANNER_TIMETABLE: PlannerTimetable = {
-  periods: ['Period 1', 'Period 2', 'Period 3', 'Period 4', 'Period 5'],
-  days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+  ...DEFAULT_KIDS_TIMETABLE,
   data: {
     'Period 1': { Mon: { subject: 'Math', room: 'A2' }, Tue: { subject: 'Physics', room: 'B1' }, Wed: { subject: 'English', room: 'C3' }, Thu: { subject: 'Biology', room: 'B2' }, Fri: { subject: 'Chemistry', room: 'Lab' } },
     'Period 2': { Mon: { subject: 'History', room: 'A1' }, Tue: { subject: 'Math', room: 'A2' }, Wed: { subject: 'Computer', room: 'Lab' }, Thu: { subject: 'Geography', room: 'C1' }, Fri: { subject: 'English', room: 'C3' } },

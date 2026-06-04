@@ -141,8 +141,20 @@ export interface PlannerTimetableCell {
   teacher?: string;
 }
 
+export type PlannerTimetableSlotType = 'class' | 'break';
+export type PlannerTimetableSession = 'morning' | 'afternoon';
+
+export interface PlannerTimetableSlot {
+  id: string;
+  label: string;
+  type: PlannerTimetableSlotType;
+  session?: PlannerTimetableSession;
+  durationMinutes?: number;
+}
+
 export interface PlannerTimetable {
   periods: string[];
+  slots?: PlannerTimetableSlot[];
   days: string[];
   data: Record<string, Record<string, PlannerTimetableCell | undefined>>;
 }
