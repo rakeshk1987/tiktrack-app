@@ -900,6 +900,7 @@ function ParentDashboardContent() {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
+      setSelectedActivityDetail((current) => current?.kind === 'task' && current.item?.id === taskId ? null : current);
       setSuccess('Task deleted.');
     } catch (err) {
       console.error('Failed to delete task:', err);
@@ -5469,7 +5470,10 @@ function ParentDashboardContent() {
                       <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{task.title}</p>
                       <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{activityRecurrenceLabel(task)} • {activityExpiryStatus('task', task)}</p>
                     </div>
-                    <button type="button" onClick={() => setSelectedActivityDetail({ kind: 'task', item: task })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Details</button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button type="button" onClick={() => setSelectedActivityDetail({ kind: 'task', item: task })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Details</button>
+                      <button type="button" onClick={() => void handleDeleteTask(task.id)} className="rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200">Delete</button>
+                    </div>
                   </div>
                 ))}
                 <p className="pt-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Map Existing Tasks</p>
@@ -5737,7 +5741,18 @@ function ParentDashboardContent() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400">{kind} details</p>
                   <h3 className="mt-1 text-xl font-bold" style={{ color: 'var(--text-main)' }}>{activityItemTitle(kind, item)}</h3>
                 </div>
-                <button type="button" onClick={() => setSelectedActivityDetail(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {kind === 'task' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteTask(item.id)}
+                      className="rounded-lg bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700 hover:bg-rose-200"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={() => setSelectedActivityDetail(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
