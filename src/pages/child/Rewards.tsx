@@ -4,7 +4,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import RewardMarketplace from '../../components/RewardMarketplace';
 import { db } from '../../config/firebase';
 import { useRedemptions, useRewards } from '../../hooks/useRedemptions';
-import { useRewardLedger } from '../../hooks/useRewardLedger';
+import { getRewardLedgerMonthSummary, useRewardLedger } from '../../hooks/useRewardLedger';
 import { useScratchRewards } from '../../hooks/useScratchRewards';
 import { useChildLayout } from './ChildLayout';
 import { computeMonthlyStars, getChildBadges, getLevelProgress } from '../../utils/childProgression';
@@ -83,16 +83,12 @@ export default function ChildRewards() {
   }, [parentId, profile.id, tasks]);
 
   const monthlySpentStars = useMemo(() => {
-    const now = new Date();
-    return redemptions
-      .filter((redemption) => {
-        const ts = new Date(redemption.requested_at);
-        return ts.getFullYear() === now.getFullYear() && ts.getMonth() === now.getMonth();
-      })
-      .reduce((sum, redemption) => sum + Number(redemption.stars_spent || 0), 0);
-  }, [redemptions]);
+    return getRewardLedgerMonthSummary(visibleEntries).spent;
+  }, [visibleEntries]);
+  const monthlyLedgerSummary = useMemo(() => getRewardLedgerMonthSummary(visibleEntries), [visibleEntries]);
+  const monthlyDisplayEarned = monthlyLedgerSummary.earned || monthlyEarnedStars;
 
-  const monthlyPayoutEstimate = useMemo(() => Number((monthlyEarnedStars * conversionRate).toFixed(2)), [conversionRate, monthlyEarnedStars]);
+  const monthlyPayoutEstimate = useMemo(() => Number((monthlyDisplayEarned * conversionRate).toFixed(2)), [conversionRate, monthlyDisplayEarned]);
   const availableStars = Number(profile.total_stars || 0);
   const cashStarsValue = cashStars === '' ? 0 : Number(cashStars);
   const cashEstimate = Number(cashStarsValue.toFixed(2));
@@ -185,7 +181,7 @@ export default function ChildRewards() {
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Balance</p><p className="mt-1 text-2xl font-black">{formatCash(profile.total_stars || 0, currencySymbol)}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Monthly Cash</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyEarnedStars, currencySymbol)}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>{monthlyLedgerSummary.label}</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyDisplayEarned, currencySymbol)}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Base Estimate</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyPayoutEstimate, currencySymbol)}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Spent</p><p className="mt-1 text-2xl font-black">{formatCash(monthlySpentStars, currencySymbol)}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Streak / Shields</p><p className="mt-1 text-2xl font-black">{profile.streak_count || 0} / {profile.streak_shields || 0}</p></div>

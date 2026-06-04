@@ -23,6 +23,30 @@ export const createRewardLedgerEntry = async (entry: NewRewardLedgerEntry) => {
   } as RewardLedgerEntry;
 };
 
+export function getRewardLedgerMonthSummary(entries: RewardLedgerEntry[], monthAnchor = new Date()) {
+  const monthStart = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1);
+  const nextMonthStart = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 1);
+  const monthEntries = entries.filter((entry) => {
+    const createdAt = new Date(entry.created_at);
+    return createdAt >= monthStart && createdAt < nextMonthStart;
+  });
+
+  const earned = monthEntries
+    .filter((entry) => Number(entry.stars_delta) > 0)
+    .reduce((sum, entry) => sum + Number(entry.stars_delta || 0), 0);
+  const spent = Math.abs(monthEntries
+    .filter((entry) => Number(entry.stars_delta) < 0)
+    .reduce((sum, entry) => sum + Number(entry.stars_delta || 0), 0));
+
+  return {
+    earned,
+    spent,
+    net: earned - spent,
+    entries: monthEntries,
+    label: monthAnchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+  };
+}
+
 export function useRewardLedger(childId: string, familyId?: string) {
   const [entries, setEntries] = useState<RewardLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);

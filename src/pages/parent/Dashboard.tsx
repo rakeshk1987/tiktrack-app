@@ -43,7 +43,7 @@ import { useRoutineConfiguration } from '../../hooks/useRoutineConfiguration';
 import { useTaskScheduler } from '../../hooks/useTaskScheduler';
 import { getDefaultReminders, useReminders } from '../../hooks/useReminders';
 import { getDefaultRewards, useRedemptions, useRewards } from '../../hooks/useRedemptions';
-import { createRewardLedgerEntry } from '../../hooks/useRewardLedger';
+import { createRewardLedgerEntry, getRewardLedgerMonthSummary, useRewardLedger } from '../../hooks/useRewardLedger';
 import { awardScratchRewardForTrigger, useScratchRewards } from '../../hooks/useScratchRewards';
 import { useApprovals } from '../../hooks/useApprovals';
 import type { ChildProfile, Event as AppEvent, ExamResult, Reminder, RewardItem } from '../../types/schema';
@@ -2354,6 +2354,14 @@ function ParentDashboardContent() {
     updateRedemptionStatus
   } = useRedemptions(selectedAutomationChildId, familyId);
   const {
+    entries: selectedRewardLedger,
+    loading: selectedRewardLedgerLoading
+  } = useRewardLedger(selectedAutomationChildId, familyId);
+  const selectedRewardMonthSummary = useMemo(
+    () => getRewardLedgerMonthSummary(selectedRewardLedger),
+    [selectedRewardLedger]
+  );
+  const {
     templates: scratchTemplates,
     templatesLoading: scratchTemplatesLoading,
     createScratchCard,
@@ -3714,6 +3722,45 @@ function ParentDashboardContent() {
                           </div>
 	                    )}
 	                  </div>
+                    </div>
+
+                    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Month So Far</h3>
+                          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                            Earned, spent, and current balance for the selected child.
+                          </p>
+                        </div>
+                        <select value={selectedAutomationChildId} onChange={(event) => setAutomationChildId(event.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                          {children.map((child) => (
+                            <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedRewardLedgerLoading ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading reward month...</p>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.10)' }}>
+                            <p className="text-xs font-bold uppercase text-emerald-500">{selectedRewardMonthSummary.label} Earned</p>
+                            <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{rCurrencySymbol || '₹'}{selectedRewardMonthSummary.earned}</p>
+                          </div>
+                          <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'rgba(244,63,94,0.35)', background: 'rgba(244,63,94,0.10)' }}>
+                            <p className="text-xs font-bold uppercase text-rose-500">Spent / Paid</p>
+                            <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{rCurrencySymbol || '₹'}{selectedRewardMonthSummary.spent}</p>
+                          </div>
+                          <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)', background: 'rgba(34,211,238,0.10)' }}>
+                            <p className="text-xs font-bold uppercase text-cyan-500">Net This Month</p>
+                            <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{rCurrencySymbol || '₹'}{selectedRewardMonthSummary.net}</p>
+                          </div>
+                          <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                            <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Current Balance</p>
+                            <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{rCurrencySymbol || '₹'}{Number(selectedAutomationProfile?.total_stars || 0)}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
