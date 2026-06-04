@@ -128,7 +128,7 @@ export function buildTimetableSubjectMonthlyInsights(timetable: PlannerTimetable
     const weekday = DAY_TO_WEEKDAY.get(day.trim().toLowerCase());
     if (weekday === undefined) continue;
 
-    const dayOccurrences = timetable.activeWeeks || countWeekdayInMonth(monthAnchor, weekday);
+    const dayOccurrences = countWeekdayInMonth(monthAnchor, weekday);
     const periodCount = timetable.dayPeriodCounts?.[day] ?? slots.filter((slot) => slot.type === 'class').length;
     let classIndex = 0;
     for (const slot of slots) {

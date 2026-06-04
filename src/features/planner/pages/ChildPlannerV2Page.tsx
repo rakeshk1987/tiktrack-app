@@ -106,7 +106,6 @@ export default function ChildPlannerV2Page() {
   const [schoolError, setSchoolError] = useState('');
   const [showTimetableConfig, setShowTimetableConfig] = useState(false);
   const [timetableDaysDraft, setTimetableDaysDraft] = useState<string[]>(DEFAULT_KIDS_TIMETABLE.days);
-  const [timetableActiveWeeksDraft, setTimetableActiveWeeksDraft] = useState(DEFAULT_KIDS_TIMETABLE.activeWeeks || 4);
   const [timetableDayPeriodCountsDraft, setTimetableDayPeriodCountsDraft] = useState<Record<string, number>>(DEFAULT_KIDS_TIMETABLE.dayPeriodCounts || {});
   const [periodDurationDraft, setPeriodDurationDraft] = useState(40);
   const [newTimetableDay, setNewTimetableDay] = useState('');
@@ -185,6 +184,16 @@ export default function ChildPlannerV2Page() {
   );
   const { challenges, createChallenge, incrementScore } = usePlannerChallenges(childId, activeActivityId, activityPointsConfig?.challengePoints);
   const { subjects, addSubject: addNewSubject, removeSubject, updateSubject } = usePlannerSubjects(childId, activeActivityId);
+  const subjectHoursByName = useMemo(() => {
+    return new Map(monthlySubjectHours.map((item) => [item.subject.toLowerCase(), item]));
+  }, [monthlySubjectHours]);
+  const subjectsByTimetableHours = useMemo(() => {
+    return [...subjects].sort((a, b) => {
+      const aMinutes = subjectHoursByName.get(a.name.toLowerCase())?.minutes || 0;
+      const bMinutes = subjectHoursByName.get(b.name.toLowerCase())?.minutes || 0;
+      return bMinutes - aMinutes || a.name.localeCompare(b.name);
+    });
+  }, [subjectHoursByName, subjects]);
 
   // New Form States
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -344,7 +353,6 @@ export default function ChildPlannerV2Page() {
 
   useEffect(() => {
     setTimetableDaysDraft(editableTimetable.days);
-    setTimetableActiveWeeksDraft(editableTimetable.activeWeeks || 4);
     setTimetableDayPeriodCountsDraft(editableTimetable.dayPeriodCounts || {});
     setPeriodDurationDraft(editableTimetable.slots?.find((slot) => slot.type === 'class')?.durationMinutes || 40);
   }, [editableTimetable]);
@@ -667,7 +675,7 @@ export default function ChildPlannerV2Page() {
       await saveSchoolTimetableConfig(childId, familyId, {
         days: nextDays,
         slots: nextSlots,
-        activeWeeks: timetableActiveWeeksDraft,
+        activeWeeks: editableTimetable.activeWeeks || 4,
         dayPeriodCounts: nextDayPeriodCounts,
         data: nextData
       });
@@ -1420,7 +1428,7 @@ export default function ChildPlannerV2Page() {
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Class Matrix</h3>
-                    <p className="text-sm font-medium text-white/40 italic">{editableTimetable.activeWeeks || 4} active weeks // {timetableMaxPeriods} generated periods</p>
+                    <p className="text-sm font-medium text-white/40 italic">{activityPeriodRange.label} // {timetableMaxPeriods} generated periods</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -1439,7 +1447,7 @@ export default function ChildPlannerV2Page() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <h4 className="text-sm font-black uppercase tracking-widest text-white">Timetable Structure</h4>
-                        <p className="text-xs font-semibold text-white/40">Active weeks, school days, and period count for each day.</p>
+                        <p className="text-xs font-semibold text-white/40">School days and period count for each day.</p>
                       </div>
                       <button
                         type="button"
@@ -1454,16 +1462,7 @@ export default function ChildPlannerV2Page() {
 
                     <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
                       <div>
-                        <p className="mb-2 text-xs font-black uppercase tracking-widest text-white/50">Active Weeks</p>
-                        <input
-                          type="number"
-                          min={1}
-                          value={timetableActiveWeeksDraft}
-                          onChange={(e) => setTimetableActiveWeeksDraft(Math.max(1, toNonNegativeInteger(e.target.value, 1)))}
-                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white outline-none"
-                        />
-
-                        <p className="mb-2 mt-4 text-xs font-black uppercase tracking-widest text-white/50">Period Duration</p>
+                        <p className="mb-2 text-xs font-black uppercase tracking-widest text-white/50">Period Duration</p>
                         <input
                           type="number"
                           min={1}
@@ -1574,7 +1573,7 @@ export default function ChildPlannerV2Page() {
                                       className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                       <option value="" className="bg-slate-900">Select</option>
-                                      {subjects.map((sub) => (
+                                      {subjectsByTimetableHours.map((sub) => (
                                         <option key={sub.id} value={sub.name} className="bg-slate-900">{sub.name}</option>
                                       ))}
                                     </select>
@@ -1595,7 +1594,7 @@ export default function ChildPlannerV2Page() {
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h4 className="text-sm font-black uppercase tracking-widest text-white">Subject Hours</h4>
-                      <p className="text-xs font-semibold text-white/40">{editableTimetable.activeWeeks || 4} active weeks • longest to shortest</p>
+                      <p className="text-xs font-semibold text-white/40">{activityPeriodRange.label} • longest to shortest</p>
                     </div>
                     <p className="text-xs font-bold text-white/50">{monthlySubjectHours.length} subjects</p>
                   </div>
@@ -1697,9 +1696,10 @@ export default function ChildPlannerV2Page() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {subjects.length ? subjects.map((sub) => {
+                  {subjectsByTimetableHours.length ? subjectsByTimetableHours.map((sub) => {
                     const subjectTasks = allEvents.filter(t => t.category === 'homework' && t.linkedProgramId === activeActivityId && t.subjectId === sub.id);
                     const subjectExams = allEvents.filter(e => e.category === 'exam' && e.linkedProgramId === activeActivityId && (e.subjectId === sub.id || e.subject === sub.name));
+                    const subjectHourInsight = subjectHoursByName.get(sub.name.toLowerCase());
 
                     return (
                     <div 
@@ -1717,6 +1717,9 @@ export default function ChildPlannerV2Page() {
                             {sub.includeInExams && (
                               <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" title="Included in Exams" />
                             )}
+                            {subjectHourInsight ? (
+                              <span className="flex-shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-black text-cyan-300">{subjectHourInsight.hours}h</span>
+                            ) : null}
                           </div>
                           <p className="text-[11px] font-bold text-indigo-300/60 uppercase tracking-wider truncate">{sub.teacherName || 'Independent Study'}</p>
                         </div>
