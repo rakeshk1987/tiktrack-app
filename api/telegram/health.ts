@@ -3,7 +3,7 @@ import {
   setApiCors,
   type TelegramApiRequest,
   type TelegramApiResponse,
-} from '../_telegramSupport';
+} from '../_telegramSupport.js';
 
 export default function handler(req: TelegramApiRequest, res: TelegramApiResponse) {
   setApiCors(res);
