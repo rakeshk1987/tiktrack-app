@@ -109,12 +109,20 @@ function typeLabel(type: ScheduleType) {
 }
 
 async function callMiniAppFunction<T>(name: string, initData: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(functionUrl(name), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ initData, ...payload }),
-  });
-  const json = await response.json();
+  const url = functionUrl(name);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData, ...payload }),
+    });
+  } catch (error) {
+    throw new Error(`Could not reach Telegram API at ${url}. Check VITE_TELEGRAM_API_BASE_URL and the Vercel deployment.`);
+  }
+
+  const json = await response.json().catch(() => null);
+  if (!json) throw new Error(`Telegram API at ${url} did not return JSON.`);
   if (!response.ok || !json.ok) throw new Error(json.error || 'Request failed.');
   return json as T;
 }

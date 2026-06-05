@@ -1,13 +1,12 @@
 import {
-  adaptTelegramRequest,
-  adaptTelegramResponse,
-  initializeTelegramFirebaseAdmin,
+  runTelegramHandler,
   type TelegramApiRequest,
   type TelegramApiResponse,
 } from '../../_telegramSupport';
 
 export default async function handler(req: TelegramApiRequest, res: TelegramApiResponse) {
-  initializeTelegramFirebaseAdmin();
-  const { telegramMiniAppListWeek } = await import('../../../functions/src/telegramBot');
-  return telegramMiniAppListWeek(adaptTelegramRequest(req) as never, adaptTelegramResponse(res) as never);
+  return runTelegramHandler(req, res, async () => {
+    const { telegramMiniAppListWeek } = await import('../../../functions/src/telegramBot');
+    return telegramMiniAppListWeek as never;
+  });
 }

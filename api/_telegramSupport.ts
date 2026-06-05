@@ -27,6 +27,8 @@ export interface TelegramApiResponse {
   set?: (name: string, value: HeaderValue) => TelegramApiResponse;
 }
 
+export type TelegramCloudHandler = (req: never, res: never) => unknown | Promise<unknown>;
+
 export function initializeTelegramFirebaseAdmin() {
   if (admin.apps.length) return;
 
@@ -67,4 +69,31 @@ export function adaptTelegramRequest(req: TelegramApiRequest): TelegramApiReques
 export function adaptTelegramResponse(res: TelegramApiResponse): TelegramApiResponse {
   res.set = (name: string, value: HeaderValue) => res.setHeader(name, value);
   return res;
+}
+
+export async function runTelegramHandler(
+  req: TelegramApiRequest,
+  res: TelegramApiResponse,
+  loadHandler: () => Promise<TelegramCloudHandler>
+) {
+  try {
+    initializeTelegramFirebaseAdmin();
+    const handler = await loadHandler();
+    return handler(adaptTelegramRequest(req) as never, adaptTelegramResponse(res) as never);
+  } catch (error) {
+    console.error('Telegram Vercel route failed', error);
+    setApiCors(res);
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Telegram API route failed.',
+    });
+    return;
+  }
+}
+
+export function setApiCors(res: TelegramApiResponse) {
+  res.setHeader('Access-Control-Allow-Origin', process.env.TELEGRAM_MINI_APP_ORIGIN || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 }
