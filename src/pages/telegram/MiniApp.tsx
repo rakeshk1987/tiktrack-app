@@ -59,7 +59,18 @@ const typeOptions: Array<{ id: ScheduleType; label: string }> = [
   { id: 'exam', label: 'Exam' },
 ];
 
+const telegramApiBaseUrl = (import.meta.env.VITE_TELEGRAM_API_BASE_URL || '').replace(/\/$/, '');
+const telegramApiRoutes: Record<string, string> = {
+  telegramMiniAppBootstrap: '/api/telegram/mini-app/bootstrap',
+  telegramMiniAppCreateSchedule: '/api/telegram/mini-app/create-schedule',
+  telegramMiniAppListToday: '/api/telegram/mini-app/list-today',
+  telegramMiniAppListWeek: '/api/telegram/mini-app/list-week',
+  telegramMiniAppDeleteSchedule: '/api/telegram/mini-app/delete-schedule',
+};
+
 function functionUrl(name: string) {
+  if (telegramApiBaseUrl) return `${telegramApiBaseUrl}${telegramApiRoutes[name] || ''}`;
+
   const projectId = firebaseConfig?.projectId || '';
   if (isUsingFirebaseEmulators) return `http://127.0.0.1:5001/${projectId}/us-central1/${name}`;
   return `https://us-central1-${projectId}.cloudfunctions.net/${name}`;

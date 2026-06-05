@@ -106,21 +106,24 @@ const miniAppUrl = requireEnv('TELEGRAM_MINI_APP_URL');
 const miniAppOrigin = process.env.TELEGRAM_MINI_APP_ORIGIN?.trim() || new URL(miniAppUrl).origin;
 const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() || `https://us-central1-${project}.cloudfunctions.net/telegramWebhook`;
 const shouldDeploy = process.argv.includes('--deploy');
+const shouldSkipFirebaseConfig = process.argv.includes('--skip-firebase-config');
 
 console.log(`Project: ${project}`);
 console.log(`Mini App: ${miniAppUrl}`);
 console.log(`Webhook: ${webhookUrl}`);
 
-await run('npx', [
-  'firebase-tools',
-  'functions:config:set',
-  `telegram.bot_token=${botToken}`,
-  `telegram.webhook_secret=${webhookSecret}`,
-  `telegram.mini_app_url=${miniAppUrl}`,
-  `telegram.mini_app_origin=${miniAppOrigin}`,
-  '--project',
-  project,
-]);
+if (!shouldSkipFirebaseConfig) {
+  await run('npx', [
+    'firebase-tools',
+    'functions:config:set',
+    `telegram.bot_token=${botToken}`,
+    `telegram.webhook_secret=${webhookSecret}`,
+    `telegram.mini_app_url=${miniAppUrl}`,
+    `telegram.mini_app_origin=${miniAppOrigin}`,
+    '--project',
+    project,
+  ]);
+}
 
 if (shouldDeploy) {
   await run('npm', ['run', 'build']);

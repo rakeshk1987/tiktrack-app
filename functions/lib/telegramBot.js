@@ -40,15 +40,15 @@ function escapeHtml(value) {
 }
 function botToken() {
     var _a;
-    return ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.bot_token) || '';
+    return ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.bot_token) || process.env.TELEGRAM_BOT_TOKEN || '';
 }
 function webhookSecret() {
     var _a;
-    return ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.webhook_secret) || '';
+    return ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.webhook_secret) || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 }
 function miniAppUrl() {
     var _a;
-    return ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.mini_app_url) || '';
+    return ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.mini_app_url) || process.env.TELEGRAM_MINI_APP_URL || '';
 }
 function sessionExpiry() {
     return admin.firestore.Timestamp.fromDate(new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000));
@@ -692,7 +692,7 @@ function verifyTelegramInitData(initData) {
 }
 function setCors(req, res) {
     var _a;
-    const allowedOrigin = ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.mini_app_origin) || '*';
+    const allowedOrigin = ((_a = functions.config().telegram) === null || _a === void 0 ? void 0 : _a.mini_app_origin) || process.env.TELEGRAM_MINI_APP_ORIGIN || '*';
     res.set('Access-Control-Allow-Origin', allowedOrigin);
     res.set('Vary', 'Origin');
     res.set('Access-Control-Allow-Headers', 'Content-Type');

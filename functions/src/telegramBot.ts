@@ -112,15 +112,15 @@ function escapeHtml(value: string): string {
 }
 
 function botToken(): string {
-  return functions.config().telegram?.bot_token || '';
+  return functions.config().telegram?.bot_token || process.env.TELEGRAM_BOT_TOKEN || '';
 }
 
 function webhookSecret(): string {
-  return functions.config().telegram?.webhook_secret || '';
+  return functions.config().telegram?.webhook_secret || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 }
 
 function miniAppUrl(): string {
-  return functions.config().telegram?.mini_app_url || '';
+  return functions.config().telegram?.mini_app_url || process.env.TELEGRAM_MINI_APP_URL || '';
 }
 
 function sessionExpiry() {
@@ -838,7 +838,7 @@ function verifyTelegramInitData(initData: string): TelegramUser | null {
 }
 
 function setCors(req: functions.https.Request, res: functions.Response) {
-  const allowedOrigin = functions.config().telegram?.mini_app_origin || '*';
+  const allowedOrigin = functions.config().telegram?.mini_app_origin || process.env.TELEGRAM_MINI_APP_ORIGIN || '*';
   res.set('Access-Control-Allow-Origin', allowedOrigin);
   res.set('Vary', 'Origin');
   res.set('Access-Control-Allow-Headers', 'Content-Type');
