@@ -28,7 +28,6 @@ export function usePlannerPrograms(childId: string) {
       (snap) => {
         const rows = snap.docs
           .map((docRow) => mapPlannerProgram(docRow.id, docRow.data() as Record<string, unknown>))
-          .filter((p) => p.isActive)
           .sort((a, b) => a.name.localeCompare(b.name));
 
         const now = new Date();

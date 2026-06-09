@@ -909,6 +909,19 @@ function ParentDashboardContent() {
     }
   };
 
+  const handleCompleteMappedTask = async (taskId: string) => {
+    if (!window.confirm('Are you sure you want to mark this task as completed?\n\nThis will keep past occurrences but remove future ones from the calendar.')) return;
+    try {
+      await updateDoc(doc(db, 'tasks', taskId), {
+        status: 'completed',
+        expires_at: new Date().toISOString()
+      });
+      setSuccess('Task marked as completed.');
+    } catch (err: any) {
+      setError(err.message || 'Could not complete task.');
+    }
+  };
+
   const handleParentResetChildPassword = async (child: ChildAccount) => {
     try {
       await updateDoc(doc(db, 'users', child.id), {
@@ -5585,6 +5598,9 @@ function ParentDashboardContent() {
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       <button type="button" onClick={() => setSelectedActivityDetail({ kind: 'task', item: task })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Details</button>
+                      {task.status !== 'completed' && task.status !== 'expired' && (
+                        <button type="button" onClick={() => void handleCompleteMappedTask(task.id)} className="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-200">Complete</button>
+                      )}
                       <button type="button" onClick={() => void handleDeleteTask(task.id)} className="rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200">Delete</button>
                     </div>
                   </div>
