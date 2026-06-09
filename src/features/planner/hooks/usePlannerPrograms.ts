@@ -6,6 +6,7 @@ import type { PlannerProgram } from '../types/planner.types';
 
 export function usePlannerPrograms(childId: string) {
   const [programs, setPrograms] = useState<PlannerProgram[]>([]);
+  const [archivedPrograms, setArchivedPrograms] = useState<PlannerProgram[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,13 +33,25 @@ export function usePlannerPrograms(childId: string) {
 
         const now = new Date();
         const active = rows.filter((p) => {
+          if (!p.isActive) return false;
           if (!p.endDate) return true;
           const end = new Date(p.endDate);
           end.setHours(23, 59, 59, 999);
           return end >= now;
         });
 
+        const archived = rows.filter((p) => {
+          if (!p.isActive) return true;
+          if (p.endDate) {
+            const end = new Date(p.endDate);
+            end.setHours(23, 59, 59, 999);
+            return end < now;
+          }
+          return false;
+        });
+
         setPrograms(active);
+        setArchivedPrograms(archived);
         setLoading(false);
       },
       (err) => {
@@ -50,6 +63,6 @@ export function usePlannerPrograms(childId: string) {
     return () => unsubscribe();
   }, [childId]);
 
-  return { programs, loading, refresh: () => {} };
+  return { programs, archivedPrograms, loading, refresh: () => {} };
 }
 

@@ -507,6 +507,7 @@ function ParentDashboardContent() {
   const [selectedActivityDetail, setSelectedActivityDetail] = useState<{ kind: ActivityDetailKind; item: any } | null>(null);
   const [activityModalTab, setActivityModalTab] = useState<PlannerActivityModule>('tasks');
   const [allPlannerPrograms, setAllPlannerPrograms] = useState<PlannerProgram[]>([]);
+  const [showArchivedActivities, setShowArchivedActivities] = useState(false);
   const [taskActivityFilter, setTaskActivityFilter] = useState('all');
   const [examActivityFilter, setExamActivityFilter] = useState('all');
   const [eventActivityFilter, setEventActivityFilter] = useState('all');
@@ -592,7 +593,7 @@ function ParentDashboardContent() {
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const { activeChallenges, completedChallenges, createChallenge, incrementScore, deleteChallenge } = useChallenges(familyId);
   const selectedActivityChildId = activityChildId || children[0]?.id || '';
-  const { programs: activityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId);
+  const { programs: activityPrograms, archivedPrograms: archivedActivityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId);
   const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, false);
   const { challenges: activityChallenges, incrementScore: incrementActivityChallengeScore, createChallenge: createActivityChallenge } = usePlannerChallenges(selectedActivityChildId, selectedActivity?.id);
   const { subjects: activitySubjects, addSubject: addActivitySubject, removeSubject: removeActivitySubject } = usePlannerSubjects(selectedActivityChildId, selectedActivity?.id);
@@ -2887,6 +2888,57 @@ function ParentDashboardContent() {
     }
   };
 
+  const handleCompleteActivity = async (program: PlannerProgram) => {
+    if (!window.confirm('Are you sure you want to mark this activity as completed?\n\nThis will move it to the archive, keeping past tasks but deleting any tasks scheduled in the future.')) return;
+    try {
+      await updateDoc(doc(db, 'programs', program.id), {
+        is_active: false,
+        end_date: new Date().toISOString()
+      });
+
+      // Delete future tasks
+      const now = new Date();
+      const futureTasks = tasks.filter(t => t.linked_program_id === program.id && new Date(t.due_date || t.available_from || t.created_at) > now);
+      for (const t of futureTasks) {
+        await deleteDoc(doc(db, 'tasks', t.id));
+      }
+
+      // Delete future exams
+      const futureExams = exams.filter(e => e.linked_program_id === program.id && e.exam_date && new Date(e.exam_date) > now);
+      for (const e of futureExams) {
+        await deleteDoc(doc(db, 'exams', e.id));
+      }
+
+      // Delete future events
+      const futureEvents = events.filter(ev => ev.linked_program_id === program.id && ev.date && new Date(ev.date) > now);
+      for (const ev of futureEvents) {
+        await deleteDoc(doc(db, 'events', ev.id));
+      }
+
+      await refreshActivityPrograms();
+      setSuccess('Activity completed and archived.');
+      if (selectedActivity?.id === program.id) {
+        setSelectedActivity(null);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Could not complete activity.');
+    }
+  };
+
+  const handleUnarchiveActivity = async (program: PlannerProgram) => {
+    if (!window.confirm('Are you sure you want to unarchive this activity?')) return;
+    try {
+      await updateDoc(doc(db, 'programs', program.id), {
+        is_active: true,
+        end_date: null
+      });
+      await refreshActivityPrograms();
+      setSuccess('Activity unarchived.');
+    } catch (err: any) {
+      setError(err.message || 'Could not unarchive activity.');
+    }
+  };
+
   const handleGenerateTelegramLinkCode = async () => {
     if (!user || !familyId || telegramLinkGenerating) return;
     setTelegramLinkGenerating(true);
@@ -4698,27 +4750,34 @@ function ParentDashboardContent() {
                       </select>
                     </div>
                     <p className="mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>Create root activities (School, Extra Curricular, etc.) and choose which branches appear on the child side.</p>
-                    <div className="mb-4">
+                    <div className="mb-4 flex flex-col sm:flex-row gap-3">
                       <button type="button" onClick={() => { clearActivityForm(); setIsActivityModalOpen(true); }} className="w-full py-2 px-4 rounded-xl text-sm font-bold text-white shadow-md hover:shadow-lg transition sm:w-auto" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>
                         + Create New Activity
                       </button>
+                      <div className="flex bg-[var(--surface-soft)] border rounded-xl p-1 w-full sm:w-auto" style={{ borderColor: 'var(--border-main)' }}>
+                        <button type="button" onClick={() => setShowArchivedActivities(false)} className={`flex-1 py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${!showArchivedActivities ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Active</button>
+                        <button type="button" onClick={() => setShowArchivedActivities(true)} className={`flex-1 py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${showArchivedActivities ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Archived</button>
+                      </div>
                     </div>
                     <div className="mt-4 space-y-2">
                       {activityProgramsLoading ? (
                         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading activities...</p>
-                      ) : activityPrograms.length === 0 ? (
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No activities yet for this child.</p>
+                      ) : (showArchivedActivities ? archivedActivityPrograms : activityPrograms).length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No {showArchivedActivities ? 'archived' : 'active'} activities yet for this child.</p>
                       ) : (
-                        activityPrograms.map((program) => (
-                          <div key={program.id} className="rounded-2xl border p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--border-main)', background: 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(6,182,212,0.1))' }}>
+                        (showArchivedActivities ? archivedActivityPrograms : activityPrograms).map((program) => (
+                          <div key={program.id} className={`rounded-2xl border p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${showArchivedActivities ? 'opacity-70 grayscale-[30%]' : ''}`} style={{ borderColor: 'var(--border-main)', background: 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(6,182,212,0.1))' }}>
                             <div className="min-w-0">
                               <p className="font-semibold" style={{ color: 'var(--text-main)' }}>{program.name}</p>
                               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === program.childId)?.name || 'Child'} • Modules: {(program.modules || ['tasks']).join(', ')}</p>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
-                              <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>
-                              <button type="button" onClick={() => startEditActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>
-                              <button type="button" onClick={() => handleDeleteActivity(program.id)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
+                            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                              {!showArchivedActivities && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>}
+                              {!showArchivedActivities && <button type="button" onClick={() => startEditActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>}
+                              {!showArchivedActivities && <button type="button" onClick={() => void handleCompleteActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700">Complete</button>}
+                              {showArchivedActivities && <button type="button" onClick={() => void handleUnarchiveActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-indigo-100 text-indigo-700">Unarchive</button>}
+                              {showArchivedActivities && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">View</button>}
+                              <button type="button" onClick={() => handleDeleteActivity(program.id)} className="col-span-2 sm:col-span-1 py-2 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
                             </div>
                           </div>
                         ))
@@ -5473,7 +5532,14 @@ function ParentDashboardContent() {
                 <h3 className="text-xl font-bold" style={{ color: 'var(--text-main)' }}>{selectedActivity.name}</h3>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === selectedActivity.childId)?.name || 'Child'}</p>
               </div>
-              <button type="button" onClick={() => setSelectedActivity(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+              <div className="flex gap-2">
+                {selectedActivity.isActive ? (
+                  <button type="button" onClick={() => void handleCompleteActivity(selectedActivity)} className="rounded-lg bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">Complete</button>
+                ) : (
+                  <button type="button" onClick={() => void handleUnarchiveActivity(selectedActivity)} className="rounded-lg bg-indigo-100 px-3 py-1 text-sm font-semibold text-indigo-700">Unarchive</button>
+                )}
+                <button type="button" onClick={() => setSelectedActivity(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+              </div>
             </div>
 
             <div className="mb-4 flex flex-wrap gap-2">
