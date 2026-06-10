@@ -5872,13 +5872,30 @@ function ParentDashboardContent() {
                 </div>
                 <div className="flex flex-wrap justify-end gap-2">
                   {kind === 'task' ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteTask(item.id)}
-                      className="rounded-lg bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700 hover:bg-rose-200"
-                    >
-                      Delete
-                    </button>
+                    <>
+                      {item.status !== 'completed' && item.status !== 'expired' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCompleteMappedTask(item.id);
+                            setSelectedActivityDetail(null);
+                          }}
+                          className="rounded-lg bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-200"
+                        >
+                          Complete
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleDeleteTask(item.id);
+                          setSelectedActivityDetail(null);
+                        }}
+                        className="rounded-lg bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700 hover:bg-rose-200"
+                      >
+                        Delete
+                      </button>
+                    </>
                   ) : null}
                   <button type="button" onClick={() => setSelectedActivityDetail(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
                 </div>

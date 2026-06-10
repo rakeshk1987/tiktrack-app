@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { RewardLedgerEntry } from '../types/schema';
 
@@ -53,32 +53,35 @@ export function useRewardLedger(childId: string, familyId?: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadLedger = async () => {
-      if (!childId) {
-        setEntries([]);
-        setLoading(false);
-        return;
-      }
+    if (!childId) {
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      setError(null);
-      try {
-        const rewardLedgerRef = collection(db, 'reward_ledger');
-        const snapshot = await getDocs(query(rewardLedgerRef, where('child_id', '==', childId)));
+    setLoading(true);
+    setError(null);
+
+    const rewardLedgerRef = collection(db, 'reward_ledger');
+    const q = query(rewardLedgerRef, where('child_id', '==', childId));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
         const fetched = snapshot.docs
           .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<RewardLedgerEntry, 'id'>) }))
           .filter((entry) => !familyId || !entry.family_id || entry.family_id === familyId)
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         setEntries(fetched);
-      } catch (err) {
+        setLoading(false);
+      },
+      (err) => {
         setError(err instanceof Error ? err.message : 'Failed to load reward timeline');
-        setEntries([]);
-      } finally {
         setLoading(false);
       }
-    };
+    );
 
-    void loadLedger();
+    return () => unsubscribe();
   }, [childId, familyId]);
 
   const visibleEntries = useMemo(
@@ -101,14 +104,6 @@ export function useRewardLedger(childId: string, familyId?: string) {
       surprise_state: 'revealed',
       revealed_at: revealedAt,
     });
-
-    setEntries((current) =>
-      current.map((entry) =>
-        entry.id === entryId
-          ? { ...entry, surprise_state: 'revealed', revealed_at: revealedAt }
-          : entry
-      )
-    );
   }, []);
 
   return {
