@@ -379,8 +379,8 @@ function ParentDashboardContent() {
   const [exams, setExams] = useState<Array<any>>([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [eChild, setEChild] = useState('');
-  const [eSubject, setESubject] = useState('');
-  const [eSubjectId, setESubjectId] = useState('');
+  const [eSubjects, setESubjects] = useState<string[]>([]);
+  const [eSubjectIds, setESubjectIds] = useState<string[]>([]);
   const [eRecurrenceType, setERecurrenceType] = useState<'none' | 'daily' | 'weekly'>('none');
   const [eRecurrenceDays, setERecurrenceDays] = useState<number[]>([]);
   const [eType, setEType] = useState<'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other'>('weekly_test');
@@ -1659,8 +1659,8 @@ function ParentDashboardContent() {
 
         await updateDoc(doc(db, 'exams', editExamId), {
           child_id: eChild || null,
-          subject: eSubject || 'Placeholder Subject',
-          subject_id: eSubjectId === 'custom' ? '' : eSubjectId,
+          subject: eSubjects.length > 0 ? eSubjects.join(', ') : 'Placeholder Subject',
+          subject_id: eSubjectIds.includes('custom') ? '' : eSubjectIds.join(','),
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
@@ -1676,7 +1676,7 @@ function ParentDashboardContent() {
           recurrence_days: eRecurrenceType === 'weekly' ? eRecurrenceDays : [],
           updated_at: new Date().toISOString()
         });
-        await syncExamCountdownReminders(editExamId, eChild || null, eSubject, examDateIso, computedStatus);
+        await syncExamCountdownReminders(editExamId, eChild || null, eSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
 
         if (pointsDelta !== 0 && (eChild || oldData?.child_id)) {
           const profileRef = doc(db, 'child_profile', eChild || oldData?.child_id);
@@ -1700,8 +1700,8 @@ function ParentDashboardContent() {
 
         const createdRef = await addDoc(collection(db, 'exams'), {
           child_id: eChild || null,
-          subject: eSubject || 'Placeholder Subject',
-          subject_id: eSubjectId === 'custom' ? '' : eSubjectId,
+          subject: eSubjects.length > 0 ? eSubjects.join(', ') : 'Placeholder Subject',
+          subject_id: eSubjectIds.includes('custom') ? '' : eSubjectIds.join(','),
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
@@ -1719,7 +1719,7 @@ function ParentDashboardContent() {
           family_id: familyId,
           created_at: new Date().toISOString()
         });
-        await syncExamCountdownReminders(createdRef.id, eChild || null, eSubject, examDateIso, computedStatus);
+        await syncExamCountdownReminders(createdRef.id, eChild || null, eSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
         
         if (newPointsEarned && newPointsEarned > 0 && eChild) {
           const profileRef = doc(db, 'child_profile', eChild);
@@ -1737,8 +1737,8 @@ function ParentDashboardContent() {
 
       setEChild('');
       setEActivityId('');
-      setESubject('');
-      setESubjectId('');
+      setESubjects([]);
+      setESubjectIds([]);
       setERecurrenceType('none');
       setERecurrenceDays([]);
       setEType('weekly_test');
@@ -1772,8 +1772,8 @@ function ParentDashboardContent() {
     setEditExamId(ex.id);
     setEChild(ex.child_id || '');
     setEActivityId(ex.linked_program_id || '');
-    setESubject(ex.subject || '');
-    setESubjectId(ex.subject_id || '');
+    setESubjects(ex.subject ? ex.subject.split(', ') : []);
+    setESubjectIds(ex.subject_id ? ex.subject_id.split(',') : []);
     setERecurrenceType(ex.recurrence_type || 'none');
     setERecurrenceDays(ex.recurrence_days || []);
     setEType((ex.exam_type as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other') || 'weekly_test');
@@ -1789,8 +1789,8 @@ function ParentDashboardContent() {
     setEditExamId(null);
     setEChild('');
     setEActivityId('');
-    setESubject('');
-    setESubjectId('');
+    setESubjects([]);
+    setESubjectIds([]);
     setERecurrenceType('none');
     setERecurrenceDays([]);
     setEType('weekly_test');
@@ -4548,7 +4548,7 @@ function ParentDashboardContent() {
                             {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                           </select>
                           <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{visibleExams.length}</span>
-                          <button onClick={() => { setEChild(''); setEActivityId(''); setESubject(''); setESubjectId(''); setERecurrenceType('none'); setERecurrenceDays([]); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); setEditExamId(null); setShowExamModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Exam</button>
+                          <button onClick={() => { setEChild(''); setEActivityId(''); setESubjects([]); setESubjectIds([]); setERecurrenceType('none'); setERecurrenceDays([]); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); setEditExamId(null); setShowExamModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Exam</button>
                         </div>
                       </div>
                       {renderActivityFilter(examActivityFilter, setExamActivityFilter, exams.length)}
@@ -4561,42 +4561,68 @@ function ParentDashboardContent() {
                               <button onClick={() => setShowExamModal(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
                             </div>
                             <form onSubmit={(e) => { handleCreateExam(e); setShowExamModal(false); }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <select value={eChild} onChange={(ev) => { setEChild(ev.target.value); setEActivityId(''); setESubject(''); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <select value={eChild} onChange={(ev) => { setEChild(ev.target.value); setEActivityId(''); setESubjects([]); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="">-- Select Child --</option>
                                 {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                               </select>
-                              <select required value={eActivityId} onChange={(ev) => { setEActivityId(ev.target.value); setESubject(''); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <select required value={eActivityId} onChange={(ev) => { setEActivityId(ev.target.value); setESubjects([]); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="">-- Activity / Program --</option>
                                 {examPrograms.filter(p => (p.modules || []).includes('exams')).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                               </select>
                               <div className="col-span-1 md:col-span-2 flex flex-col gap-2">
-                                <select 
-                                  required 
-                                  value={eSubjectId} 
-                                  onChange={(ev) => {
-                                    setESubjectId(ev.target.value);
-                                    if (ev.target.value !== 'custom') {
-                                      setESubject(examSubjects.find(s => s.id === ev.target.value)?.name || '');
-                                    } else {
-                                      setESubject('');
-                                    }
-                                  }} 
-                                  className="rounded-xl py-2 px-3 border" 
-                                  style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                                  disabled={!eActivityId}
-                                >
-                                  <option value="">-- Select Subject --</option>
-                                  {examSubjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                  <option value="custom">-- Custom Subject --</option>
-                                </select>
+                                <label className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Subjects</label>
+                                {!eActivityId ? (
+                                  <p className="text-xs text-slate-500">Please select an Activity / Program first.</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2">
+                                    {examSubjects.filter(s => s.includeInExams).map(s => {
+                                      const isSelected = eSubjectIds.includes(s.id);
+                                      return (
+                                        <button
+                                          key={s.id}
+                                          type="button"
+                                          onClick={() => {
+                                            if (isSelected) {
+                                              setESubjectIds(prev => prev.filter(id => id !== s.id));
+                                              setESubjects(prev => prev.filter(name => name !== s.name));
+                                            } else {
+                                              setESubjectIds(prev => [...prev, s.id]);
+                                              setESubjects(prev => [...prev, s.name]);
+                                            }
+                                          }}
+                                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${isSelected ? 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900 dark:text-cyan-100 dark:border-cyan-700' : 'bg-[var(--surface-soft)] text-[var(--text-muted)] border-[var(--border-main)] hover:bg-[var(--surface-hover)]'}`}
+                                        >
+                                          {s.name}
+                                        </button>
+                                      );
+                                    })}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (eSubjectIds.includes('custom')) {
+                                          setESubjectIds(prev => prev.filter(id => id !== 'custom'));
+                                        } else {
+                                          setESubjectIds(prev => [...prev, 'custom']);
+                                        }
+                                      }}
+                                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${eSubjectIds.includes('custom') ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900 dark:text-purple-100 dark:border-purple-700' : 'bg-[var(--surface-soft)] text-[var(--text-muted)] border-[var(--border-main)] hover:bg-[var(--surface-hover)]'}`}
+                                    >
+                                      Custom Subject
+                                    </button>
+                                  </div>
+                                )}
 
-                                {(eSubjectId === 'custom' || (eActivityId && examSubjects.filter(s => s.includeInExams).length === 0)) && (
+                                {eSubjectIds.includes('custom') && (
                                   <input 
                                     required 
-                                    value={eSubject} 
-                                    onChange={(ev) => setESubject(ev.target.value)} 
-                                    placeholder="Subject Name (or Placeholder)" 
-                                    className="rounded-xl py-2 px-3 border" 
+                                    value={eSubjects.filter(s => !examSubjects.find(es => es.name === s)).join(', ')} 
+                                    onChange={(ev) => {
+                                      const nonCustom = eSubjects.filter(s => examSubjects.find(es => es.name === s));
+                                      const customValue = ev.target.value;
+                                      setESubjects(customValue ? [...nonCustom, customValue] : nonCustom);
+                                    }} 
+                                    placeholder="Enter Custom Subject Name" 
+                                    className="rounded-xl py-2 px-3 border mt-2" 
                                     style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} 
                                   />
                                 )}
@@ -5784,7 +5810,7 @@ function ParentDashboardContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {activitySubjects.map((sub) => {
                     const subjectTasks = tasks.filter(t => t.linked_program_id === selectedActivity.id && t.subject_id === sub.name);
-                    const subjectExams = exams.filter(e => e.linked_program_id === selectedActivity.id && e.subject === sub.name);
+                    const subjectExams = exams.filter(e => e.linked_program_id === selectedActivity.id && (e.subject === sub.name || (e.subject && e.subject.split(', ').includes(sub.name))));
 
                     return (
                     <div key={sub.id} className="group relative rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-white hover:shadow-md">

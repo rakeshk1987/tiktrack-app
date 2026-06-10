@@ -206,8 +206,8 @@ export default function ChildPlannerV2Page() {
   const [taskCreating, setTaskCreating] = useState(false);
 
   const [showExamForm, setShowExamForm] = useState(false);
-  const [newExamSubject, setNewExamSubject] = useState('');
-  const [newExamSubjectId, setNewExamSubjectId] = useState('');
+  const [newExamSubjects, setNewExamSubjects] = useState<string[]>([]);
+  const [newExamSubjectIds, setNewExamSubjectIds] = useState<string[]>([]);
   const [newExamDate, setNewExamDate] = useState('');
   const [newExamMarks, setNewExamMarks] = useState<number | ''>('');
   const [newExamTotalMarks, setNewExamTotalMarks] = useState<number | ''>('');
@@ -426,7 +426,8 @@ export default function ChildPlannerV2Page() {
 
   async function handleCreateExam(e: React.FormEvent) {
     e.preventDefault();
-    if (!childId || !newExamSubject.trim() || !activeActivityId) return;
+    if (!childId || newExamSubjects.length === 0 || !activeActivityId) return;
+
 
     if (newExamMarks !== '' && Number(newExamMarks) < 0) { alert('Marks scored cannot be negative.'); return; }
     if (newExamTotalMarks !== '' && Number(newExamTotalMarks) < 0) { alert('Total marks cannot be negative.'); return; }
@@ -438,8 +439,8 @@ export default function ChildPlannerV2Page() {
       const allocatedPoints = activityPointsConfig?.examPoints || null;
 
       const createdRef = await addDoc(collection(db, 'exams'), {
-        subject: newExamSubject.trim() || 'Placeholder Subject',
-        subject_id: newExamSubjectId === 'custom' ? '' : newExamSubjectId,
+        subject: newExamSubjects.length > 0 ? newExamSubjects.join(', ') : 'Placeholder Subject',
+        subject_id: newExamSubjectIds.includes('custom') ? '' : newExamSubjectIds.join(','),
         child_id: childId,
         family_id: familyId,
         parent_id: familyId,
@@ -463,13 +464,13 @@ export default function ChildPlannerV2Page() {
         child_id: childId,
         type: 'exam',
         reference_id: createdRef.id,
-        title: newExamSubject.trim() || 'Exam',
+        title: newExamSubjects.length > 0 ? newExamSubjects.join(', ') : 'Exam',
         points: 0,
         status: 'pending',
         created_at: new Date().toISOString()
       });
-      setNewExamSubject('');
-      setNewExamSubjectId('');
+      setNewExamSubjects([]);
+      setNewExamSubjectIds([]);
       setNewExamDate('');
       setNewExamMarks('');
       setNewExamTotalMarks('');
@@ -1190,32 +1191,56 @@ export default function ChildPlannerV2Page() {
                 {showExamForm && (
                   <form onSubmit={handleCreateExam} className="mb-8 rounded-3xl border border-rose-400/20 bg-rose-400/5 p-6 animate-in zoom-in-95 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div className="col-span-1 md:col-span-2">
-                        <select 
-                          required
-                          value={newExamSubjectId}
-                          onChange={(e) => {
-                            setNewExamSubjectId(e.target.value);
-                            if (e.target.value !== 'custom') {
-                              setNewExamSubject(subjects.find(s => s.id === e.target.value)?.name || '');
-                            } else {
-                              setNewExamSubject('');
-                            }
-                          }}
-                          className="w-full rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50 mb-3"
-                        >
-                          <option value="" className="bg-slate-900">Select Subject</option>
-                          {subjects.filter(s => s.includeInExams).map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.name}</option>)}
-                          <option value="custom" className="bg-slate-900">-- Custom Subject --</option>
-                        </select>
-                        
-                        {(newExamSubjectId === 'custom' || subjects.filter(s => s.includeInExams).length === 0) && (
+                      <div className="col-span-1 md:col-span-2 flex flex-col gap-2 mb-4">
+                        <label className="text-sm font-semibold text-white/80">Subjects</label>
+                        <div className="flex flex-wrap gap-2">
+                          {subjects.filter(s => s.includeInExams).map(s => {
+                            const isSelected = newExamSubjectIds.includes(s.id);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setNewExamSubjectIds(prev => prev.filter(id => id !== s.id));
+                                    setNewExamSubjects(prev => prev.filter(name => name !== s.name));
+                                  } else {
+                                    setNewExamSubjectIds(prev => [...prev, s.id]);
+                                    setNewExamSubjects(prev => [...prev, s.name]);
+                                  }
+                                }}
+                                className={`px-4 py-2 rounded-2xl text-xs font-bold border transition-colors ${isSelected ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' : 'bg-black/20 text-white/70 border-white/10 hover:bg-white/5'}`}
+                              >
+                                {s.name}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newExamSubjectIds.includes('custom')) {
+                                setNewExamSubjectIds(prev => prev.filter(id => id !== 'custom'));
+                              } else {
+                                setNewExamSubjectIds(prev => [...prev, 'custom']);
+                              }
+                            }}
+                            className={`px-4 py-2 rounded-2xl text-xs font-bold border transition-colors ${newExamSubjectIds.includes('custom') ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-black/20 text-white/70 border-white/10 hover:bg-white/5'}`}
+                          >
+                            Custom Subject
+                          </button>
+                        </div>
+
+                        {newExamSubjectIds.includes('custom') && (
                           <input 
-                            required
-                            value={newExamSubject}
-                            onChange={(e) => setNewExamSubject(e.target.value)}
-                            placeholder="Type Subject Name (or Placeholder)"
-                            className="w-full rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50 mb-3"
+                            required 
+                            value={newExamSubjects.filter(s => !subjects.find(es => es.name === s)).join(', ')} 
+                            onChange={(ev) => {
+                              const nonCustom = newExamSubjects.filter(s => subjects.find(es => es.name === s));
+                              const customValue = ev.target.value;
+                              setNewExamSubjects(customValue ? [...nonCustom, customValue] : nonCustom);
+                            }} 
+                            placeholder="Enter Custom Subject Name" 
+                            className="w-full rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-sm text-white outline-none focus:ring-2 ring-rose-500/50 mt-2 mb-3"
                           />
                         )}
                       </div>
@@ -1663,7 +1688,7 @@ export default function ChildPlannerV2Page() {
                 <div className="space-y-3">
                   {subjectsByTimetableHours.length ? subjectsByTimetableHours.map((sub) => {
                     const subjectTasks = allEvents.filter(t => t.category === 'homework' && t.linkedProgramId === activeActivityId && t.subjectId === sub.id);
-                    const subjectExams = allEvents.filter(e => e.category === 'exam' && e.linkedProgramId === activeActivityId && (e.subjectId === sub.id || e.subject === sub.name));
+                    const subjectExams = allEvents.filter(e => e.category === 'exam' && e.linkedProgramId === activeActivityId && (e.subject === sub.name || (e.subject && e.subject.split(', ').includes(sub.name))));
                     const subjectHourInsight = subjectHoursByName.get(sub.name.toLowerCase());
 
                     return (
