@@ -53,13 +53,17 @@ import { mapPlannerProgram, upsertPlannerProgram } from '../../features/planner/
 import { useSickMode } from '../../hooks/useSickMode';
 import { RoutineManagement } from '../../components/parent/RoutineManagement';
 import { ApprovalsManagement } from '../../components/parent/ApprovalsManagement';
-import type { PlannerActivityModule, PlannerProgram } from '../../features/planner/types/planner.types';
+import type { PlannerActivityModule, PlannerProgram, PlannerSubject } from '../../features/planner/types/planner.types';
 import { usePlannerTimetable } from '../../features/planner/hooks/usePlannerTimetable';
 import { usePlannerSubjects } from '../../features/planner/hooks/usePlannerSubjects';
 import { usePlannerChallenges } from '../../features/planner/hooks/usePlannerChallenges';
 import { calculateCashReward, DEFAULT_STAR_PAYOUT_PERCENTAGES, fetchCashRewardSettings, normalizeRewardSettings } from '../../utils/rewards';
 
 type ActivityDetailKind = 'task' | 'exam' | 'event';
+
+function subjectMatchesStoredValue(subject: PlannerSubject, value?: string | null): boolean {
+  return Boolean(value && (value === subject.id || value === subject.name));
+}
 
 const ACTIVITY_FILTER_PALETTE = [
   '#38bdf8',
@@ -821,6 +825,15 @@ function ParentDashboardContent() {
         return;
       }
 
+      const selectedTaskSubject = tSubjectId === 'general'
+        ? null
+        : taskSubjects.find((subject) => subjectMatchesStoredValue(subject, tSubjectId));
+      if (tActivityId && tSubjectId !== 'general' && !selectedTaskSubject) {
+        setError('Select a subject that belongs to the selected activity.');
+        setTaskLoading(false);
+        return;
+      }
+
       const starValue = Number(tPoints) || 1;
       if (tMandatory && !tEndDate) {
         setError('Mandatory timed tasks need a Complete Before date and time.');
@@ -858,7 +871,7 @@ function ParentDashboardContent() {
         recurrence_type: tRecurrenceType,
         recurrence_days: tRecurrenceType === 'weekly' ? tRecurrenceDays : [],
         linked_program_id: tActivityId || null,
-        subject_id: tSubjectId || null,
+        subject_id: tSubjectId === 'general' ? 'general' : selectedTaskSubject?.id || null,
         parent_id: familyId,
         family_id: familyId
       };
@@ -1611,6 +1624,32 @@ function ParentDashboardContent() {
     setExamLoading(true);
 
     try {
+      const selectedExamSubjectRows = eSubjectIds
+        .filter((subjectId) => subjectId !== 'custom')
+        .map((subjectId) => examSubjects.find((subject) => subjectMatchesStoredValue(subject, subjectId)))
+        .filter((subject): subject is PlannerSubject => Boolean(subject));
+      const knownSubjectNames = new Set(examSubjects.map((subject) => subject.name));
+      const customExamSubjects = eSubjectIds.includes('custom')
+        ? eSubjects.map((subject) => subject.trim()).filter((subject) => subject && !knownSubjectNames.has(subject))
+        : [];
+      const normalizedExamSubjects = [
+        ...selectedExamSubjectRows.map((subject) => subject.name),
+        ...customExamSubjects
+      ];
+      const normalizedExamSubjectIds = eSubjectIds.includes('custom')
+        ? ''
+        : selectedExamSubjectRows.map((subject) => subject.id).join(',');
+
+      if (eActivityId && selectedExamSubjectRows.length !== eSubjectIds.filter((subjectId) => subjectId !== 'custom').length) {
+        setError('Select subjects that belong to the selected activity.');
+        return;
+      }
+
+      if (normalizedExamSubjects.length === 0) {
+        setError('Select at least one subject for the exam.');
+        return;
+      }
+
       const examDateIso = eDate ? new Date(eDate).toISOString() : new Date().toISOString();
       const hasResult = eMarks !== '' && eTotal !== '';
       const datePassed = new Date(examDateIso).getTime() < Date.now();
@@ -1659,8 +1698,8 @@ function ParentDashboardContent() {
 
         await updateDoc(doc(db, 'exams', editExamId), {
           child_id: eChild || null,
-          subject: eSubjects.length > 0 ? eSubjects.join(', ') : 'Placeholder Subject',
-          subject_id: eSubjectIds.includes('custom') ? '' : eSubjectIds.join(','),
+          subject: normalizedExamSubjects.join(', '),
+          subject_id: normalizedExamSubjectIds,
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
@@ -1676,7 +1715,7 @@ function ParentDashboardContent() {
           recurrence_days: eRecurrenceType === 'weekly' ? eRecurrenceDays : [],
           updated_at: new Date().toISOString()
         });
-        await syncExamCountdownReminders(editExamId, eChild || null, eSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
+        await syncExamCountdownReminders(editExamId, eChild || null, normalizedExamSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
 
         if (pointsDelta !== 0 && (eChild || oldData?.child_id)) {
           const profileRef = doc(db, 'child_profile', eChild || oldData?.child_id);
@@ -1700,8 +1739,8 @@ function ParentDashboardContent() {
 
         const createdRef = await addDoc(collection(db, 'exams'), {
           child_id: eChild || null,
-          subject: eSubjects.length > 0 ? eSubjects.join(', ') : 'Placeholder Subject',
-          subject_id: eSubjectIds.includes('custom') ? '' : eSubjectIds.join(','),
+          subject: normalizedExamSubjects.join(', '),
+          subject_id: normalizedExamSubjectIds,
           exam_type: eType,
           marks_scored: hasResult ? Number(eMarks) : null,
           total_marks: hasResult ? Number(eTotal) : null,
@@ -1719,7 +1758,7 @@ function ParentDashboardContent() {
           family_id: familyId,
           created_at: new Date().toISOString()
         });
-        await syncExamCountdownReminders(createdRef.id, eChild || null, eSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
+        await syncExamCountdownReminders(createdRef.id, eChild || null, normalizedExamSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
         
         if (newPointsEarned && newPointsEarned > 0 && eChild) {
           const profileRef = doc(db, 'child_profile', eChild);
@@ -4182,10 +4221,10 @@ function ParentDashboardContent() {
                             </select>
                             
                             {tActivityId && (
-                              <select required value={tSubjectId} onChange={(e) => setTSubjectId(e.target.value)} className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <select required value={taskSubjects.find((subject) => subjectMatchesStoredValue(subject, tSubjectId))?.id || tSubjectId} onChange={(e) => setTSubjectId(e.target.value)} className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="">-- Select Subject (Required) --</option>
                                 {taskSubjects.map((s) => (
-                                  <option key={s.id} value={s.name}>{s.name}</option>
+                                  <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
                                 <option value="general">General Activity</option>
                               </select>
@@ -4561,11 +4600,11 @@ function ParentDashboardContent() {
                               <button onClick={() => setShowExamModal(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
                             </div>
                             <form onSubmit={(e) => { handleCreateExam(e); setShowExamModal(false); }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <select value={eChild} onChange={(ev) => { setEChild(ev.target.value); setEActivityId(''); setESubjects([]); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <select value={eChild} onChange={(ev) => { setEChild(ev.target.value); setEActivityId(''); setESubjects([]); setESubjectIds([]); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="">-- Select Child --</option>
                                 {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                               </select>
-                              <select required value={eActivityId} onChange={(ev) => { setEActivityId(ev.target.value); setESubjects([]); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                              <select required value={eActivityId} onChange={(ev) => { setEActivityId(ev.target.value); setESubjects([]); setESubjectIds([]); }} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                                 <option value="">-- Activity / Program --</option>
                                 {examPrograms.filter(p => (p.modules || []).includes('exams')).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                               </select>
@@ -5809,8 +5848,16 @@ function ParentDashboardContent() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {activitySubjects.map((sub) => {
-                    const subjectTasks = tasks.filter(t => t.linked_program_id === selectedActivity.id && t.subject_id === sub.name);
-                    const subjectExams = exams.filter(e => e.linked_program_id === selectedActivity.id && (e.subject === sub.name || (e.subject && e.subject.split(', ').includes(sub.name))));
+                    const subjectTasks = tasks.filter(t => t.linked_program_id === selectedActivity.id && subjectMatchesStoredValue(sub, t.subject_id));
+                    const subjectExams = exams.filter(e => (
+                      e.linked_program_id === selectedActivity.id &&
+                      (
+                        subjectMatchesStoredValue(sub, e.subject_id) ||
+                        (typeof e.subject_id === 'string' && e.subject_id.split(',').some((subjectId: string) => subjectMatchesStoredValue(sub, subjectId.trim()))) ||
+                        e.subject === sub.name ||
+                        (e.subject && e.subject.split(', ').includes(sub.name))
+                      )
+                    ));
 
                     return (
                     <div key={sub.id} className="group relative rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-white hover:shadow-md">

@@ -245,6 +245,12 @@ export default function ChildPlannerV2Page() {
   const { uploadProof, uploading } = useChildProofs(childId);
   const { completeTask, markTaskPendingProof, saving: questSaving } = useQuestActions(childId);
 
+  useEffect(() => {
+    setNewTaskSubjectId('');
+    setNewExamSubjects([]);
+    setNewExamSubjectIds([]);
+  }, [activeActivityId]);
+
   // 30-Minute approaching task/exam reminders
   const [triggeredReminders, setTriggeredReminders] = useState<Set<string>>(new Set());
 
@@ -292,9 +298,12 @@ export default function ChildPlannerV2Page() {
     if (activeTab === 'calendar') return allEvents;
     if (!activeActivityId) return allEvents;
     if (isSchoolActivity) {
-      return allEvents.filter((event) => ['school', 'homework', 'exam', 'tuition'].includes(event.category));
+      return allEvents.filter((event) => (
+        event.linkedProgramId === activeActivityId ||
+        (!event.linkedProgramId && ['school', 'homework', 'exam', 'tuition'].includes(event.category))
+      ));
     }
-    return allEvents.filter((event) => event.linkedProgramId === activeActivityId || event.category === 'extracurricular' || event.category === 'custom');
+    return allEvents.filter((event) => event.linkedProgramId === activeActivityId);
   }, [activeTab, allEvents, activeActivityId, isSchoolActivity]);
 
   const filteredEvents = useMemo(() => {
@@ -427,6 +436,21 @@ export default function ChildPlannerV2Page() {
   async function handleCreateExam(e: React.FormEvent) {
     e.preventDefault();
     if (!childId || newExamSubjects.length === 0 || !activeActivityId) return;
+    const selectedSubjectRows = newExamSubjectIds
+      .filter((subjectId) => subjectId !== 'custom')
+      .map((subjectId) => subjects.find((subject) => subject.id === subjectId))
+      .filter((subject): subject is typeof subjects[number] => Boolean(subject));
+    const knownSubjectNames = new Set(subjects.map((subject) => subject.name));
+    const customSubjects = newExamSubjectIds.includes('custom')
+      ? newExamSubjects.map((subject) => subject.trim()).filter((subject) => subject && !knownSubjectNames.has(subject))
+      : [];
+    const normalizedSubjects = [
+      ...selectedSubjectRows.map((subject) => subject.name),
+      ...customSubjects
+    ];
+
+    if (selectedSubjectRows.length !== newExamSubjectIds.filter((subjectId) => subjectId !== 'custom').length) return;
+    if (normalizedSubjects.length === 0) return;
 
 
     if (newExamMarks !== '' && Number(newExamMarks) < 0) { alert('Marks scored cannot be negative.'); return; }
@@ -439,8 +463,8 @@ export default function ChildPlannerV2Page() {
       const allocatedPoints = activityPointsConfig?.examPoints || null;
 
       const createdRef = await addDoc(collection(db, 'exams'), {
-        subject: newExamSubjects.length > 0 ? newExamSubjects.join(', ') : 'Placeholder Subject',
-        subject_id: newExamSubjectIds.includes('custom') ? '' : newExamSubjectIds.join(','),
+        subject: normalizedSubjects.join(', '),
+        subject_id: newExamSubjectIds.includes('custom') ? '' : selectedSubjectRows.map((subject) => subject.id).join(','),
         child_id: childId,
         family_id: familyId,
         parent_id: familyId,
@@ -464,7 +488,7 @@ export default function ChildPlannerV2Page() {
         child_id: childId,
         type: 'exam',
         reference_id: createdRef.id,
-        title: newExamSubjects.length > 0 ? newExamSubjects.join(', ') : 'Exam',
+        title: normalizedSubjects.join(', ') || 'Exam',
         points: 0,
         status: 'pending',
         created_at: new Date().toISOString()
@@ -1688,7 +1712,16 @@ export default function ChildPlannerV2Page() {
                 <div className="space-y-3">
                   {subjectsByTimetableHours.length ? subjectsByTimetableHours.map((sub) => {
                     const subjectTasks = allEvents.filter(t => t.category === 'homework' && t.linkedProgramId === activeActivityId && t.subjectId === sub.id);
-                    const subjectExams = allEvents.filter(e => e.category === 'exam' && e.linkedProgramId === activeActivityId && (e.subject === sub.name || (e.subject && e.subject.split(', ').includes(sub.name))));
+                    const subjectExams = allEvents.filter(e => (
+                      e.category === 'exam' &&
+                      e.linkedProgramId === activeActivityId &&
+                      (
+                        e.subjectId === sub.id ||
+                        e.subjectId?.split(',').some((subjectId) => subjectId.trim() === sub.id) ||
+                        e.subject === sub.name ||
+                        (e.subject && e.subject.split(', ').includes(sub.name))
+                      )
+                    ));
                     const subjectHourInsight = subjectHoursByName.get(sub.name.toLowerCase());
 
                     return (

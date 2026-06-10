@@ -112,6 +112,9 @@ export function ParentEventEditorModal({ open, mode, event, programs, onClose, o
 
   function handleCloseRequest() {
     if (hasUnsavedChanges && !window.confirm('Discard unsaved changes?')) return;
+    if (hasUnsavedChanges) {
+      localStorage.removeItem(draftKey);
+    }
     onClose();
   }
 

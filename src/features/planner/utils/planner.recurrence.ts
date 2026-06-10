@@ -31,6 +31,18 @@ function withTimeFrom(date: Date, source: Date): Date {
   return d;
 }
 
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function addYears(date: Date, years: number): Date {
+  const d = new Date(date);
+  d.setFullYear(d.getFullYear() + years);
+  return d;
+}
+
 function overlaps(start: Date, end: Date, rangeStart: Date, rangeEnd: Date): boolean {
   return end >= rangeStart && start <= rangeEnd;
 }
@@ -80,6 +92,14 @@ export function expandRecurringEventForRange(
     let generatedCount = 0;
     let safety = 0;
 
+    if (!count && rangeStart > weekStart) {
+      const elapsedWeeks = Math.floor((startOfWeek(rangeStart).getTime() - weekStart.getTime()) / (7 * 86400000));
+      const intervalsToSkip = Math.max(0, Math.floor(elapsedWeeks / interval) - 1);
+      if (intervalsToSkip > 0) {
+        weekStart = addDays(weekStart, intervalsToSkip * 7 * interval);
+      }
+    }
+
     while (instances.length < maxInstances && weekStart <= rangeEnd && safety < maxInstances * 8) {
       for (const weekDay of weekDays) {
         const occurrenceDay = addDays(weekStart, weekDay);
@@ -114,7 +134,32 @@ export function expandRecurringEventForRange(
   let cursor = new Date(start);
   let index = 0;
 
-  while (index < maxInstances && cursor <= rangeEnd) {
+  if (!event.recurrence.count && rangeStart > cursor) {
+    if (event.recurrence.type === 'daily') {
+      const elapsedDays = Math.floor((rangeStart.getTime() - cursor.getTime()) / 86400000);
+      const intervalsToSkip = Math.max(0, Math.floor(elapsedDays / interval) - 1);
+      if (intervalsToSkip > 0) {
+        cursor = addDays(cursor, intervalsToSkip * interval);
+        index = intervalsToSkip;
+      }
+    } else if (event.recurrence.type === 'monthly') {
+      const elapsedMonths = (rangeStart.getFullYear() - cursor.getFullYear()) * 12 + (rangeStart.getMonth() - cursor.getMonth());
+      const intervalsToSkip = Math.max(0, Math.floor(elapsedMonths / interval) - 1);
+      if (intervalsToSkip > 0) {
+        cursor = addMonths(cursor, intervalsToSkip * interval);
+        index = intervalsToSkip;
+      }
+    } else if (event.recurrence.type === 'yearly') {
+      const elapsedYears = rangeStart.getFullYear() - cursor.getFullYear();
+      const intervalsToSkip = Math.max(0, Math.floor(elapsedYears / interval) - 1);
+      if (intervalsToSkip > 0) {
+        cursor = addYears(cursor, intervalsToSkip * interval);
+        index = intervalsToSkip;
+      }
+    }
+  }
+
+  while (instances.length < maxInstances && cursor <= rangeEnd) {
     const instanceEnd = new Date(cursor.getTime() + durationMs);
     const within = overlaps(cursor, instanceEnd, rangeStart, rangeEnd);
     if (within) {
@@ -132,13 +177,9 @@ export function expandRecurringEventForRange(
     if (event.recurrence.type === 'daily') {
       cursor = addDays(cursor, interval);
     } else if (event.recurrence.type === 'monthly') {
-      const next = new Date(cursor);
-      next.setMonth(next.getMonth() + interval);
-      cursor = next;
+      cursor = addMonths(cursor, interval);
     } else if (event.recurrence.type === 'yearly') {
-      const next = new Date(cursor);
-      next.setFullYear(next.getFullYear() + interval);
-      cursor = next;
+      cursor = addYears(cursor, interval);
     } else {
       break;
     }

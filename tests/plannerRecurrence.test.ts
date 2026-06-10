@@ -51,4 +51,23 @@ describe('planner recurrence expansion', () => {
 
     expect(instances.map((instance) => new Date(instance.startAt).getUTCDay())).toEqual([1, 1]);
   });
+
+  it('expands old open-ended daily recurrence into a far future visible range', () => {
+    const instances = expandRecurringEventForRange(
+      {
+        ...baseEvent,
+        startAt: '2024-01-01T07:10:00.000Z',
+        endAt: '2024-01-01T08:10:00.000Z',
+        recurrence: { type: 'daily', interval: 1, byWeekDays: [], byMonthDays: [], until: null, count: null, rrule: null }
+      },
+      '2026-06-01T00:00:00.000Z',
+      '2026-06-03T23:59:59.999Z'
+    );
+
+    expect(instances.map((instance) => instance.startAt.slice(0, 10))).toEqual([
+      '2026-06-01',
+      '2026-06-02',
+      '2026-06-03'
+    ]);
+  });
 });

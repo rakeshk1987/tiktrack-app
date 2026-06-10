@@ -73,7 +73,8 @@ function expandPlannerEventsAsPlannerEvents(events: PlannerEvent[], rangeStart: 
       ...event,
       id: instance.instanceId,
       startAt: instance.startAt,
-      endAt: instance.endAt
+      endAt: instance.endAt,
+      recurrence: { type: 'none', interval: 1, byWeekDays: [] }
     }))
   );
 }
@@ -120,8 +121,7 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
       return categoryVisible && activityVisible;
     });
   }, [mergedEvents, activeCategories, activeActivityFilter]);
-  const insights = usePlannerInsights(filteredEvents);
-  const lightInsights = usePlannerLightInsights(filteredEvents);
+
   const periodRange = useMemo(() => {
     if (statusPeriod === 'month') {
       return {
@@ -140,12 +140,18 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
     };
   }, [periodAnchor, statusPeriod]);
 
+  const monthlyEvents = useMemo(() => {
+    return expandPlannerEventsAsPlannerEvents(filteredEvents, periodRange.start, periodRange.end);
+  }, [filteredEvents, periodRange.end, periodRange.start]);
+  const insights = usePlannerInsights(monthlyEvents);
+  const lightInsights = usePlannerLightInsights(monthlyEvents);
+
   const focusedEvents = useMemo(() => {
-    if (insightFocus === 'none' || insightFocus === 'workload' || insightFocus === 'sync') return filteredEvents;
-    if (insightFocus === 'exams') return filteredEvents.filter((event) => event.category === 'exam');
+    if (insightFocus === 'none' || insightFocus === 'workload' || insightFocus === 'sync') return monthlyEvents;
+    if (insightFocus === 'exams') return monthlyEvents.filter((event) => event.category === 'exam');
     if (insightFocus === 'burnout') {
       const heavy = new Set(['school', 'exam', 'tuition', 'homework']);
-      return filteredEvents.filter((event) => heavy.has(event.category));
+      return monthlyEvents.filter((event) => heavy.has(event.category));
     }
     if (insightFocus === 'conflicts') {
       const ids = new Set<string>();
@@ -153,39 +159,28 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
         ids.add(conflict.eventAId);
         ids.add(conflict.eventBId);
       }
-      return filteredEvents.filter((event) => ids.has(event.id));
+      return monthlyEvents.filter((event) => ids.has(event.id));
     }
-    return filteredEvents;
-  }, [filteredEvents, insightFocus, insights.conflicts]);
+    return monthlyEvents;
+  }, [monthlyEvents, insightFocus, insights.conflicts]);
 
   const calendarEvents = useMemo<EventInput[]>(() => {
     const expanded: EventInput[] = [];
     for (const event of focusedEvents) {
-      const instances = expandRecurringEventForRange(
-        event,
-        periodRange.start.toISOString(),
-        periodRange.end.toISOString()
-      );
-      for (const inst of instances) {
-        expanded.push({
-          id: inst.instanceId,
-          title: inst.title,
-          start: inst.startAt,
-          end: inst.endAt,
-          color: inst.color,
-          extendedProps: {
-            category: inst.category,
-            rootEventId: inst.rootEventId
-          }
-        });
-      }
+      expanded.push({
+        id: event.id,
+        title: event.title,
+        start: event.startAt,
+        end: event.endAt,
+        color: event.color,
+        extendedProps: {
+          category: event.category,
+          rootEventId: event.id.split('::')[0]
+        }
+      });
     }
     return expanded;
-  }, [focusedEvents, periodRange.end, periodRange.start]);
-
-  const monthlyEvents = useMemo(() => {
-    return expandPlannerEventsAsPlannerEvents(filteredEvents, periodRange.start, periodRange.end);
-  }, [filteredEvents, periodRange.end, periodRange.start]);
+  }, [focusedEvents]);
 
   const monthlyExamEvents = useMemo(() => monthlyEvents.filter((event) => event.category === 'exam'), [monthlyEvents]);
   const upcomingExamCount = monthlyExamEvents.filter((event) => new Date(event.startAt).getTime() >= Date.now()).length;
@@ -405,6 +400,11 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
     const rootId = arg.event.id.split('::')[0];
     const target = mergedEvents.find((event) => event.id === rootId);
     if (!target || !arg.event.start || !arg.event.end) return;
+    if (target.recurrence.type !== 'none') {
+      setCalendarNote('Recurring events must be edited from the event details to avoid changing the whole series by accident.');
+      arg.revert();
+      return;
+    }
 
     const payload: PlannerEventInput = {
       title: target.title,
@@ -412,8 +412,8 @@ function ParentPlannerInner({ childId, familyId }: { childId: string; familyId: 
       startAt: arg.event.start.toISOString(),
       endAt: arg.event.end.toISOString(),
       linkedProgramId: target.linkedProgramId || null,
-      recurrenceType: target.recurrence.type === 'daily' || target.recurrence.type === 'weekly' ? target.recurrence.type : 'none',
-      recurrenceWeekDays: target.recurrence.byWeekDays || []
+      recurrenceType: 'none',
+      recurrenceWeekDays: []
     };
 
     const previous = target;

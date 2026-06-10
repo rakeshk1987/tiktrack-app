@@ -12,6 +12,21 @@ import {
 import { db } from '../../../config/firebase';
 import type { PlannerSubject } from '../types/planner.types';
 
+function mapPlannerSubject(docId: string, raw: Record<string, unknown>): PlannerSubject {
+  return {
+    id: docId,
+    familyId: String(raw.familyId || raw.family_id || ''),
+    childId: String(raw.childId || raw.child_id || ''),
+    programId: String(raw.programId || raw.program_id || ''),
+    name: String(raw.name || ''),
+    teacherName: String(raw.teacherName || raw.teacher_name || ''),
+    includeInExams: Boolean(raw.includeInExams ?? raw.include_in_exams ?? true),
+    description: String(raw.description || ''),
+    color: raw.color ? String(raw.color) : undefined,
+    createdAt: String(raw.createdAt || raw.created_at || new Date().toISOString())
+  };
+}
+
 export function usePlannerSubjects(childId: string, programId?: string | null) {
   const [subjects, setSubjects] = useState<PlannerSubject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,25 +38,23 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
       return;
     }
 
+    setSubjects([]);
     setLoading(true);
-    const q = query(
-      collection(db, 'planner_subjects'),
-      where('childId', '==', childId)
-    );
+    const q = programId
+      ? query(
+          collection(db, 'planner_subjects'),
+          where('childId', '==', childId),
+          where('programId', '==', programId)
+        )
+      : query(
+          collection(db, 'planner_subjects'),
+          where('childId', '==', childId)
+        );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const allItems = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data()
-        })) as PlannerSubject[];
-
-        const filtered = programId
-          ? allItems.filter((s) => s.programId === programId)
-          : allItems;
-
-        setSubjects(filtered);
+        setSubjects(snapshot.docs.map((d) => mapPlannerSubject(d.id, d.data() as Record<string, unknown>)));
         setLoading(false);
       },
       (err) => {
@@ -89,4 +102,3 @@ export function usePlannerSubjects(childId: string, programId?: string | null) {
 
   return { subjects, loading, addSubject, removeSubject, updateSubject, refresh: () => {} };
 }
-
