@@ -466,6 +466,7 @@ function ParentDashboardContent() {
   const [scratchSaving, setScratchSaving] = useState(false);
   const [scratchTemplateChildId, setScratchTemplateChildId] = useState('');
   const [scratchTemplateTitle, setScratchTemplateTitle] = useState('Task completion scratch');
+  const [scratchTemplateTrigger, setScratchTemplateTrigger] = useState<'task_completion' | 'random_task' | 'streak' | 'perfect_exam'>('task_completion');
   const [scratchTemplateRevealType, setScratchTemplateRevealType] = useState<'scratch' | 'wheel'>('scratch');
   const [scratchTemplatePrizeType, setScratchTemplatePrizeType] = useState<'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom'>('cash');
   const [scratchTemplateStars, setScratchTemplateStars] = useState<number | ''>(10);
@@ -681,6 +682,28 @@ function ParentDashboardContent() {
       </div>
     </div>
   );
+
+  const getScratchTriggerLabel = (trigger?: string) => {
+    switch (trigger) {
+      case 'random_task':
+        return 'random task';
+      case 'streak':
+        return '7-day streak';
+      case 'perfect_exam':
+        return '100% exam';
+      case 'manual':
+        return 'manual';
+      case 'task_completion':
+      default:
+        return 'task completion';
+    }
+  };
+
+  useEffect(() => {
+    if (settingsTab === 'rewards') {
+      setSettingsTab('manage_child');
+    }
+  }, [settingsTab]);
 
   useEffect(() => {
     if (!user) {
@@ -1649,6 +1672,7 @@ function ParentDashboardContent() {
                 sourceId: taskId,
                 sourceType: 'task',
                 reason: `Proof approved for "${task?.title || 'Task'}"`,
+                streakCount: Number(updatedProfile.streak_count || 0),
               });
             }
           } catch (innerErr) {
@@ -1788,6 +1812,18 @@ function ParentDashboardContent() {
         });
         await syncExamCountdownReminders(editExamId, eChild || null, normalizedExamSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
 
+        if (hasResult && eChild && Number(eTotal) > 0 && Number(eMarks) === Number(eTotal)) {
+          await awardScratchRewardForTrigger({
+            childId: eChild,
+            parentId: user.id,
+            familyId,
+            sourceId: editExamId,
+            sourceType: 'exam',
+            reason: `Perfect exam score: ${normalizedExamSubjects.join(', ') || 'Exam'}`,
+            trigger: 'perfect_exam',
+          });
+        }
+
         if (pointsDelta !== 0 && (eChild || oldData?.child_id)) {
           const profileRef = doc(db, 'child_profile', eChild || oldData?.child_id);
           const profileSnap = await getDoc(profileRef);
@@ -1830,6 +1866,18 @@ function ParentDashboardContent() {
           created_at: new Date().toISOString()
         });
         await syncExamCountdownReminders(createdRef.id, eChild || null, normalizedExamSubjects.join(', ') || 'Exam', examDateIso, computedStatus);
+
+        if (hasResult && eChild && Number(eTotal) > 0 && Number(eMarks) === Number(eTotal)) {
+          await awardScratchRewardForTrigger({
+            childId: eChild,
+            parentId: user.id,
+            familyId,
+            sourceId: createdRef.id,
+            sourceType: 'exam',
+            reason: `Perfect exam score: ${normalizedExamSubjects.join(', ') || 'Exam'}`,
+            trigger: 'perfect_exam',
+          });
+        }
         
         if (newPointsEarned && newPointsEarned > 0 && eChild) {
           const profileRef = doc(db, 'child_profile', eChild);
@@ -2412,17 +2460,17 @@ function ParentDashboardContent() {
         parent_id: user.id,
         family_id: familyId,
         child_id: scratchTemplateChildId || '',
-        title: scratchTemplateTitle.trim() || (scratchTemplateRevealType === 'wheel' ? 'Task completion spin' : 'Task completion scratch'),
+        title: scratchTemplateTitle.trim() || `${getScratchTriggerLabel(scratchTemplateTrigger)} ${scratchTemplateRevealType === 'wheel' ? 'spin' : 'scratch'}`,
         reveal_type: scratchTemplateRevealType,
         prize_type: scratchTemplateRevealType === 'wheel' ? 'custom' : scratchTemplatePrizeType,
         prize_label: prizeLabel,
         stars_value: scratchTemplateRevealType === 'wheel' ? 0 : (scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? stars : 0),
         cash_value: scratchTemplateRevealType === 'wheel' ? 0 : (scratchTemplatePrizeType === 'cash' ? stars : 0),
         wheel_segments: scratchTemplateRevealType === 'wheel' ? wheelSegments : undefined,
-        trigger: 'task_completion',
+        trigger: scratchTemplateTrigger,
         is_active: true,
       });
-      setSuccess('Surprise template saved. Future completed tasks can award it.');
+      setSuccess(`Surprise template saved for ${getScratchTriggerLabel(scratchTemplateTrigger)}.`);
     } catch (err) {
       console.error('Failed to save scratch template:', err);
       setError('Could not save scratch template.');
@@ -3522,7 +3570,7 @@ function ParentDashboardContent() {
             <form onSubmit={handleSaveScratchTemplate} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Reward Template</h4>
-                <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">task completion</span>
+                <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">{getScratchTriggerLabel(scratchTemplateTrigger)}</span>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <select value={scratchTemplateChildId} onChange={(event) => setScratchTemplateChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
@@ -3532,6 +3580,12 @@ function ParentDashboardContent() {
                   ))}
                 </select>
                 <input value={scratchTemplateTitle} onChange={(event) => setScratchTemplateTitle(event.target.value)} placeholder="Template title" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                <select value={scratchTemplateTrigger} onChange={(event) => setScratchTemplateTrigger(event.target.value as typeof scratchTemplateTrigger)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                  <option value="task_completion">Every completed task</option>
+                  <option value="random_task">Random completed task</option>
+                  <option value="streak">7-day streak milestone</option>
+                  <option value="perfect_exam">100% exam result</option>
+                </select>
                 <select value={scratchTemplateRevealType} onChange={(event) => setScratchTemplateRevealType(event.target.value as 'scratch' | 'wheel')} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                   <option value="scratch">Scratch Card</option>
                   <option value="wheel">Spin Wheel</option>
@@ -3581,7 +3635,7 @@ function ParentDashboardContent() {
                     <div key={template.id} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                       <div className="min-w-0">
                         <p className="truncate font-bold" style={{ color: 'var(--text-main)' }}>{template.title}</p>
-                        <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {template.reveal_type === 'wheel' ? `${template.wheel_segments?.length || 0} wheel options` : template.prize_label}</p>
+                        <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {getScratchTriggerLabel(template.trigger)} • {template.reveal_type === 'wheel' ? `${template.wheel_segments?.length || 0} wheel options` : template.prize_label}</p>
                       </div>
                       <button type="button" onClick={() => void updateScratchTemplate(template.id, { is_active: !template.is_active })} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${template.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{template.is_active ? 'Active' : 'Paused'}</button>
                     </div>
@@ -4410,7 +4464,7 @@ function ParentDashboardContent() {
                       <form onSubmit={handleSaveScratchTemplate} className="mb-5 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Award Template</h4>
-                          <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">after task completion</span>
+                          <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">{getScratchTriggerLabel(scratchTemplateTrigger)}</span>
                         </div>
                         <div className="grid grid-cols-1 gap-3 xl:grid-cols-6 xl:items-center">
                           <select
@@ -4431,6 +4485,17 @@ function ParentDashboardContent() {
                             className="rounded-xl py-2.5 px-3 border"
                             style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                           />
+                          <select
+                            value={scratchTemplateTrigger}
+                            onChange={(event) => setScratchTemplateTrigger(event.target.value as typeof scratchTemplateTrigger)}
+                            className="rounded-xl py-2.5 px-3 border"
+                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
+                          >
+                            <option value="task_completion">Every completed task</option>
+                            <option value="random_task">Random completed task</option>
+                            <option value="streak">7-day streak milestone</option>
+                            <option value="perfect_exam">100% exam result</option>
+                          </select>
                           <select
                             value={scratchTemplateRevealType}
                             onChange={(event) => setScratchTemplateRevealType(event.target.value as 'scratch' | 'wheel')}
@@ -4497,7 +4562,7 @@ function ParentDashboardContent() {
                               <div>
                                 <p className="font-bold" style={{ color: 'var(--text-main)' }}>{template.title}</p>
                                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                                  {template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {template.prize_label}
+                                  {template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {getScratchTriggerLabel(template.trigger)} • {template.prize_label}
                                 </p>
                               </div>
                               <button
@@ -5393,9 +5458,6 @@ function ParentDashboardContent() {
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         <button onClick={() => setSettingsTab('manage_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'manage_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'manage_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Manage Child
-                        </button>
-                        <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
-                          Rewards
                         </button>
                         <button onClick={() => setSettingsTab('growth')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'growth' ? 'white' : 'var(--text-main)', background: settingsTab === 'growth' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Growth

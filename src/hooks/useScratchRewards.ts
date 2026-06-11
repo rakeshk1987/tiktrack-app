@@ -30,15 +30,23 @@ export const awardScratchRewardForTrigger = async ({
   sourceId,
   sourceType,
   reason,
+  trigger = 'task_completion',
+  streakCount,
 }: {
   childId: string;
   familyId: string;
   parentId: string;
   sourceId: string;
-  sourceType: 'task' | 'routine' | 'approval';
+  sourceType: 'task' | 'routine' | 'approval' | 'exam';
   reason: string;
+  trigger?: ScratchRewardTemplate['trigger'];
+  streakCount?: number;
 }) => {
   if (!childId || !familyId || !sourceId) return null;
+
+  const triggerCandidates: ScratchRewardTemplate['trigger'][] =
+    trigger === 'task_completion' ? ['task_completion', 'random_task', 'streak'] : [trigger];
+  if (triggerCandidates.length === 0 || trigger === 'manual') return null;
 
   const existingSnapshot = await getDocs(query(
     collection(db, 'scratch_rewards'),
@@ -47,18 +55,24 @@ export const awardScratchRewardForTrigger = async ({
   ));
   if (!existingSnapshot.empty) return null;
 
-  const templateSnapshot = await getDocs(query(
+  const templateSnapshots = await Promise.all(triggerCandidates.map((candidate) => getDocs(query(
     collection(db, 'scratch_reward_templates'),
     where('family_id', '==', familyId),
-    where('trigger', '==', 'task_completion'),
+    where('trigger', '==', candidate),
     where('is_active', '==', true)
-  ));
+  ))));
 
-  const templates = templateSnapshot.docs
+  const templates = templateSnapshots.flatMap((snapshot) => snapshot.docs)
     .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<ScratchRewardTemplate, 'id'>) }))
-    .filter((template) => !template.child_id || template.child_id === childId);
+    .filter((template) => !template.child_id || template.child_id === childId)
+    .filter((template) => {
+      if (template.trigger === 'random_task') return Math.random() < 0.25;
+      if (template.trigger === 'streak') return Boolean(streakCount && streakCount > 0 && streakCount % 7 === 0);
+      return true;
+    });
 
-  const template = templates[0];
+  const orderedTemplates = templates.sort((a, b) => triggerCandidates.indexOf(a.trigger) - triggerCandidates.indexOf(b.trigger));
+  const template = orderedTemplates[0];
   if (!template) return null;
 
   return createScratchCardDoc({

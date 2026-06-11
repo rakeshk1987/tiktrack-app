@@ -337,7 +337,7 @@ export interface ScratchRewardCard {
   family_id?: string;
   template_id?: string;
   source_id?: string;
-  source_type?: 'task' | 'routine' | 'approval' | 'manual';
+  source_type?: 'task' | 'routine' | 'approval' | 'exam' | 'manual';
   title: string;
   reveal_type?: 'scratch' | 'wheel';
   prize_label: string;
@@ -363,7 +363,7 @@ export interface ScratchRewardTemplate {
   stars_value?: number;
   cash_value?: number;
   wheel_segments?: string[];
-  trigger: 'task_completion' | 'manual';
+  trigger: 'task_completion' | 'random_task' | 'streak' | 'perfect_exam' | 'manual';
   is_active: boolean;
   created_at: string;
   updated_at: string;

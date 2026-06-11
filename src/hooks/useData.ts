@@ -551,6 +551,7 @@ export function useQuestActions(childId: string) {
             sourceId: task.id,
             sourceType: 'task',
             reason: `Completed task "${task.title || 'Task'}"`,
+            streakCount: Number(updatedProfile.streak_count || 0),
           });
         }
       }
