@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -65,6 +66,13 @@ function subjectMatchesStoredValue(subject: PlannerSubject, value?: string | nul
   return Boolean(value && (value === subject.id || value === subject.name));
 }
 
+function splitStoredList(value?: string | null): string[] {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 const ACTIVITY_FILTER_PALETTE = [
   '#38bdf8',
   '#a78bfa',
@@ -74,6 +82,21 @@ const ACTIVITY_FILTER_PALETTE = [
   '#22d3ee',
   '#f472b6',
   '#84cc16'
+];
+
+const MONTH_OPTIONS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December'
 ];
 
 interface ChildAccount {
@@ -397,6 +420,8 @@ function ParentDashboardContent() {
   const [showExamModal, setShowExamModal] = useState(false);
   const [editExamId, setEditExamId] = useState<string | null>(null);
   const [filterChild, setFilterChild] = useState<string>('');
+  const [examFilterMonth, setExamFilterMonth] = useState(() => String(new Date().getMonth()));
+  const [examFilterYear, setExamFilterYear] = useState(() => String(new Date().getFullYear()));
   const [growthLogs, setGrowthLogs] = useState<Array<any>>([]);
   const [growthLoading, setGrowthLoading] = useState(true);
   const [gChild, setGChild] = useState('');
@@ -1807,12 +1832,20 @@ function ParentDashboardContent() {
   };
 
   const startEditExam = (ex: any) => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const storedSubjectNames = splitStoredList(ex.subject);
+    const storedSubjectIds = splitStoredList(ex.subject_id);
+    const knownSubjectTokens = new Set(
+      examSubjects.flatMap((subject) => [subject.id, subject.name])
+    );
+    const hasCustomSubjects = storedSubjectNames.some((subjectName) => !knownSubjectTokens.has(subjectName));
     setEditExamId(ex.id);
     setEChild(ex.child_id || '');
     setEActivityId(ex.linked_program_id || '');
-    setESubjects(ex.subject ? ex.subject.split(', ') : []);
-    setESubjectIds(ex.subject_id ? ex.subject_id.split(',') : []);
+    setESubjects(storedSubjectNames);
+    setESubjectIds(storedSubjectIds.length ? storedSubjectIds : [
+      ...storedSubjectNames,
+      ...(hasCustomSubjects ? ['custom'] : [])
+    ]);
     setERecurrenceType(ex.recurrence_type || 'none');
     setERecurrenceDays(ex.recurrence_days || []);
     setEType((ex.exam_type as 'weekly_test' | 'unit_test' | 'midterm' | 'final' | 'practice' | 'other') || 'weekly_test');
@@ -1821,7 +1854,6 @@ function ParentDashboardContent() {
     setEDate(ex.exam_date ? toInputDateTimeLocal(ex.exam_date) : '');
     setESyllabusScope(ex.syllabus_scope || '');
     setEPoints(ex.points_allocated ?? '');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelEdit = () => {
@@ -2340,6 +2372,14 @@ function ParentDashboardContent() {
   const [upcomingEventsCount, setUpcomingEventsCount] = useState(0);
   const [examsCount, setExamsCount] = useState(0);
   const getEventDateValue = (event: any) => event.start_at || event.date || event.created_at || null;
+  const getExamDateValue = (exam: any) => exam.exam_date || exam.date || exam.created_at || null;
+  const isExamInMonth = (exam: any, month: number, year: number) => {
+    const dateValue = getExamDateValue(exam);
+    if (!dateValue) return false;
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return false;
+    return date.getMonth() === month && date.getFullYear() === year;
+  };
   const calculateBmi = (heightCm?: number, weightKg?: number) => {
     const h = Number(heightCm) || 0;
     const w = Number(weightKg) || 0;
@@ -2533,7 +2573,8 @@ function ParentDashboardContent() {
     // aggregate simple analytics from existing subscriptions
     setTotalTasksCount(tasks.length);
     setPendingProofCount(visiblePendingProofs.length);
-    setExamsCount(exams.length);
+    const currentMonth = new Date();
+    setExamsCount(exams.filter((exam) => isExamInMonth(exam, currentMonth.getMonth(), currentMonth.getFullYear())).length);
 
     const today = new Date();
     const upcoming = events.filter((ev) => {
@@ -2579,7 +2620,10 @@ function ParentDashboardContent() {
   const cardBase = 'rounded-3xl border p-5 shadow-[var(--card-shadow)]';
   const hasChildren = children.length > 0;
   const getChildName = (childId?: string) => children.find((c) => c.id === childId)?.name || 'Child';
-  const latestExams = [...exams]
+  const currentExamSnapshotDate = new Date();
+  const latestExams = exams
+    .filter((exam) => isExamInMonth(exam, currentExamSnapshotDate.getMonth(), currentExamSnapshotDate.getFullYear()))
+    .slice()
     .sort((a, b) => new Date(b.exam_date || 0).getTime() - new Date(a.exam_date || 0).getTime())
     .slice(0, 3);
   const upcomingEventsPreview = events
@@ -2818,6 +2862,20 @@ function ParentDashboardContent() {
   const filteredEvents = events.filter((event) => matchesActivityFilter(event, eventActivityFilter));
   const filteredActiveChallenges = activeChallenges.filter((challenge) => matchesActivityFilter(challenge, challengeActivityFilter));
   const filteredCompletedChallenges = completedChallenges.filter((challenge) => matchesActivityFilter(challenge, challengeActivityFilter));
+  const selectedExamMonth = Number(examFilterMonth);
+  const selectedExamYear = Number(examFilterYear);
+  const examYearOptions = Array.from(new Set([
+    new Date().getFullYear(),
+    ...exams
+      .map((exam) => {
+        const dateValue = getExamDateValue(exam);
+        const date = dateValue ? new Date(dateValue) : null;
+        return date && !Number.isNaN(date.getTime()) ? date.getFullYear() : null;
+      })
+      .filter((year): year is number => year !== null)
+  ])).sort((a, b) => b - a);
+  const examPeriodCount = (filterChild ? exams.filter((exam) => exam.child_id === filterChild) : exams)
+    .filter((exam) => isExamInMonth(exam, selectedExamMonth, selectedExamYear)).length;
 
   const automatedTasks = tasks.filter((task) => task.is_generated === true);
   const manualTasks = tasks.filter((task) => task.is_generated !== true);
@@ -2838,7 +2896,8 @@ function ParentDashboardContent() {
     ? exams.filter((exam) => exam.child_id === selectedActivity.childId && !exam.linked_program_id)
     : [];
 
-  const visibleExams = (filterChild ? filteredExams.filter((x) => x.child_id === filterChild) : filteredExams);
+  const visibleExams = (filterChild ? filteredExams.filter((x) => x.child_id === filterChild) : filteredExams)
+    .filter((exam) => isExamInMonth(exam, selectedExamMonth, selectedExamYear));
   const upcomingExamSchedules = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'scheduled');
   const pendingExamResults = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'completed_pending_result');
   const publishedExamResults = visibleExams.filter((ex) => (ex.status || 'scheduled') === 'result_published');
@@ -4581,18 +4640,28 @@ function ParentDashboardContent() {
                     <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                         <h2 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Exams</h2>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <select value={filterChild} onChange={(ev) => setFilterChild(ev.target.value)} className="rounded-xl py-1 px-3 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                             <option value="">All Children</option>
                             {children.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
+                          </select>
+                          <select value={examFilterMonth} onChange={(ev) => setExamFilterMonth(ev.target.value)} className="rounded-xl py-1 px-3 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            {MONTH_OPTIONS.map((month, index) => (
+                              <option key={month} value={String(index)}>{month}</option>
+                            ))}
+                          </select>
+                          <select value={examFilterYear} onChange={(ev) => setExamFilterYear(ev.target.value)} className="rounded-xl py-1 px-3 text-sm border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                            {examYearOptions.map((year) => (
+                              <option key={year} value={String(year)}>{year}</option>
+                            ))}
                           </select>
                           <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{visibleExams.length}</span>
                           <button onClick={() => { setEChild(''); setEActivityId(''); setESubjects([]); setESubjectIds([]); setERecurrenceType('none'); setERecurrenceDays([]); setEMarks(''); setETotal(''); setEDate(''); setESyllabusScope(''); setEPoints(''); setEditExamId(null); setShowExamModal(true); }} className="py-2 px-4 rounded-xl text-sm font-bold text-white shadow-sm hover:shadow-md transition-shadow" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>+ Add Exam</button>
                         </div>
                       </div>
-                      {renderActivityFilter(examActivityFilter, setExamActivityFilter, exams.length)}
+                      {renderActivityFilter(examActivityFilter, setExamActivityFilter, examPeriodCount)}
 
-                      {showExamModal && (
+                      {showExamModal && createPortal((
                         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
                           <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl p-4 sm:p-6 border max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto" style={{ borderColor: 'var(--border-main)' }}>
                             <div className="flex justify-between items-center mb-4">
@@ -4615,14 +4684,14 @@ function ParentDashboardContent() {
                                 ) : (
                                   <div className="flex flex-wrap gap-2">
                                     {examSubjects.filter(s => s.includeInExams).map(s => {
-                                      const isSelected = eSubjectIds.includes(s.id);
+                                      const isSelected = eSubjectIds.some((subjectId) => subjectMatchesStoredValue(s, subjectId));
                                       return (
                                         <button
                                           key={s.id}
                                           type="button"
                                           onClick={() => {
                                             if (isSelected) {
-                                              setESubjectIds(prev => prev.filter(id => id !== s.id));
+                                              setESubjectIds(prev => prev.filter(id => !subjectMatchesStoredValue(s, id)));
                                               setESubjects(prev => prev.filter(name => name !== s.name));
                                             } else {
                                               setESubjectIds(prev => [...prev, s.id]);
@@ -4726,7 +4795,7 @@ function ParentDashboardContent() {
                             </form>
                           </div>
                         </div>
-                      )}
+                      ), document.body)}
 
                       <div className="space-y-6">
                         {examsLoading ? (
