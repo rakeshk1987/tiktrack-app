@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -460,6 +461,7 @@ function ParentDashboardContent() {
   const [scratchPrizeType, setScratchPrizeType] = useState<'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom'>('cash');
   const [scratchStars, setScratchStars] = useState<number | ''>(10);
   const [scratchPrizeLabel, setScratchPrizeLabel] = useState('₹10');
+  const [scratchWheelSegments, setScratchWheelSegments] = useState<string[]>(['₹5', '₹10', 'Treat', 'Book', 'Bonus stars', 'Try again']);
   const [scratchReason, setScratchReason] = useState('');
   const [scratchSaving, setScratchSaving] = useState(false);
   const [scratchTemplateChildId, setScratchTemplateChildId] = useState('');
@@ -468,6 +470,7 @@ function ParentDashboardContent() {
   const [scratchTemplatePrizeType, setScratchTemplatePrizeType] = useState<'stars' | 'cash' | 'book' | 'toy' | 'treat' | 'custom'>('cash');
   const [scratchTemplateStars, setScratchTemplateStars] = useState<number | ''>(10);
   const [scratchTemplatePrizeLabel, setScratchTemplatePrizeLabel] = useState('₹10');
+  const [scratchTemplateWheelSegments, setScratchTemplateWheelSegments] = useState<string[]>(['₹5', '₹10', 'Treat', 'Book', 'Bonus stars', 'Try again']);
   const [scratchTemplateSaving, setScratchTemplateSaving] = useState(false);
 
   const { initiateSickPeriod, getActiveSickPeriod } = useSickMode(user?.id || '');
@@ -636,6 +639,48 @@ function ParentDashboardContent() {
   const [newSubTeacher, setNewSubTeacher] = useState('');
   const [newSubInExam, setNewSubInExam] = useState(true);
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
+
+  const renderWheelSegmentEditor = (
+    segments: string[],
+    setSegments: Dispatch<SetStateAction<string[]>>
+  ) => (
+    <div className="rounded-2xl border p-3 sm:col-span-2 xl:col-span-full" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Wheel options</p>
+        <button
+          type="button"
+          onClick={() => setSegments((current) => [...current, ''])}
+          disabled={segments.length >= 12}
+          className="rounded-lg border px-3 py-1 text-xs font-bold disabled:opacity-40"
+          style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+        >
+          + Option
+        </button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {segments.map((segment, index) => (
+          <div key={index} className="flex gap-2">
+            <input
+              value={segment}
+              onChange={(event) => setSegments((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+              placeholder={`Option ${index + 1}`}
+              className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm"
+              style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
+            />
+            <button
+              type="button"
+              onClick={() => setSegments((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+              disabled={segments.length <= 2}
+              className="rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-40"
+              style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     if (!user) {
@@ -2189,12 +2234,15 @@ function ParentDashboardContent() {
     const child = children.find((item) => item.id === settleChildId);
     const childProfile = childProfiles.find((item) => item.id === settleChildId);
     const currentBalance = Number(childProfile?.total_stars || 0);
+    const rewardSettings = rewards[0] ? normalizeRewardSettings(rewards[0]) : null;
+    const cashRate = Number(rewardSettings?.point_to_cash_rate || 0);
+    const cashBalance = currentBalance * cashRate;
     if (currentBalance <= 0) {
       setError('This child has no reward balance to settle.');
       return;
     }
 
-    if (!window.confirm(`Mark ${currentBalance} as paid and reset ${child?.name || 'this child'}'s reward balance to zero?`)) {
+    if (!window.confirm(`Mark ${currentBalance} stars (${rewardSettings?.currency_symbol || '₹'}${cashBalance}) as paid and reset ${child?.name || 'this child'}'s reward balance to zero?`)) {
       return;
     }
 
@@ -2215,7 +2263,7 @@ function ParentDashboardContent() {
         period_start: today,
         period_end: today,
         total_points: currentBalance,
-        total_money: currentBalance,
+        total_money: cashBalance,
         status: 'paid',
         created_at: now,
         paid_at: now,
@@ -2228,7 +2276,7 @@ function ParentDashboardContent() {
         type: 'adjustment',
         stars_delta: -currentBalance,
         title: 'Reward balance settled',
-        reason: `Parent marked ${currentBalance} as paid and reset the reward balance.`,
+        reason: `Parent marked ${currentBalance} stars (${rewardSettings?.currency_symbol || '₹'}${cashBalance}) as paid and reset the reward balance.`,
         source_type: 'system',
         visible_to_child: true,
       });
@@ -2236,13 +2284,13 @@ function ParentDashboardContent() {
       await sendMessage(
         settleChildId,
         familyId,
-        `Your reward balance of ${currentBalance} was paid and reset to zero.`,
+        `Your reward balance of ${currentBalance} stars (${rewardSettings?.currency_symbol || '₹'}${cashBalance}) was paid and reset to zero.`,
         'parent',
         familyId,
         'Reward paid'
       );
 
-      setSuccess(`Settled ${currentBalance} for ${child?.name || 'child'} and reset balance to zero.`);
+      setSuccess(`Settled ${rewardSettings?.currency_symbol || '₹'}${cashBalance} for ${child?.name || 'child'} and reset balance to zero.`);
       setSettleChildId('');
     } catch (err) {
       console.error('Failed to settle reward balance:', err);
@@ -2252,6 +2300,13 @@ function ParentDashboardContent() {
     }
   };
 
+  const normalizeWheelSegments = (segments: string[]) => (
+    segments
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .slice(0, 12)
+  );
+
   const handleSendScratchReward = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user || !scratchChildId) {
@@ -2260,12 +2315,20 @@ function ParentDashboardContent() {
     }
 
     const stars = Number(scratchStars);
-    if ((scratchPrizeType === 'stars' || scratchPrizeType === 'cash') && (!Number.isFinite(stars) || stars <= 0)) {
+    if (scratchRevealType !== 'wheel' && (scratchPrizeType === 'stars' || scratchPrizeType === 'cash') && (!Number.isFinite(stars) || stars <= 0)) {
       setError(`Enter the ${scratchPrizeType === 'cash' ? 'cash' : 'star'} value for this surprise reward.`);
       return;
     }
 
-    const prizeLabel = scratchPrizeType === 'stars'
+    const wheelSegments = scratchRevealType === 'wheel' ? normalizeWheelSegments(scratchWheelSegments) : [];
+    if (scratchRevealType === 'wheel' && wheelSegments.length < 2) {
+      setError('Add at least two spin wheel options.');
+      return;
+    }
+
+    const prizeLabel = scratchRevealType === 'wheel'
+      ? `Spin wheel: ${wheelSegments.join(' / ')}`
+      : scratchPrizeType === 'stars'
       ? `${stars} stars`
       : scratchPrizeType === 'cash'
         ? `${rCurrencySymbol || '₹'}${stars}`
@@ -2285,11 +2348,11 @@ function ParentDashboardContent() {
         family_id: familyId,
         title: scratchTitle.trim() || (scratchRevealType === 'wheel' ? 'Spin surprise' : 'Scratch surprise'),
         reveal_type: scratchRevealType,
-        prize_type: scratchPrizeType,
+        prize_type: scratchRevealType === 'wheel' ? 'custom' : scratchPrizeType,
         prize_label: prizeLabel,
-        stars_value: scratchPrizeType === 'stars' || scratchPrizeType === 'cash' ? stars : 0,
-        cash_value: scratchPrizeType === 'cash' ? stars : 0,
-        wheel_segments: scratchRevealType === 'wheel' ? ['₹5', 'Treat', prizeLabel, 'Bonus', 'Try again', 'Mystery'] : undefined,
+        stars_value: scratchRevealType === 'wheel' ? 0 : (scratchPrizeType === 'stars' || scratchPrizeType === 'cash' ? stars : 0),
+        cash_value: scratchRevealType === 'wheel' ? 0 : (scratchPrizeType === 'cash' ? stars : 0),
+        wheel_segments: scratchRevealType === 'wheel' ? wheelSegments : undefined,
         reason: scratchReason.trim() || 'Completed something special',
       });
 
@@ -2318,12 +2381,20 @@ function ParentDashboardContent() {
     if (!user) return;
 
     const stars = Number(scratchTemplateStars);
-    if ((scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash') && (!Number.isFinite(stars) || stars <= 0)) {
+    if (scratchTemplateRevealType !== 'wheel' && (scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash') && (!Number.isFinite(stars) || stars <= 0)) {
       setError(`Enter the ${scratchTemplatePrizeType === 'cash' ? 'cash' : 'star'} value for this surprise template.`);
       return;
     }
 
-    const prizeLabel = scratchTemplatePrizeType === 'stars'
+    const wheelSegments = scratchTemplateRevealType === 'wheel' ? normalizeWheelSegments(scratchTemplateWheelSegments) : [];
+    if (scratchTemplateRevealType === 'wheel' && wheelSegments.length < 2) {
+      setError('Add at least two spin wheel template options.');
+      return;
+    }
+
+    const prizeLabel = scratchTemplateRevealType === 'wheel'
+      ? `Spin wheel: ${wheelSegments.join(' / ')}`
+      : scratchTemplatePrizeType === 'stars'
       ? `${stars} stars`
       : scratchTemplatePrizeType === 'cash'
         ? `${rCurrencySymbol || '₹'}${stars}`
@@ -2343,11 +2414,11 @@ function ParentDashboardContent() {
         child_id: scratchTemplateChildId || '',
         title: scratchTemplateTitle.trim() || (scratchTemplateRevealType === 'wheel' ? 'Task completion spin' : 'Task completion scratch'),
         reveal_type: scratchTemplateRevealType,
-        prize_type: scratchTemplatePrizeType,
+        prize_type: scratchTemplateRevealType === 'wheel' ? 'custom' : scratchTemplatePrizeType,
         prize_label: prizeLabel,
-        stars_value: scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? stars : 0,
-        cash_value: scratchTemplatePrizeType === 'cash' ? stars : 0,
-        wheel_segments: scratchTemplateRevealType === 'wheel' ? ['₹5', 'Treat', prizeLabel, 'Bonus', 'Try again', 'Mystery'] : undefined,
+        stars_value: scratchTemplateRevealType === 'wheel' ? 0 : (scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? stars : 0),
+        cash_value: scratchTemplateRevealType === 'wheel' ? 0 : (scratchTemplatePrizeType === 'cash' ? stars : 0),
+        wheel_segments: scratchTemplateRevealType === 'wheel' ? wheelSegments : undefined,
         trigger: 'task_completion',
         is_active: true,
       });
@@ -3256,6 +3327,320 @@ function ParentDashboardContent() {
     }
   };
 
+  const renderRewardsPage = () => {
+    const activeSettings = rewards[0] ? normalizeRewardSettings(rewards[0]) : null;
+    const rewardRate = Number(activeSettings?.point_to_cash_rate || rStarRate || 0);
+    const rewardCurrency = activeSettings?.currency_symbol || rCurrencySymbol || '₹';
+    const walletStars = Number(selectedAutomationProfile?.total_stars || 0);
+    const walletCash = walletStars * rewardRate;
+    const monthEarnedCash = selectedRewardMonthSummary.earned * rewardRate;
+    const monthSpentCash = selectedRewardMonthSummary.spent * rewardRate;
+    const monthNetCash = selectedRewardMonthSummary.net * rewardRate;
+    const settleStars = settleChildId ? Number(childProfiles.find((child) => child.id === settleChildId)?.total_stars || 0) : 0;
+    const settleCash = settleStars * rewardRate;
+    const pendingRedemptions = redemptions.filter((item) => item.status === 'pending').length;
+    const approvedRedemptions = redemptions.filter((item) => item.status === 'approved').length;
+    const cashText = (value: number) => `${rewardCurrency}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-black" style={{ color: 'var(--text-main)' }}>Reward Wallet</h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Stars, cash value, shop rewards, approvals, bonus gifts, and payouts.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-bold">
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">Rate {rewardRate ? `1 star = ${cashText(rewardRate)}` : 'not set'}</span>
+            <span className="rounded-full bg-cyan-100 px-3 py-1 text-cyan-700">{rewardItems.length} shop items</span>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">{pendingRedemptions} pending</span>
+          </div>
+        </div>
+
+        <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Wallet Overview</h3>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{selectedRewardMonthSummary.label}</p>
+            </div>
+            <select value={selectedAutomationChildId} onChange={(event) => setAutomationChildId(event.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+              {children.map((child) => (
+                <option key={child.id} value={child.id}>{child.name || child.email}</option>
+              ))}
+            </select>
+          </div>
+
+          {selectedRewardLedgerLoading ? (
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading wallet...</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.10)' }}>
+                <p className="text-xs font-bold uppercase text-emerald-500">Earned</p>
+                <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{selectedRewardMonthSummary.earned} stars</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(monthEarnedCash)}</p>
+              </div>
+              <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'rgba(244,63,94,0.35)', background: 'rgba(244,63,94,0.10)' }}>
+                <p className="text-xs font-bold uppercase text-rose-500">Paid / Spent</p>
+                <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{selectedRewardMonthSummary.spent} stars</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(monthSpentCash)}</p>
+              </div>
+              <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)', background: 'rgba(34,211,238,0.10)' }}>
+                <p className="text-xs font-bold uppercase text-cyan-500">Net Month</p>
+                <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{selectedRewardMonthSummary.net} stars</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(monthNetCash)}</p>
+              </div>
+              <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Current Balance</p>
+                <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{walletStars} stars</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(walletCash)}</p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Conversion Rate</h3>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{activeSettings ? `Current: 1 star = ${cashText(rewardRate)}` : 'Set a star-to-cash rate'}</p>
+              </div>
+              <span className="rounded-full border px-3 py-1 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>{rewards.length} saved</span>
+            </div>
+
+            <form onSubmit={handleSaveReward} className="grid grid-cols-1 gap-3">
+              <div className="grid gap-3 sm:grid-cols-[110px_1fr]">
+                <input required value={rCurrencySymbol} onChange={(ev) => setRCurrencySymbol(ev.target.value)} placeholder="Currency" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value for 1 star" type="number" min="0" step="0.01" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {([5, 4, 3, 2, 1] as const).map((star) => (
+                  <label key={star} className="rounded-xl border p-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>
+                    {star} star %
+                    <input value={rPayoutPercentages[star]} onChange={(event) => setRPayoutPercentages((current) => ({ ...current, [star]: Number(event.target.value) || 0 }))} type="number" min="0" max="100" className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
+                  <span style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
+                </label>
+                <div className="flex gap-2">
+                  <button disabled={rewardLoading} type="submit" className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : 'Save Rate')}</button>
+                  <button type="button" onClick={editRewardId ? cancelEditReward : () => { setRStarRate(''); setRWeeklyBonus(false); }} className="rounded-xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: 'var(--border-main)' }}>{editRewardId ? 'Cancel' : 'Clear'}</button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Settlement</h3>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Pay out the selected child and reset their star balance.</p>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{cashText(settleCash)}</span>
+            </div>
+            <form onSubmit={handleSettleRewardBalance} className="grid grid-cols-1 gap-3">
+              <select value={settleChildId} onChange={(event) => setSettleChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                <option value="">Select child</option>
+                {children.map((child) => (
+                  <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                ))}
+              </select>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Stars to reset</p>
+                  <p className="mt-1 text-xl font-black" style={{ color: 'var(--text-main)' }}>{settleStars}</p>
+                </div>
+                <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Cash payout</p>
+                  <p className="mt-1 text-xl font-black" style={{ color: 'var(--text-main)' }}>{cashText(settleCash)}</p>
+                </div>
+              </div>
+              <button disabled={settleSaving || !settleChildId || settleStars <= 0} type="submit" className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                {settleSaving ? 'Settling...' : 'Mark Paid & Reset'}
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <section className="space-y-4 rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Shop</h3>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Child-requestable catalogue items.</p>
+            </div>
+            <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Add Starter Catalogue</button>
+          </div>
+          <RewardManagement rewards={rewardItems} onCreateReward={createRewardForFamily} onUpdateReward={updateReward} onDeleteReward={deleteReward} loading={rewardItemsLoading} />
+        </section>
+
+        <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Requests</h3>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{pendingRedemptions} pending, {approvedRedemptions} approved</p>
+            </div>
+            <select value={selectedAutomationChildId} onChange={(event) => setAutomationChildId(event.target.value)} className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+              <option value="">Select child</option>
+              {children.map((child) => (
+                <option key={child.id} value={child.id}>{child.name || child.email}</option>
+              ))}
+            </select>
+          </div>
+          <RedemptionHistory redemptions={redemptions} onUpdateStatus={updateRedemptionStatus} loading={redemptionsLoading} />
+        </section>
+
+        <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+          <div className="mb-4">
+            <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Bonus Rewards</h3>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Manual stars, scratch cards, and spin wheels.</p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <form onSubmit={handleAwardStars} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+              <h4 className="mb-3 font-bold" style={{ color: 'var(--text-main)' }}>Award Stars</h4>
+              <div className="grid grid-cols-1 gap-3">
+                <select value={awardChildId} onChange={(event) => setAwardChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                  <option value="">Select child</option>
+                  {children.map((child) => (
+                    <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                  ))}
+                </select>
+                <div className="grid gap-3 sm:grid-cols-[0.5fr_1fr]">
+                  <input value={awardStars as any} onChange={(event) => setAwardStars(event.target.value === '' ? '' : Number(event.target.value))} placeholder="Stars" type="number" min="1" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                  <input value={awardReason} onChange={(event) => setAwardReason(event.target.value)} placeholder="Reason" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={awardSurprise} onChange={(event) => setAwardSurprise(event.target.checked)} className="h-4 w-4" />
+                  <span style={{ color: 'var(--text-muted)' }}>Surprise reveal</span>
+                </label>
+                <button disabled={awardSaving} type="submit" className="rounded-xl bg-pink-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{awardSaving ? 'Sending...' : 'Award Stars'}</button>
+              </div>
+            </form>
+
+            <form onSubmit={handleSaveScratchTemplate} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Reward Template</h4>
+                <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">task completion</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <select value={scratchTemplateChildId} onChange={(event) => setScratchTemplateChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                  <option value="">All children</option>
+                  {children.map((child) => (
+                    <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                  ))}
+                </select>
+                <input value={scratchTemplateTitle} onChange={(event) => setScratchTemplateTitle(event.target.value)} placeholder="Template title" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                <select value={scratchTemplateRevealType} onChange={(event) => setScratchTemplateRevealType(event.target.value as 'scratch' | 'wheel')} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                  <option value="scratch">Scratch Card</option>
+                  <option value="wheel">Spin Wheel</option>
+                </select>
+                {scratchTemplateRevealType === 'scratch' ? (
+                  <>
+                    <select value={scratchTemplatePrizeType} onChange={(event) => {
+                      const nextType = event.target.value as typeof scratchTemplatePrizeType;
+                      setScratchTemplatePrizeType(nextType);
+                      setScratchTemplatePrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'cash' ? `${rCurrencySymbol || '₹'}${scratchTemplateStars || 10}` : nextType === 'stars' ? `${scratchTemplateStars || 10} stars` : '');
+                    }} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <option value="cash">Cash</option>
+                      <option value="stars">Stars</option>
+                      <option value="book">Book</option>
+                      <option value="toy">Toy</option>
+                      <option value="treat">Treat</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? (
+                      <input value={scratchTemplateStars as any} onChange={(event) => {
+                        const value = event.target.value === '' ? '' : Number(event.target.value);
+                        setScratchTemplateStars(value);
+                        setScratchTemplatePrizeLabel(value === '' ? '' : scratchTemplatePrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${value}` : `${value} stars`);
+                      }} placeholder={scratchTemplatePrizeType === 'cash' ? 'Cash' : 'Stars'} type="number" min="1" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    ) : (
+                      <input value={scratchTemplatePrizeLabel} onChange={(event) => setScratchTemplatePrizeLabel(event.target.value)} placeholder="Prize label" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    )}
+                  </>
+                ) : (
+                  renderWheelSegmentEditor(scratchTemplateWheelSegments, setScratchTemplateWheelSegments)
+                )}
+                <button disabled={scratchTemplateSaving} type="submit" className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">{scratchTemplateSaving ? 'Saving...' : 'Save Template'}</button>
+              </div>
+            </form>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+              <h4 className="mb-3 font-bold" style={{ color: 'var(--text-main)' }}>Saved Templates</h4>
+              <div className="grid gap-2">
+                {scratchTemplatesLoading ? (
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading templates...</p>
+                ) : scratchTemplates.length === 0 ? (
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No templates saved.</p>
+                ) : (
+                  scratchTemplates.map((template) => (
+                    <div key={template.id} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold" style={{ color: 'var(--text-main)' }}>{template.title}</p>
+                        <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {template.reveal_type === 'wheel' ? `${template.wheel_segments?.length || 0} wheel options` : template.prize_label}</p>
+                      </div>
+                      <button type="button" onClick={() => void updateScratchTemplate(template.id, { is_active: !template.is_active })} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${template.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{template.is_active ? 'Active' : 'Paused'}</button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSendScratchReward} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+              <h4 className="mb-3 font-bold" style={{ color: 'var(--text-main)' }}>Send One-Time Surprise</h4>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <select value={scratchChildId} onChange={(event) => setScratchChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                  <option value="">Select child</option>
+                  {children.map((child) => (
+                    <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                  ))}
+                </select>
+                <input value={scratchTitle} onChange={(event) => setScratchTitle(event.target.value)} placeholder="Reward title" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                <select value={scratchRevealType} onChange={(event) => setScratchRevealType(event.target.value as 'scratch' | 'wheel')} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                  <option value="scratch">Scratch Card</option>
+                  <option value="wheel">Spin Wheel</option>
+                </select>
+                {scratchRevealType === 'scratch' ? (
+                  <>
+                    <select value={scratchPrizeType} onChange={(event) => {
+                      const nextType = event.target.value as typeof scratchPrizeType;
+                      setScratchPrizeType(nextType);
+                      setScratchPrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'cash' ? `${rCurrencySymbol || '₹'}${scratchStars || 10}` : nextType === 'stars' ? `${scratchStars || 10} stars` : '');
+                    }} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
+                      <option value="cash">Cash</option>
+                      <option value="stars">Stars</option>
+                      <option value="book">Book</option>
+                      <option value="toy">Toy</option>
+                      <option value="treat">Treat</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {scratchPrizeType === 'stars' || scratchPrizeType === 'cash' ? (
+                      <input value={scratchStars as any} onChange={(event) => {
+                        const value = event.target.value === '' ? '' : Number(event.target.value);
+                        setScratchStars(value);
+                        setScratchPrizeLabel(value === '' ? '' : scratchPrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${value}` : `${value} stars`);
+                      }} placeholder={scratchPrizeType === 'cash' ? 'Cash' : 'Stars'} type="number" min="1" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    ) : (
+                      <input value={scratchPrizeLabel} onChange={(event) => setScratchPrizeLabel(event.target.value)} placeholder="Prize label" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                    )}
+                  </>
+                ) : (
+                  renderWheelSegmentEditor(scratchWheelSegments, setScratchWheelSegments)
+                )}
+                <input value={scratchReason} onChange={(event) => setScratchReason(event.target.value)} placeholder="Reason" className="rounded-xl py-2.5 px-3 border sm:col-span-2" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
+                <button disabled={scratchSaving} type="submit" className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">{scratchSaving ? 'Sending...' : scratchRevealType === 'wheel' ? 'Send Wheel' : 'Send Scratch'}</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden px-2 py-3 sm:px-8 sm:py-8">
       <div className="mx-auto max-w-[1680px] rounded-[1.25rem] border bg-[var(--surface)]/95 p-2 backdrop-blur-md sm:rounded-[2rem] sm:p-4 lg:p-5" style={{ borderColor: 'var(--border-main)' }}>
@@ -3796,6 +4181,8 @@ function ParentDashboardContent() {
               </div>
 
                 <div className={activeTab === 'rewards' ? 'xl:col-span-12' : 'hidden'}>
+                  {renderRewardsPage()}
+                  {false && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -4243,8 +4630,9 @@ function ParentDashboardContent() {
                       </div>
                     </div>
 	              </div>
-	                </div>
-              </div>
+		                </div>
+                  )}
+                </div>
 
                 <div className={activeTab === 'tasks' ? 'xl:col-span-12' : 'hidden'}>
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>

@@ -202,22 +202,39 @@ export function useScratchRewards(childId: string, familyId?: string) {
     if (!card || card.status === 'revealed') return null;
 
     const revealedAt = new Date().toISOString();
+    const wheelSegments = (card.reveal_type === 'wheel' ? card.wheel_segments || [] : []).filter(Boolean);
+    const landedSegment = wheelSegments.length
+      ? wheelSegments[Math.floor(Math.random() * wheelSegments.length)]
+      : card.prize_label;
+    const revealedPrizeLabel = card.reveal_type === 'wheel' ? landedSegment : card.prize_label;
+    const revealedCard = card.reveal_type === 'wheel'
+      ? {
+          ...card,
+          prize_type: 'custom' as const,
+          prize_label: revealedPrizeLabel,
+          stars_value: 0,
+          cash_value: 0,
+        }
+      : card;
+
     await updateDoc(doc(db, 'scratch_rewards', cardId), {
       status: 'revealed',
       revealed_at: revealedAt,
+      prize_label: revealedPrizeLabel,
+      ...(card.reveal_type === 'wheel' ? { prize_type: 'custom', stars_value: 0, cash_value: 0 } : {}),
     });
 
-    if ((card.prize_type === 'stars' || card.prize_type === 'cash') && Number(card.stars_value || card.cash_value || 0) > 0) {
+    if ((revealedCard.prize_type === 'stars' || revealedCard.prize_type === 'cash') && Number(revealedCard.stars_value || revealedCard.cash_value || 0) > 0) {
       const profileRef = doc(db, 'child_profile', card.child_id);
       const profileSnap = await getDoc(profileRef);
       if (profileSnap.exists()) {
         const currentStars = Number(profileSnap.data().total_stars || 0);
         await updateDoc(profileRef, {
-          total_stars: currentStars + Number(card.stars_value || card.cash_value || 0),
+          total_stars: currentStars + Number(revealedCard.stars_value || revealedCard.cash_value || 0),
         });
       }
     } else {
-      await createAwardedPrizeRedemption(card);
+      await createAwardedPrizeRedemption(revealedCard);
     }
 
     await createRewardLedgerEntry({
@@ -225,15 +242,15 @@ export function useScratchRewards(childId: string, familyId?: string) {
       parent_id: card.parent_id,
       family_id: card.family_id,
       type: 'scratch_reward',
-      stars_delta: card.prize_type === 'stars' || card.prize_type === 'cash' ? Number(card.stars_value || card.cash_value || 0) : 0,
+      stars_delta: revealedCard.prize_type === 'stars' || revealedCard.prize_type === 'cash' ? Number(revealedCard.stars_value || revealedCard.cash_value || 0) : 0,
       title: card.title,
-      reason: `${card.reveal_type === 'wheel' ? 'Wheel reward' : 'Scratch reward'}: ${card.prize_label}. ${card.reason}`,
+      reason: `${card.reveal_type === 'wheel' ? 'Wheel reward' : 'Scratch reward'}: ${revealedPrizeLabel}. ${card.reason}`,
       source_id: card.id,
       source_type: 'scratch',
       visible_to_child: true,
     });
 
-    const revealed = { ...card, status: 'revealed' as const, revealed_at: revealedAt };
+    const revealed = { ...revealedCard, status: 'revealed' as const, revealed_at: revealedAt };
     setCards((current) => current.map((item) => item.id === cardId ? revealed : item));
     return revealed;
   }, [cards]);
