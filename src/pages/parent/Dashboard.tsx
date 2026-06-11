@@ -625,7 +625,7 @@ function ParentDashboardContent() {
   const { programs: activityPrograms, archivedPrograms: archivedActivityPrograms, loading: activityProgramsLoading, refresh: refreshActivityPrograms } = usePlannerPrograms(selectedActivityChildId);
   const { timetable: selectedChildTimetable } = usePlannerTimetable(selectedActivityChildId, false);
   const { challenges: activityChallenges, incrementScore: incrementActivityChallengeScore, createChallenge: createActivityChallenge } = usePlannerChallenges(selectedActivityChildId, selectedActivity?.id);
-  const { subjects: activitySubjects, addSubject: addActivitySubject, removeSubject: removeActivitySubject } = usePlannerSubjects(selectedActivityChildId, selectedActivity?.id);
+  const { subjects: activitySubjects, addSubject: addActivitySubject, removeSubject: removeActivitySubject, updateSubject: updateActivitySubject } = usePlannerSubjects(selectedActivityChildId, selectedActivity?.id);
   const { programs: examPrograms } = usePlannerPrograms(eChild);
   const { programs: taskPrograms } = usePlannerPrograms(tChild);
   const { programs: eventPrograms } = usePlannerPrograms(evChild);
@@ -635,6 +635,7 @@ function ParentDashboardContent() {
   const [newSubName, setNewSubName] = useState('');
   const [newSubTeacher, setNewSubTeacher] = useState('');
   const [newSubInExam, setNewSubInExam] = useState(true);
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -4882,7 +4883,7 @@ function ParentDashboardContent() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <GrowthChart logs={filterChild ? growthLogs.filter((x) => x.child_id === filterChild) : growthLogs} isDark={theme === 'dark'} />
-                      <AcademicHeatmap exams={filterChild ? exams.filter((x) => x.child_id === filterChild) : exams} isDark={theme === 'dark'} />
+                      <AcademicHeatmap exams={visibleExams} isDark={theme === 'dark'} />
                     </div>
                   </>
                 )}
@@ -4919,11 +4920,12 @@ function ParentDashboardContent() {
                               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{children.find((child) => child.id === program.childId)?.name || 'Child'} • Modules: {(program.modules || ['tasks']).join(', ')}</p>
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
-                              {!showArchivedActivities && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>}
+                              {!showArchivedActivities && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); setEditingSubId(null); setNewSubName(''); setNewSubTeacher(''); setNewSubInExam(true); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">Open</button>}
+                              {!showArchivedActivities && (program.modules || []).includes('subjects') && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab('subjects'); setEditingSubId(null); setNewSubName(''); setNewSubTeacher(''); setNewSubInExam(true); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-indigo-100 text-indigo-700">Subjects</button>}
                               {!showArchivedActivities && <button type="button" onClick={() => startEditActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700">Edit</button>}
                               {!showArchivedActivities && <button type="button" onClick={() => void handleCompleteActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-700">Complete</button>}
                               {showArchivedActivities && <button type="button" onClick={() => void handleUnarchiveActivity(program)} className="py-2 px-3 rounded-lg text-sm font-semibold bg-indigo-100 text-indigo-700">Unarchive</button>}
-                              {showArchivedActivities && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">View</button>}
+                              {showArchivedActivities && <button type="button" onClick={() => { setSelectedActivity(program); setActivityModalTab((program.modules?.[0] || 'tasks') as PlannerActivityModule); setEditingSubId(null); setNewSubName(''); setNewSubTeacher(''); setNewSubInExam(true); }} className="py-2 px-3 rounded-lg text-sm font-semibold bg-cyan-100 text-cyan-800">View</button>}
                               <button type="button" onClick={() => handleDeleteActivity(program.id)} className="col-span-2 sm:col-span-1 py-2 px-3 rounded-lg text-sm font-semibold bg-rose-100 text-rose-700">Delete</button>
                             </div>
                           </div>
@@ -5685,7 +5687,7 @@ function ParentDashboardContent() {
                 ) : (
                   <button type="button" onClick={() => void handleUnarchiveActivity(selectedActivity)} className="rounded-lg bg-indigo-100 px-3 py-1 text-sm font-semibold text-indigo-700">Unarchive</button>
                 )}
-                <button type="button" onClick={() => setSelectedActivity(null)} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
+                <button type="button" onClick={() => { setSelectedActivity(null); setEditingSubId(null); setNewSubName(''); setNewSubTeacher(''); setNewSubInExam(true); }} className="rounded-lg border px-3 py-1 text-sm font-semibold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}>Close</button>
               </div>
             </div>
 
@@ -5873,7 +5875,7 @@ function ParentDashboardContent() {
             {activityModalTab === 'subjects' ? (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-                  <p className="mb-3 text-xs font-bold uppercase tracking-widest text-indigo-400">Add New Subject</p>
+                  <p className="mb-3 text-xs font-bold uppercase tracking-widest text-indigo-400">{editingSubId ? 'Edit Subject' : 'Add New Subject'}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     <input 
                       value={newSubName} 
@@ -5890,7 +5892,7 @@ function ParentDashboardContent() {
                       style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input 
                         type="checkbox" 
@@ -5900,18 +5902,44 @@ function ParentDashboardContent() {
                       />
                       <span className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Include in Exams</span>
                     </label>
-                    <button 
-                      onClick={async () => {
-                        if (!newSubName.trim()) return;
-                        await addActivitySubject(newSubName, familyId, newSubTeacher, newSubInExam);
-                        setNewSubName('');
-                        setNewSubTeacher('');
-                        setNewSubInExam(true);
-                      }} 
-                      className="rounded-lg bg-indigo-500 px-4 py-2 text-xs font-bold text-white shadow-sm"
-                    >
-                      + Add Subject
-                    </button>
+                    <div className="flex gap-2">
+                      {editingSubId ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSubId(null);
+                            setNewSubName('');
+                            setNewSubTeacher('');
+                            setNewSubInExam(true);
+                          }}
+                          className="rounded-lg border px-4 py-2 text-xs font-bold"
+                          style={{ borderColor: 'var(--border-main)', color: 'var(--text-main)' }}
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
+                      <button 
+                        onClick={async () => {
+                          if (!newSubName.trim()) return;
+                          if (editingSubId) {
+                            await updateActivitySubject(editingSubId, {
+                              name: newSubName.trim(),
+                              teacherName: newSubTeacher,
+                              includeInExams: newSubInExam
+                            });
+                            setEditingSubId(null);
+                          } else {
+                            await addActivitySubject(newSubName, familyId, newSubTeacher, newSubInExam);
+                          }
+                          setNewSubName('');
+                          setNewSubTeacher('');
+                          setNewSubInExam(true);
+                        }} 
+                        className="rounded-lg bg-indigo-500 px-4 py-2 text-xs font-bold text-white shadow-sm"
+                      >
+                        {editingSubId ? 'Save Subject' : '+ Add Subject'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -5924,7 +5952,7 @@ function ParentDashboardContent() {
                         subjectMatchesStoredValue(sub, e.subject_id) ||
                         (typeof e.subject_id === 'string' && e.subject_id.split(',').some((subjectId: string) => subjectMatchesStoredValue(sub, subjectId.trim()))) ||
                         e.subject === sub.name ||
-                        (e.subject && e.subject.split(', ').includes(sub.name))
+                        (typeof e.subject === 'string' && e.subject.split(',').some((subjectName: string) => subjectName.trim() === sub.name))
                       )
                     ));
 
@@ -5939,6 +5967,17 @@ function ParentDashboardContent() {
                           {sub.includeInExams && (
                             <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 uppercase">Exam</span>
                           )}
+                          <button 
+                            onClick={() => {
+                              setEditingSubId(sub.id);
+                              setNewSubName(sub.name);
+                              setNewSubTeacher(sub.teacherName || '');
+                              setNewSubInExam(Boolean(sub.includeInExams));
+                            }} 
+                            className="rounded-lg bg-indigo-100 px-2 py-1 text-[10px] font-bold text-indigo-700 transition-colors hover:bg-indigo-200"
+                          >
+                            Edit
+                          </button>
                           <button 
                             onClick={() => void removeActivitySubject(sub.id)} 
                             className="text-slate-300 hover:text-rose-500 transition-colors"

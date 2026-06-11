@@ -131,6 +131,27 @@ describe('detectWeakSubjects', () => {
     expect(result[0]).toEqual({ subject: 'Math', percentage: 47 });
     expect(result[1]).toEqual({ subject: 'Science', percentage: 80 });
   });
+
+  it('splits multi-subject exams and distributes marks evenly', () => {
+    const result = detectWeakSubjects([
+      { id: '1', child_id: 'c1', subject: 'Physics, Chemistry', marks_scored: 80, total_marks: 100, exam_date: '2026-04-01' },
+      { id: '2', child_id: 'c1', subject: 'Physics', marks_scored: 45, total_marks: 50, exam_date: '2026-04-02' }
+    ]);
+
+    expect(result).toEqual([
+      { subject: 'Chemistry', percentage: 80 },
+      { subject: 'Physics', percentage: 85 }
+    ]);
+  });
+
+  it('ignores exams without usable marks', () => {
+    const result = detectWeakSubjects([
+      { id: '1', child_id: 'c1', subject: 'English', marks_scored: null, total_marks: null, exam_date: '2026-04-01' },
+      { id: '2', child_id: 'c1', subject: 'Math', marks_scored: 8, total_marks: 10, exam_date: '2026-04-02' }
+    ]);
+
+    expect(result).toEqual([{ subject: 'Math', percentage: 80 }]);
+  });
 });
 
 describe('getMoodAdjustedTaskLoad', () => {
@@ -425,4 +446,3 @@ describe('getExamPlannerStats', () => {
     vi.useRealTimers();
   });
 });
-

@@ -94,10 +94,24 @@ export function detectWeakSubjects(exams: ExamResult[]) {
   const subjectScores = new Map<string, { scored: number; total: number }>();
 
   exams.forEach((exam) => {
-    const current = subjectScores.get(exam.subject) ?? { scored: 0, total: 0 };
-    subjectScores.set(exam.subject, {
-      scored: current.scored + exam.marks_scored,
-      total: current.total + exam.total_marks
+    const marksScored = Number(exam.marks_scored);
+    const totalMarks = Number(exam.total_marks);
+    if (!Number.isFinite(marksScored) || !Number.isFinite(totalMarks) || totalMarks <= 0) return;
+
+    const subjects = exam.subject
+      .split(',')
+      .map((subject) => subject.trim())
+      .filter(Boolean);
+    const subjectCount = subjects.length || 1;
+    const scoredPerSubject = marksScored / subjectCount;
+    const totalPerSubject = totalMarks / subjectCount;
+
+    subjects.forEach((subject) => {
+      const current = subjectScores.get(subject) ?? { scored: 0, total: 0 };
+      subjectScores.set(subject, {
+        scored: current.scored + scoredPerSubject,
+        total: current.total + totalPerSubject
+      });
     });
   });
 
