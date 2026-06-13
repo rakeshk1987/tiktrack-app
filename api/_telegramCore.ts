@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import * as crypto from 'crypto';
 
 function getDb(): FirebaseFirestore.Firestore { return admin.firestore(); }
