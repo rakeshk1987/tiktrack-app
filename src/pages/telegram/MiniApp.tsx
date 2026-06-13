@@ -71,9 +71,8 @@ const telegramApiRoutes: Record<string, string> = {
 function functionUrl(name: string) {
   if (telegramApiBaseUrl) return `${telegramApiBaseUrl}${telegramApiRoutes[name] || ''}`;
 
-  const projectId = firebaseConfig?.projectId || '';
-  if (isUsingFirebaseEmulators) return `http://127.0.0.1:5001/${projectId}/us-central1/${name}`;
-  return `https://us-central1-${projectId}.cloudfunctions.net/${name}`;
+  // Default to Vercel relative path since we migrated off Firebase Functions
+  return telegramApiRoutes[name] || '';
 }
 
 function toIsoFromLocal(value: string) {

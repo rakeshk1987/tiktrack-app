@@ -5856,9 +5856,9 @@ function ParentDashboardContent() {
                         <div className="space-y-4">
                           <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
                             <p className="text-sm font-bold mb-1">Create a dedicated TikTrack bot</p>
-                            <p className="text-xs opacity-70">Use BotFather in Telegram to create a new bot. Store the bot token in Firebase Functions config, not in this browser UI.</p>
+                            <p className="text-xs opacity-70">Use BotFather in Telegram to create a new bot. Store the bot token as Environment Variables in Vercel, not in this browser UI.</p>
                             <div className="mt-3 rounded-lg bg-black/10 p-3 font-mono text-xs dark:bg-black/30">
-                              firebase functions:config:set telegram.bot_token="BOT_TOKEN" telegram.webhook_secret="LONG_RANDOM_SECRET"
+                              TELEGRAM_BOT_TOKEN="BOT_TOKEN" TELEGRAM_WEBHOOK_SECRET="LONG_RANDOM_SECRET"
                             </div>
                           </div>
 
