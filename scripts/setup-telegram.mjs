@@ -104,7 +104,7 @@ const botToken = requireEnv('TELEGRAM_BOT_TOKEN');
 const webhookSecret = requireEnv('TELEGRAM_WEBHOOK_SECRET');
 const miniAppUrl = requireEnv('TELEGRAM_MINI_APP_URL');
 const miniAppOrigin = process.env.TELEGRAM_MINI_APP_ORIGIN?.trim() || new URL(miniAppUrl).origin;
-const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() || `https://us-central1-${project}.cloudfunctions.net/telegramWebhook`;
+const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() || `https://${process.env.VERCEL_PROJECT_URL?.trim() || project + '.vercel.app'}/api/telegram/webhook`;
 const shouldDeploy = process.argv.includes('--deploy');
 const shouldSkipFirebaseConfig = process.argv.includes('--skip-firebase-config');
 
@@ -113,16 +113,7 @@ console.log(`Mini App: ${miniAppUrl}`);
 console.log(`Webhook: ${webhookUrl}`);
 
 if (!shouldSkipFirebaseConfig) {
-  await run('npx', [
-    'firebase-tools',
-    'functions:config:set',
-    `telegram.bot_token=${botToken}`,
-    `telegram.webhook_secret=${webhookSecret}`,
-    `telegram.mini_app_url=${miniAppUrl}`,
-    `telegram.mini_app_origin=${miniAppOrigin}`,
-    '--project',
-    project,
-  ]);
+  console.log('Skipping firebase-tools config:set (Vercel is used instead).');
 }
 
 if (shouldDeploy) {

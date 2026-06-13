@@ -1,12 +1,26 @@
 import {
-  runTelegramHandler,
+  initializeTelegramFirebaseAdmin,
+  setApiCors,
   type TelegramApiRequest,
   type TelegramApiResponse,
 } from '../../_telegramSupport.js';
+import { miniAppListToday, BotAuthError, BotRequestError } from '../../_telegramCore.js';
 
 export default async function handler(req: TelegramApiRequest, res: TelegramApiResponse) {
-  return runTelegramHandler(req, res, async () => {
-    const { telegramMiniAppListToday } = await import('../../../functions/lib/telegramBot.js');
-    return telegramMiniAppListToday as never;
-  });
+  setApiCors(res);
+  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+  if (req.method !== 'POST') { res.status(405).json({ ok: false, error: 'Method not allowed.' }); return; }
+
+  try {
+    initializeTelegramFirebaseAdmin();
+    const result = await miniAppListToday(req.body);
+    res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof BotAuthError || error instanceof BotRequestError) {
+      res.status(error.statusCode).json({ ok: false, error: error.message });
+      return;
+    }
+    console.error('Telegram mini app list today failed', error);
+    res.status(500).json({ ok: false, error: 'Could not load today schedule.' });
+  }
 }

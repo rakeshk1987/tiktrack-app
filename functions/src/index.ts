@@ -17,14 +17,7 @@ export {
   triggerCleanupJob,
 } from './backgroundJobs';
 
-export {
-  telegramMiniAppBootstrap,
-  telegramMiniAppCreateSchedule,
-  telegramMiniAppDeleteSchedule,
-  telegramMiniAppListToday,
-  telegramMiniAppListWeek,
-  telegramWebhook,
-} from './telegramBot';
+
 
 // Export types for use in other functions
 export * from './types/schema';
