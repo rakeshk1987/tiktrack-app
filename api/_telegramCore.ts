@@ -836,6 +836,42 @@ function verifyTelegramInitData(initData: string): TelegramUser | null {
   }
 }
 
+async function handleLinkCommand(chatId: number, telegramUser: TelegramUser, code: string) {
+  if (!code) {
+    await sendMessage(chatId, 'Send <code>/link YOUR_CODE</code>.');
+    return;
+  }
+
+  const codeRef = getDb().collection('telegram_link_codes').doc(code.trim().toUpperCase());
+  const codeSnap = await codeRef.get();
+  if (!codeSnap.exists) {
+    await sendMessage(chatId, 'That link code was not found or has expired.');
+    return;
+  }
+
+  const codeData = codeSnap.data() || {};
+  const expiresAt = codeData.expires_at as FirebaseFirestore.Timestamp | undefined;
+  if (expiresAt && expiresAt.toDate().getTime() < Date.now()) {
+    await sendMessage(chatId, 'That link code has expired. Please create a new one in TikTrack.');
+    return;
+  }
+
+  await getDb().collection('telegram_links').doc(String(telegramUser.id)).set({
+    telegram_user_id: telegramUser.id,
+    telegram_username: telegramUser.username || null,
+    telegram_first_name: telegramUser.first_name || null,
+    family_id: String(codeData.family_id),
+    parent_id: codeData.parent_id ? String(codeData.parent_id) : null,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  await codeRef.delete();
+  await sendMessage(chatId, 'Telegram is now linked to TikTrack.');
+  const link = await loadLink(telegramUser.id);
+  if (link) await showChildPicker(chatId, telegramUser.id, link);
+}
+
 async function handleMessage(message: TelegramMessage) {
   if (!message.from) return;
   const chatId = message.chat.id;
