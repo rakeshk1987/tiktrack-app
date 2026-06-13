@@ -155,6 +155,28 @@ This repo includes `vercel.json` for SPA rewrite and cache headers.
 3. Set output directory: `dist`.
 4. Add `VITE_FIREBASE_*` variables only if overriding defaults.
 
+## Telegram Bot & Mini App Integration
+
+TikTrack includes a fully integrated Telegram Bot and Mini App backend running on Vercel Serverless Functions. The bot handles webhooks natively without requiring Firebase Functions.
+
+**Setup Instructions:**
+
+1. Deploy the project to Vercel (see Vercel Deployment section).
+2. Configure the following Environment Variables in your Vercel project settings:
+   - `TELEGRAM_BOT_TOKEN`: Your Telegram Bot API token from BotFather.
+   - `TELEGRAM_WEBHOOK_SECRET`: A secure, random string for authenticating webhook requests.
+   - `TELEGRAM_MINI_APP_URL`: The URL where the frontend is hosted (e.g., `https://your-vercel-project.vercel.app`).
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: The JSON string of your Firebase Admin service account key (required to access Firestore securely from Vercel).
+3. Run the setup script locally to register the webhook, commands, and Mini App menu button:
+   ```bash
+   TELEGRAM_BOT_TOKEN="your_bot_token" \
+   TELEGRAM_WEBHOOK_SECRET="your_webhook_secret" \
+   TELEGRAM_MINI_APP_URL="https://your-vercel-project.vercel.app" \
+   VERCEL_PROJECT_URL="your-vercel-project.vercel.app" \
+   FIREBASE_PROJECT="tiktrack-f112b" \
+   node scripts/setup-telegram.mjs --skip-firebase-config
+   ```
+
 ## GitHub Actions Deployment
 
 The repository includes a GitHub Actions workflow at `.github/workflows/firebase-hosting.yml`.

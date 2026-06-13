@@ -20,6 +20,6 @@
     }
   ],
   "functions": {
-    "api/**/*.ts": { "runtime": "nodejs20.x", "maxDuration": 15 }
+    "api/**/*.ts": { "maxDuration": 15 }
   }
 }
