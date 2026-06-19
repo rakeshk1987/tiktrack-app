@@ -408,7 +408,7 @@ export default function ChildPlannerV2Page() {
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
-      await addDoc(collection(db, 'approvals'), {
+      const approvalRef = await addDoc(collection(db, 'approvals'), {
         family_id: familyId,
         child_id: childId,
         type: 'task',
@@ -418,6 +418,18 @@ export default function ChildPlannerV2Page() {
         status: 'pending',
         created_at: new Date().toISOString()
       });
+      // Fire-and-forget Telegram notification — never blocks the UI
+      fetch('/api/telegram/notify-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          family_id: familyId,
+          child_id: childId,
+          type: 'task',
+          title: newTaskTitle.trim(),
+          approval_id: approvalRef.id,
+        }),
+      }).catch(() => {});
       setNewTaskTitle('');
       setNewTaskDue('');
       setNewTaskExpiresAt('');
@@ -483,7 +495,7 @@ export default function ChildPlannerV2Page() {
         created_at: new Date().toISOString(),
         created_ts: serverTimestamp()
       });
-      await addDoc(collection(db, 'approvals'), {
+      const examApprovalRef = await addDoc(collection(db, 'approvals'), {
         family_id: familyId,
         child_id: childId,
         type: 'exam',
@@ -493,6 +505,18 @@ export default function ChildPlannerV2Page() {
         status: 'pending',
         created_at: new Date().toISOString()
       });
+      // Fire-and-forget Telegram notification — never blocks the UI
+      fetch('/api/telegram/notify-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          family_id: familyId,
+          child_id: childId,
+          type: 'exam',
+          title: normalizedSubjects.join(', ') || 'Exam',
+          approval_id: examApprovalRef.id,
+        }),
+      }).catch(() => {});
       setNewExamSubjects([]);
       setNewExamSubjectIds([]);
       setNewExamDate('');

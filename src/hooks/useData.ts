@@ -425,7 +425,7 @@ export function useChildProofs(childId: string) {
       });
 
       // Create a unified approval request for the parent
-      await addDoc(collection(db, 'approvals'), {
+      const approvalRef = await addDoc(collection(db, 'approvals'), {
         family_id: task.family_id || '',
         child_id: childId,
         type: 'task',
@@ -436,6 +436,19 @@ export function useChildProofs(childId: string) {
         created_at: new Date().toISOString(),
         proof_image_url: imageUrl
       });
+
+      // Fire-and-forget Telegram notification — never blocks the UI
+      fetch('/api/telegram/notify-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          family_id: task.family_id || '',
+          child_id: childId,
+          type: 'task',
+          title: task.title,
+          approval_id: approvalRef.id,
+        }),
+      }).catch(() => {});
 
       return proofDoc.id;
     } catch (error) {

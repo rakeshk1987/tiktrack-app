@@ -264,7 +264,7 @@ export function useRoutines(familyId: string, childId?: string) {
             });
 
             if (!hasPendingApprovalToday) {
-              await addDoc(collection(db, 'approvals'), {
+              const approvalRef = await addDoc(collection(db, 'approvals'), {
                 family_id: familyId,
                 child_id: targetChildId,
                 type: 'routine',
@@ -274,6 +274,18 @@ export function useRoutines(familyId: string, childId?: string) {
                 status: 'pending',
                 created_at: new Date().toISOString(),
               });
+              // Fire-and-forget Telegram notification — never blocks the UI
+              fetch('/api/telegram/notify-approval', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  family_id: familyId,
+                  child_id: targetChildId,
+                  type: 'routine',
+                  title: routine.title,
+                  approval_id: approvalRef.id,
+                }),
+              }).catch(() => {});
             }
           });
         } else if (!routine.requires_approval && starsAwarded > 0) {

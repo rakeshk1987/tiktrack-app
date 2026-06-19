@@ -44,6 +44,7 @@ interface TelegramLink {
   parent_id?: string;
   status: 'active' | 'disabled';
   default_child_id?: string | null;
+  chat_id?: number;
 }
 
 interface ChildOption {
@@ -204,6 +205,19 @@ async function saveSession(telegramUserId: number, session: Omit<TelegramSession
 
 async function clearSession(telegramUserId: number) {
   await getDb().collection('telegram_sessions').doc(String(telegramUserId)).delete();
+}
+
+/** Silently stores chat_id in telegram_links if it is missing (backfill for existing accounts). */
+async function backfillChatId(telegramUserId: number, chatId: number) {
+  try {
+    const docRef = getDb().collection('telegram_links').doc(String(telegramUserId));
+    const snap = await docRef.get();
+    if (snap.exists && !snap.data()?.chat_id) {
+      await docRef.update({ chat_id: chatId, updated_at: new Date().toISOString() });
+    }
+  } catch {
+    // non-critical — skip silently
+  }
 }
 
 async function getChildren(familyId: string): Promise<ChildOption[]> {
@@ -863,6 +877,7 @@ async function handleLinkCommand(chatId: number, telegramUser: TelegramUser, cod
     family_id: String(codeData.family_id),
     parent_id: codeData.parent_id ? String(codeData.parent_id) : null,
     status: 'active',
+    chat_id: chatId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -887,6 +902,7 @@ async function handleMessage(message: TelegramMessage) {
     await sendUnauthorised(chatId);
     return;
   }
+  void backfillChatId(message.from.id, chatId);
 
   const normalized = normalizeText(text);
   if (!text || normalized === 'hi' || normalized === 'hello' || text.startsWith('/start') || text.startsWith('/menu')) {
@@ -937,6 +953,7 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     await sendUnauthorised(chatId);
     return;
   }
+  void backfillChatId(callback.from.id, chatId);
 
   if (callback.data === 'cancel') {
     await clearSession(callback.from.id);
@@ -1086,6 +1103,104 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     const child = children.find((item) => item.id === session.draft.childId);
     if (child && source === 'week') await sendWeekSchedule(chatId, link.family_id, child);
     if (child && source !== 'week') await sendTodaySchedule(chatId, link.family_id, child);
+    return;
+  }
+
+  // ── Inline approve / reject ────────────────────────────────────────────────
+  if (callback.data.startsWith('approve:') || callback.data.startsWith('reject:')) {
+    const isApprove = callback.data.startsWith('approve:');
+    const approvalId = callback.data.split(':')[1];
+    const action = isApprove ? 'approved' : 'rejected';
+
+    const approvalRef = getDb().collection('approvals').doc(approvalId);
+    const approvalSnap = await approvalRef.get();
+
+    if (!approvalSnap.exists) {
+      await sendMessage(chatId, '⚠️ Approval not found — it may have already been reviewed.');
+      return;
+    }
+
+    const approval = approvalSnap.data() || {};
+
+    if (String(approval.family_id) !== link.family_id) {
+      await sendMessage(chatId, '⚠️ You do not have permission to review this approval.');
+      return;
+    }
+
+    if (approval.status !== 'pending') {
+      await sendMessage(chatId, `ℹ️ Already <b>${escapeHtml(String(approval.status))}</b> — no change made.`);
+      return;
+    }
+
+    await approvalRef.update({
+      status: action,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: 'telegram',
+    });
+
+    // Award stars when approved and points are set
+    if (isApprove && Number(approval.points || 0) > 0) {
+      try {
+        const profileRef = getDb().collection('child_profile').doc(String(approval.child_id));
+        const profileSnap = await profileRef.get();
+        if (profileSnap.exists) {
+          const currentStars = Number(profileSnap.data()?.total_stars || 0);
+          await profileRef.update({ total_stars: currentStars + Number(approval.points) });
+          await getDb().collection('reward_ledger').add({
+            child_id: approval.child_id,
+            parent_id: link.family_id,
+            family_id: link.family_id,
+            type: approval.type === 'routine' ? 'bonus' : 'task_completed',
+            stars_delta: Number(approval.points),
+            title: String(approval.title || 'Approval'),
+            reason: `${String(approval.type || 'Item')} approved via Telegram: ${String(approval.title || '')}`,
+            source_id: approvalId,
+            source_type: 'approval',
+            visible_to_child: true,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn('Telegram inline approval: star award failed', err);
+      }
+    }
+
+    // Notify child in-app
+    try {
+      await getDb().collection('messages').add({
+        child_id: approval.child_id,
+        parent_id: link.family_id,
+        content: `Your ${String(approval.type || 'item')} "${String(approval.title || '')}" was ${action} by your parent!${isApprove ? ' 🎉' : ''}`,
+        timestamp: new Date().toISOString(),
+        is_read: false,
+        sender_role: 'parent',
+        sender_id: link.family_id,
+        subject: 'Quest Resolution',
+      });
+    } catch (err) {
+      console.warn('Telegram inline approval: child message failed', err);
+    }
+
+    // Edit the original notification to show resolved state (remove buttons)
+    const resolvedEmoji = isApprove ? '✅' : '❌';
+    const starsLine = isApprove && Number(approval.points || 0) > 0 ? `\n⭐ +${Number(approval.points)} stars awarded.` : '';
+    const resolvedText = [
+      `${resolvedEmoji} <b>${isApprove ? 'Approved!' : 'Rejected.'}</b>`,
+      ``,
+      `<b>${escapeHtml(String(approval.title || 'Item'))}</b> — reviewed via Telegram.${starsLine}`,
+    ].join('\n');
+
+    try {
+      await telegramApi('editMessageText', {
+        chat_id: chatId,
+        message_id: callback.message.message_id,
+        text: resolvedText,
+        parse_mode: 'HTML',
+      });
+    } catch {
+      await sendMessage(chatId, resolvedText);
+    }
+    return;
   }
 }
 
@@ -1225,4 +1340,80 @@ export async function miniAppDeleteSchedule(body: unknown): Promise<void> {
   }
   const deleted = await deleteScheduleItem(auth.link.family_id, childId, collection, id);
   if (!deleted) throw new BotRequestError(404, 'Schedule was not found.');
+}
+
+// ── Approval Notifications ─────────────────────────────────────────────────────
+
+export interface ApprovalNotificationParams {
+  familyId: string;
+  approvalType: 'task' | 'routine' | 'exam' | 'custom';
+  title: string;
+  childId: string;
+  approvalId?: string;
+}
+
+/**
+ * Sends a Telegram push notification to all parents linked to the family
+ * whenever a new approval request is created by the child.
+ */
+export async function sendApprovalNotification(params: ApprovalNotificationParams): Promise<void> {
+  const { familyId, approvalType, title, childId } = params;
+
+  // Resolve child name from Firestore
+  let childName = 'Your child';
+  if (childId) {
+    try {
+      const profileSnap = await getDb().collection('child_profile').doc(childId).get();
+      if (profileSnap.exists) {
+        childName = String(profileSnap.data()?.name || childName);
+      } else {
+        const userSnap = await getDb().collection('users').doc(childId).get();
+        if (userSnap.exists) {
+          childName = String(userSnap.data()?.name || userSnap.data()?.email || childName)
+            .replace('@tiktrack.family', '');
+        }
+      }
+    } catch {
+      // use default name
+    }
+  }
+
+  // Find all active Telegram links for this family
+  const linksSnap = await getDb()
+    .collection('telegram_links')
+    .where('family_id', '==', familyId)
+    .where('status', '==', 'active')
+    .get();
+
+  if (linksSnap.empty) return;
+
+  const typeEmoji: Record<string, string> = { task: '📝', routine: '⏰', exam: '🎓', custom: '📋' };
+  const typeLabel: Record<string, string> = { task: 'task', routine: 'routine', exam: 'exam', custom: 'item' };
+  const emoji = typeEmoji[approvalType] || '📋';
+  const label = typeLabel[approvalType] || 'item';
+
+  const { approvalId } = params;
+
+  const text = [
+    `🔔 <b>Approval Needed!</b>`,
+    ``,
+    `<b>${escapeHtml(childName)}</b> completed a ${emoji} <b>${label}</b> and needs your review.`,
+    ``,
+    `📋 <b>${escapeHtml(title)}</b>`,
+    `⏰ ${new Date().toLocaleString('en-IN', { timeZone: DEFAULT_TIME_ZONE, dateStyle: 'medium', timeStyle: 'short' })}`,
+  ].join('\n');
+
+  const keyboard: TelegramInlineButton[][] | undefined = approvalId
+    ? [[callbackButton('✅ Approve', `approve:${approvalId}`), callbackButton('❌ Reject', `reject:${approvalId}`)]]
+    : undefined;
+
+  for (const linkDoc of linksSnap.docs) {
+    const linkData = linkDoc.data() as TelegramLink;
+    if (!linkData.chat_id) continue;
+    try {
+      await sendMessage(linkData.chat_id, text, keyboard);
+    } catch (err) {
+      console.warn(`Failed to send approval notification to chat ${linkData.chat_id}:`, err);
+    }
+  }
 }
