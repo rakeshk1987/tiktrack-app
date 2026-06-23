@@ -2406,10 +2406,10 @@ function ParentDashboardContent() {
 
       await sendMessage(
         scratchChildId,
-        familyId,
+        user.id,
         scratchRevealType === 'wheel' ? 'You received a spin wheel reward. Open it in Rewards.' : 'You received a scratch reward. Open it in Rewards.',
         'parent',
-        familyId,
+        user.id,
         scratchRevealType === 'wheel' ? 'Spin wheel reward' : 'Scratch reward'
       );
 

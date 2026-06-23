@@ -324,6 +324,7 @@ async function showMainMenu(chatId: number, telegramUserId: number, familyId: st
   const keyboard: TelegramInlineButton[][] = [
     [callbackButton('Add schedule', 'action:add')],
     [callbackButton('View today', 'action:view_today'), callbackButton('View week', 'action:view_week')],
+    [callbackButton('⏳ Approvals', 'action:approvals')],
     [callbackButton('Routines', 'action:routines'), callbackButton('Rewards', 'action:rewards')],
     [callbackButton('Change child', 'action:change_child')],
   ];
@@ -817,6 +818,54 @@ async function sendWeekSchedule(chatId: number, familyId: string, child: ChildOp
   );
 }
 
+async function showPendingApprovals(chatId: number, familyId: string) {
+  const children = await getChildren(familyId);
+  const childNameMap = new Map(children.map((c) => [c.id, c.name]));
+
+  const snap = await getDb()
+    .collection('approvals')
+    .where('family_id', '==', familyId)
+    .where('status', '==', 'pending')
+    .limit(15)
+    .get();
+
+  if (snap.empty) {
+    await sendMessage(
+      chatId,
+      '✅ <b>No pending approvals!</b>\n\nAll caught up — nothing waiting for your review.',
+      [[callbackButton('Back to menu', 'action:menu')]]
+    );
+    return;
+  }
+
+  const sorted = [...snap.docs].sort((a, b) => {
+    const ta = new Date(String(a.data().created_at || 0)).getTime();
+    const tb = new Date(String(b.data().created_at || 0)).getTime();
+    return tb - ta;
+  }).slice(0, 10);
+
+  const typeEmoji: Record<string, string> = { task: '📝', routine: '⏰', exam: '🎓', custom: '📋' };
+
+  await sendMessage(chatId, `⏳ <b>Pending Approvals (${sorted.length})</b>\n\nTap Approve or Reject on each item:`);
+
+  for (const approvalDoc of sorted) {
+    const a = approvalDoc.data();
+    const emoji = typeEmoji[String(a.type)] || '📋';
+    const childName = childNameMap.get(String(a.child_id)) || 'Child';
+    const dateStr = a.created_at
+      ? new Date(String(a.created_at)).toLocaleDateString('en-IN', { timeZone: DEFAULT_TIME_ZONE, day: '2-digit', month: 'short' })
+      : '';
+    const pointsStr = Number(a.points || 0) > 0 ? ` · ⭐ ${Number(a.points)} stars` : '';
+    const text = [
+      `${emoji} <b>${escapeHtml(String(a.title))}</b>`,
+      `👤 ${escapeHtml(childName)}${pointsStr}${dateStr ? ` · ${dateStr}` : ''}`,
+    ].join('\n');
+    await sendMessage(chatId, text, [
+      [callbackButton('✅ Approve', `approve:${approvalDoc.id}`), callbackButton('❌ Reject', `reject:${approvalDoc.id}`)],
+    ]);
+  }
+}
+
 function verifyTelegramInitData(initData: string): TelegramUser | null {
   const token = botToken();
   if (!token || !initData) return null;
@@ -885,6 +934,80 @@ async function handleLinkCommand(chatId: number, telegramUser: TelegramUser, cod
   await sendMessage(chatId, 'Telegram is now linked to TikTrack.');
   const link = await loadLink(telegramUser.id);
   if (link) await showChildPicker(chatId, telegramUser.id, link);
+}
+
+async function promptForDetails(chatId: number, telegramUserId: number, session: TelegramSession) {
+  await saveSession(telegramUserId, { ...session, step: 'await_details' });
+  const typeLabel = session.draft.scheduleType === 'exam' ? 'exam' : session.draft.scheduleType === 'event' ? 'event' : 'task';
+  const prompt = [
+    `📝 <b>Describe the ${typeLabel}</b>`,
+    '',
+    `Include details like:`,
+    `• Title or topic`,
+    `• Date or deadline`,
+    `• Time (optional)`,
+    `• Any other info`,
+    '',
+    `Example: <code>Math homework tomorrow 5pm</code>`,
+  ].join('\n');
+  await sendMessage(chatId, prompt, [[callbackButton('Cancel', 'cancel')]]);
+}
+
+async function handleDetailsText(chatId: number, telegramUserId: number, session: TelegramSession, text: string) {
+  // Update the draft with new details
+  const updatedDraft = buildDraftFromText(session.draft, text);
+
+  // Check if we have all required information
+  const missingFields: string[] = [];
+  if (!updatedDraft.title) missingFields.push('title');
+  if (!updatedDraft.startAt) missingFields.push('date/time');
+  if (!updatedDraft.endAt) missingFields.push('end time');
+
+  if (missingFields.length > 0) {
+    // Ask for more details
+    const nextSession: TelegramSession = {
+      ...session,
+      step: 'await_details',
+      draft: updatedDraft,
+      updated_at: new Date().toISOString(),
+      expires_at: sessionExpiry(),
+    };
+    await saveSession(telegramUserId, nextSession);
+    await sendMessage(
+      chatId,
+      [
+        `⚠️ I need more information:`,
+        `Missing: ${missingFields.join(', ')}`,
+        ``,
+        `Please provide more details or try rephrasing.`,
+      ].join('\n'),
+      [[callbackButton('Cancel', 'cancel')]]
+    );
+    return;
+  }
+
+  // All required fields present - show summary for confirmation
+  const confirmSession: TelegramSession = {
+    ...session,
+    step: 'confirm_create',
+    draft: updatedDraft,
+    updated_at: new Date().toISOString(),
+    expires_at: sessionExpiry(),
+  };
+  await saveSession(telegramUserId, confirmSession);
+
+  const summary = draftSummary(updatedDraft);
+  await sendMessage(
+    chatId,
+    [
+      summary,
+      '',
+      `Is this correct? Ready to create!`,
+    ].join('\n'),
+    [
+      [callbackButton('✅ Confirm', 'confirm:create'), callbackButton('❌ Cancel', 'cancel')],
+    ]
+  );
 }
 
 async function handleMessage(message: TelegramMessage) {
@@ -1025,6 +1148,11 @@ async function handleCallback(callback: TelegramCallbackQuery) {
       return;
     }
     await sendWeekSchedule(chatId, link.family_id, child);
+    return;
+  }
+
+  if (callback.data === 'action:approvals') {
+    await showPendingApprovals(chatId, link.family_id);
     return;
   }
 
