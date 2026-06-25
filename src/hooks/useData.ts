@@ -357,7 +357,7 @@ export interface ChildProofItem extends ProofLog {
   task_title?: string;
 }
 
-export function useChildProofs(childId: string) {
+export function useChildProofs(childId: string, familyId?: string) {
   const [proofs, setProofs] = useState<ChildProofItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -425,8 +425,9 @@ export function useChildProofs(childId: string) {
       });
 
       // Create a unified approval request for the parent
+      const actualFamilyId = task.family_id || familyId || task.parent_id || '';
       const approvalRef = await addDoc(collection(db, 'approvals'), {
-        family_id: task.family_id || '',
+        family_id: actualFamilyId,
         child_id: childId,
         type: 'task',
         reference_id: task.id,
@@ -442,7 +443,7 @@ export function useChildProofs(childId: string) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          family_id: task.family_id || '',
+          family_id: actualFamilyId,
           child_id: childId,
           type: 'task',
           title: task.title,

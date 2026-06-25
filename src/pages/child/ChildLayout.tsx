@@ -169,10 +169,10 @@ export default function ChildLayout() {
   const { reminders } = useChildReminders(childId);
   const { moodLog, saving: moodSaving, saveMood } = useChildMood(childId);
   const { entries, saving: diarySaving, addEntry } = useDiaryEntries(childId);
-  const { proofs, uploading, uploadProgress, uploadProof, retryUpload, hasPendingRetry } = useChildProofs(childId);
+  const parentId = profile?.family_id || profile?.parent_id || '';
+  const { proofs, uploading, uploadProgress, uploadProof, retryUpload, hasPendingRetry } = useChildProofs(childId, parentId);
   const { completeTask, markTaskPendingProof, saving: questSaving } = useQuestActions(childId);
   const { messages, sendMessage } = useMessages(childId, 'child');
-  const parentId = profile?.family_id || profile?.parent_id || '';
   const { activeChallenges, incrementScore: incrementChallengeScore } = useChallenges(parentId);
   const { rewards } = useRewards(parentId);
   const { getActiveSickPeriod, initiateSickPeriod } = useSickMode(parentId, childId);

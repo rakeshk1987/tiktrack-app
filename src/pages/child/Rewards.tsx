@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import clsx from 'clsx';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import RewardMarketplace from '../../components/RewardMarketplace';
@@ -10,6 +10,121 @@ import { useChildLayout } from './ChildLayout';
 import { computeMonthlyStars, getChildBadges, getLevelProgress } from '../../utils/childProgression';
 import { DEFAULT_STAR_PAYOUT_PERCENTAGES, formatCash, normalizeRewardSettings } from '../../utils/rewards';
 import type { RewardItem, RewardLedgerEntry, ScratchRewardCard } from '../../types/schema';
+
+function ScratchOffCanvas({ onReveal, width = 300, height = 200 }: { onReveal: () => void, width?: number, height?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
+  const isDrawing = useRef(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Fill with metallic silver gradient
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, '#e2e8f0');
+    gradient.addColorStop(0.5, '#94a3b8');
+    gradient.addColorStop(1, '#64748b');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // Add pattern
+    for (let i = 0; i < 60; i++) {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(255, 255, 255, ${Math.random() * 0.25})`;
+      ctx.lineWidth = Math.random() * 3;
+      ctx.moveTo(Math.random() * width, Math.random() * height);
+      ctx.lineTo(Math.random() * width, Math.random() * height);
+      ctx.stroke();
+    }
+
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.fillStyle = '#334155';
+    ctx.textAlign = 'center';
+    ctx.fillText('SCRATCH TO REVEAL', width / 2, height / 2 + 8);
+    
+    ctx.globalCompositeOperation = 'destination-out';
+  }, [width, height]);
+
+  const handleScratch = (x: number, y: number) => {
+    if (isRevealed) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 22, 0, 2 * Math.PI);
+    ctx.fill();
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+    let transparent = 0;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] < 128) transparent++;
+    }
+    const percent = transparent / (width * height);
+    if (percent > 0.4 && !isRevealed) {
+      setIsRevealed(true);
+      ctx.clearRect(0, 0, width, height);
+      setTimeout(onReveal, 400);
+    }
+  };
+
+  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    }
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+  };
+
+  const startScratch = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    isDrawing.current = true;
+    const { x, y } = getCoordinates(e);
+    handleScratch(x, y);
+  };
+
+  const scratch = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current) return;
+    if (e.cancelable) e.preventDefault();
+    const { x, y } = getCoordinates(e);
+    handleScratch(x, y);
+  };
+
+  const stopScratch = () => {
+    isDrawing.current = false;
+  };
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      className={clsx("absolute inset-0 w-full h-full cursor-crosshair rounded-2xl transition-opacity duration-1000", isRevealed ? 'opacity-0 pointer-events-none' : 'opacity-100')}
+      onMouseDown={startScratch}
+      onMouseMove={scratch}
+      onMouseUp={stopScratch}
+      onMouseLeave={stopScratch}
+      onTouchStart={startScratch}
+      onTouchMove={scratch}
+      onTouchEnd={stopScratch}
+      style={{ touchAction: 'none' }}
+    />
+  );
+}
 
 export default function ChildRewards() {
   const { panelClass, mutedTextClass, profile, tasks } = useChildLayout();
@@ -34,6 +149,7 @@ export default function ChildRewards() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinRotation, setSpinRotation] = useState(0);
   const [wonPrize, setWonPrize] = useState<string | null>(null);
+  const [scratchFullyRevealed, setScratchFullyRevealed] = useState(false);
 
   const closeSpinWheel = () => {
     setSpinningCard(null);
@@ -184,6 +300,9 @@ export default function ChildRewards() {
         setIsSpinning(false);
         return;
       }
+      
+      // Update spinningCard with the revealed prize so it matches our local state
+      setSpinningCard({ ...spinningCard, prize_label: revealed.prize_label });
 
       const segments = (spinningCard.wheel_segments || []).filter(Boolean);
       const targetIndex = segments.indexOf(revealed.prize_label);
@@ -228,9 +347,10 @@ export default function ChildRewards() {
     return (
       <svg
         viewBox="0 0 100 100"
-        className="w-full h-full max-w-[280px] max-h-[280px] transition-transform duration-[4000ms] ease-[cubic-bezier(0.2,0.8,0.2,1.0)] select-none shadow-[0_0_50px_rgba(99,102,241,0.25)] rounded-full border-4 border-white/20"
+        className="w-full h-full max-w-[320px] max-h-[320px] select-none shadow-[0_0_60px_rgba(34,211,238,0.4)] rounded-full border-[6px] border-slate-900 bg-slate-900"
         style={{
           transform: `rotate(${spinRotation}deg)`,
+          transition: isSpinning ? 'transform 4.5s cubic-bezier(0.15, 0.9, 0.15, 1)' : 'none'
         }}
       >
         <defs>
@@ -478,11 +598,15 @@ export default function ChildRewards() {
               <button
                 key={card.id}
                 type="button"
-                onClick={() => setSpinningCard(card)}
+                onClick={() => {
+                  setSpinningCard(card);
+                  setWonPrize(null);
+                  setSpinRotation(0);
+                }}
                 className="group rounded-2xl border border-cyan-300/25 bg-[conic-gradient(from_45deg,#22d3ee,#818cf8,#f472b6,#facc15,#22d3ee)] p-[1px] text-left transition hover:scale-[1.01]"
               >
                 <div className="rounded-2xl bg-slate-950/80 px-4 py-4">
-                  <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border-4 border-white/30 bg-[conic-gradient(#facc15,#22d3ee,#a78bfa,#fb7185,#34d399,#facc15)] text-3xl transition duration-700 group-hover:rotate-[540deg]">
+                  <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border-4 border-white/30 bg-[conic-gradient(#facc15,#22d3ee,#a78bfa,#fb7185,#34d399,#facc15)] text-3xl transition duration-700">
                     🎡
                   </div>
                   <p className="mt-3 text-lg font-black">{card.title}</p>
@@ -599,18 +723,49 @@ export default function ChildRewards() {
       ) : null}
 
       {openedScratch ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4">
-          <div className="w-full max-w-md rounded-[1.5rem] border border-violet-300/30 bg-slate-950 p-6 text-center shadow-2xl">
-            <p className="text-5xl">🎟️</p>
-            <h3 className="mt-3 text-2xl font-display font-black">{openedScratch.reveal_type === 'wheel' ? 'Wheel reward' : 'Scratch reward'}</h3>
-            <p className="mt-2 text-3xl font-black text-violet-200">{openedScratch.prize_label}</p>
-            <p className={clsx('mt-3 text-sm', mutedTextClass)}>{openedScratch.reason}</p>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
+          <style>{`
+            @keyframes bounceIn {
+              0% { transform: scale(0.8); opacity: 0; }
+              60% { transform: scale(1.05); opacity: 1; }
+              100% { transform: scale(1); opacity: 1; }
+            }
+            .animate-bounce-in {
+              animation: bounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+          `}</style>
+          <div className="w-full max-w-md rounded-[2rem] border border-violet-500/40 bg-[linear-gradient(145deg,#1e1b4b,#0f172a)] p-8 text-center shadow-[0_20px_70px_rgba(139,92,246,0.25)] animate-bounce-in relative overflow-hidden">
+            <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-violet-500/20 blur-3xl" />
+            <div className="absolute -right-10 -bottom-10 h-32 w-32 rounded-full bg-fuchsia-500/20 blur-3xl" />
+
+            <h3 className="relative z-10 text-3xl font-display font-black text-white">Scratch & Win</h3>
+            <p className={clsx('relative z-10 mt-2 text-sm font-semibold', mutedTextClass)}>{openedScratch.reason}</p>
+            
+            <div className="relative z-10 mx-auto mt-8 h-[200px] w-full max-w-[300px] overflow-hidden rounded-2xl shadow-2xl border-4 border-slate-800 bg-slate-900">
+              <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(ellipse_at_center,#4c1d95,#1e1b4b)] p-4">
+                <div>
+                  <p className="text-4xl animate-bounce">🎁</p>
+                  <p className="mt-3 text-3xl font-black text-white drop-shadow-md">{openedScratch.prize_label}</p>
+                </div>
+              </div>
+              <ScratchOffCanvas onReveal={() => setScratchFullyRevealed(true)} width={300} height={200} />
+            </div>
+
             <button
               type="button"
-              onClick={() => setOpenedScratch(null)}
-              className="mt-5 rounded-xl bg-violet-400 px-5 py-3 text-sm font-black text-slate-950"
+              disabled={!scratchFullyRevealed}
+              onClick={() => {
+                setOpenedScratch(null);
+                setScratchFullyRevealed(false);
+              }}
+              className={clsx(
+                "relative z-10 mt-8 w-full rounded-xl py-4 text-base font-black uppercase tracking-widest transition-all duration-300",
+                scratchFullyRevealed 
+                  ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-[0_10px_30px_rgba(139,92,246,0.4)] hover:brightness-110 active:scale-95" 
+                  : "bg-slate-800 text-slate-500 cursor-not-allowed"
+              )}
             >
-              Nice
+              {scratchFullyRevealed ? 'Claim Prize' : 'Scratch Above First'}
             </button>
           </div>
         </div>
@@ -632,15 +787,17 @@ export default function ChildRewards() {
             <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-cyan-500/15 blur-3xl" />
             <div className="absolute -left-20 -bottom-20 h-40 w-40 rounded-full bg-indigo-500/15 blur-3xl" />
 
-            <h3 className="text-2xl font-display font-black text-white">{spinningCard.title}</h3>
-            <p className={clsx('mt-1 text-sm', mutedTextClass)}>{spinningCard.reason}</p>
+            <h3 className="text-3xl font-display font-black text-white drop-shadow-lg">{spinningCard.title}</h3>
+            <p className={clsx('mt-2 text-sm font-semibold', mutedTextClass)}>{spinningCard.reason}</p>
 
             {/* Wheel Container */}
-            <div className="relative my-8 flex justify-center">
+            <div className="relative my-8 flex justify-center drop-shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
               {/* Pointer Arrow pointing down */}
-              <div className="absolute top-[-10px] left-1/2 z-10 h-0 w-0 -translate-x-1/2 border-l-[12px] border-r-[12px] border-t-[20px] border-l-transparent border-r-transparent border-t-cyan-400 drop-shadow-[0_3px_5px_rgba(0,0,0,0.5)]" />
+              <div className="absolute -top-4 left-1/2 z-30 h-0 w-0 -translate-x-1/2 border-l-[16px] border-r-[16px] border-t-[24px] border-l-transparent border-r-transparent border-t-amber-400 drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]" />
               
-              {renderSvgWheel(spinningCard.wheel_segments || [])}
+              <div className="relative rounded-full border-8 border-slate-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
+                {renderSvgWheel(spinningCard.wheel_segments || [])}
+              </div>
 
               {/* Center Spin Button */}
               <button
@@ -648,27 +805,27 @@ export default function ChildRewards() {
                 disabled={isSpinning || wonPrize !== null}
                 onClick={handleStartSpin}
                 className={clsx(
-                  "absolute left-1/2 top-1/2 z-20 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-slate-950 font-display font-black text-xs uppercase tracking-wider shadow-2xl transition duration-300",
+                  "absolute left-1/2 top-1/2 z-40 h-[72px] w-[72px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[6px] border-slate-900 font-display font-black text-xs uppercase tracking-widest shadow-2xl transition-all duration-300",
                   isSpinning || wonPrize !== null
-                    ? "bg-slate-800 text-slate-400 cursor-not-allowed"
-                    : "bg-cyan-400 text-slate-950 hover:bg-cyan-300 hover:scale-105 active:scale-95"
+                    ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                    : "bg-gradient-to-br from-amber-300 to-amber-500 text-slate-950 hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(251,191,36,0.5)]"
                 )}
               >
-                {isSpinning ? 'Spinning' : 'Spin'}
+                {isSpinning ? '...' : 'SPIN'}
               </button>
             </div>
 
             {/* Prize Announcement */}
             {wonPrize ? (
-              <div className="animate-fade-in mt-4">
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-300">Congratulations!</p>
-                <h4 className="mt-1 text-3xl font-display font-black text-white">{wonPrize}</h4>
+              <div className="animate-fade-in mt-6">
+                <p className="text-[12px] font-black uppercase tracking-[0.2em] text-amber-300 animate-pulse">🎉 You Won! 🎉</p>
+                <h4 className="mt-2 text-4xl font-display font-black text-white drop-shadow-md">{wonPrize}</h4>
                 <button
                   type="button"
                   onClick={closeSpinWheel}
-                  className="mt-6 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 py-3 text-sm font-black text-slate-950 transition hover:opacity-90 active:scale-[0.99] shadow-[0_4px_20px_rgba(34,211,238,0.3)]"
+                  className="mt-6 w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 py-4 text-base font-black uppercase tracking-widest text-slate-950 transition-all hover:brightness-110 active:scale-95 shadow-[0_10px_30px_rgba(245,158,11,0.4)]"
                 >
-                  Claim Reward
+                  Claim Prize
                 </button>
               </div>
             ) : (
