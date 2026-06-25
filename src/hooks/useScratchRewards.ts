@@ -7,10 +7,17 @@ import { createRewardLedgerEntry } from './useRewardLedger';
 export type NewScratchRewardCard = Omit<ScratchRewardCard, 'id' | 'created_at' | 'status' | 'revealed_at'>;
 export type NewScratchRewardTemplate = Omit<ScratchRewardTemplate, 'id' | 'created_at' | 'updated_at'>;
 
+const cleanUndefined = <T extends Record<string, any>>(obj: T): T => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  ) as T;
+};
+
 const createScratchCardDoc = async (card: NewScratchRewardCard) => {
   const now = new Date().toISOString();
+  const cleaned = cleanUndefined(card);
   const docRef = await addDoc(collection(db, 'scratch_rewards'), {
-    ...card,
+    ...cleaned,
     status: 'available',
     created_at: now,
   });
@@ -186,8 +193,9 @@ export function useScratchRewards(childId: string, familyId?: string) {
 
   const createScratchTemplate = useCallback(async (template: NewScratchRewardTemplate) => {
     const now = new Date().toISOString();
+    const cleaned = cleanUndefined(template);
     const docRef = await addDoc(collection(db, 'scratch_reward_templates'), {
-      ...template,
+      ...cleaned,
       created_at: now,
       updated_at: now,
     });
@@ -204,8 +212,9 @@ export function useScratchRewards(childId: string, familyId?: string) {
 
   const updateScratchTemplate = useCallback(async (id: string, updates: Partial<NewScratchRewardTemplate>) => {
     const now = new Date().toISOString();
+    const cleaned = cleanUndefined(updates);
     await updateDoc(doc(db, 'scratch_reward_templates', id), {
-      ...updates,
+      ...cleaned,
       updated_at: now,
     });
     setTemplates((current) => current.map((template) => template.id === id ? { ...template, ...updates, updated_at: now } : template));

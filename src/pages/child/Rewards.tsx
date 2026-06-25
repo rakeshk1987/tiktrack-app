@@ -30,6 +30,18 @@ export default function ChildRewards() {
   const [cashMessage, setCashMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [openingGiftId, setOpeningGiftId] = useState<string | null>(null);
   const [openedScratch, setOpenedScratch] = useState<ScratchRewardCard | null>(null);
+  const [spinningCard, setSpinningCard] = useState<ScratchRewardCard | null>(null);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [spinRotation, setSpinRotation] = useState(0);
+  const [wonPrize, setWonPrize] = useState<string | null>(null);
+
+  const closeSpinWheel = () => {
+    setSpinningCard(null);
+    setIsSpinning(false);
+    setSpinRotation(0);
+    setWonPrize(null);
+  };
+
 
   const level = useMemo(() => getLevelProgress(Number(profile.total_stars || 0)), [profile.total_stars]);
   const pendingRewards = useMemo(() => redemptions.filter((item) => item.status === 'pending').length, [redemptions]);
@@ -161,6 +173,117 @@ export default function ChildRewards() {
       setOpenedScratch(revealed);
     }
   };
+
+  const handleStartSpin = async () => {
+    if (!spinningCard || isSpinning) return;
+
+    setIsSpinning(true);
+    try {
+      const revealed = await revealScratchCard(spinningCard.id);
+      if (!revealed) {
+        setIsSpinning(false);
+        return;
+      }
+
+      const segments = (spinningCard.wheel_segments || []).filter(Boolean);
+      const targetIndex = segments.indexOf(revealed.prize_label);
+
+      if (targetIndex === -1) {
+        setWonPrize(revealed.prize_label);
+        setIsSpinning(false);
+        return;
+      }
+
+      const n = segments.length;
+      const sliceAngle = 360 / n;
+      const centerAngle = sliceAngle * targetIndex + sliceAngle / 2;
+      const alignmentRotation = 270 - centerAngle;
+      const finalRotation = 2160 + alignmentRotation;
+      setSpinRotation(finalRotation);
+
+      setTimeout(() => {
+        setWonPrize(revealed.prize_label);
+        setIsSpinning(false);
+      }, 4000);
+    } catch (err) {
+      console.error('Failed to spin wheel:', err);
+      setIsSpinning(false);
+    }
+  };
+
+  const renderSvgWheel = (segments: string[]) => {
+    const n = segments.length;
+    const sliceAngle = 360 / n;
+    const colors = [
+      '#06b6d4', // cyan-500
+      '#6366f1', // indigo-500
+      '#ec4899', // pink-500
+      '#eab308', // yellow-500
+      '#a855f7', // purple-500
+      '#10b981', // emerald-500
+      '#f97316', // orange-500
+      '#3b82f6', // blue-500
+    ];
+
+    return (
+      <svg
+        viewBox="0 0 100 100"
+        className="w-full h-full max-w-[280px] max-h-[280px] transition-transform duration-[4000ms] ease-[cubic-bezier(0.2,0.8,0.2,1.0)] select-none shadow-[0_0_50px_rgba(99,102,241,0.25)] rounded-full border-4 border-white/20"
+        style={{
+          transform: `rotate(${spinRotation}deg)`,
+        }}
+      >
+        <defs>
+          {colors.map((color, i) => (
+            <radialGradient key={i} id={`slice-grad-${i}`} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#0f172a" />
+              <stop offset="100%" stopColor={color} />
+            </radialGradient>
+          ))}
+        </defs>
+        {segments.map((label, i) => {
+          const startAngleRad = ((sliceAngle * i - 90) * Math.PI) / 180;
+          const endAngleRad = ((sliceAngle * (i + 1) - 90) * Math.PI) / 180;
+          const x1 = 50 + 50 * Math.cos(startAngleRad);
+          const y1 = 50 + 50 * Math.sin(startAngleRad);
+          const x2 = 50 + 50 * Math.cos(endAngleRad);
+          const y2 = 50 + 50 * Math.sin(endAngleRad);
+          
+          const pathData = `M 50 50 L ${x1} ${y1} A 50 50 0 0 1 ${x2} ${y2} Z`;
+          
+          const textAngleRad = ((sliceAngle * i + sliceAngle / 2 - 90) * Math.PI) / 180;
+          const textX = 50 + 32 * Math.cos(textAngleRad);
+          const textY = 50 + 32 * Math.sin(textAngleRad);
+          const textRotation = sliceAngle * i + sliceAngle / 2;
+
+          return (
+            <g key={i}>
+              <path
+                d={pathData}
+                fill={`url(#slice-grad-${i % colors.length})`}
+                stroke="#1e293b"
+                strokeWidth="0.8"
+              />
+              <text
+                x={textX}
+                y={textY}
+                transform={`rotate(${textRotation}, ${textX}, ${textY})`}
+                fill="#ffffff"
+                fontSize="3.8"
+                fontWeight="black"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="pointer-events-none drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.85)]"
+              >
+                {label.length > 9 ? label.substring(0, 7) + '..' : label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
 
   const getTimelineTypeLabel = (entry: RewardLedgerEntry) => {
     if (entry.type === 'task_completed') return 'Task';
@@ -355,7 +478,7 @@ export default function ChildRewards() {
               <button
                 key={card.id}
                 type="button"
-                onClick={() => void openScratchReward(card.id)}
+                onClick={() => setSpinningCard(card)}
                 className="group rounded-2xl border border-cyan-300/25 bg-[conic-gradient(from_45deg,#22d3ee,#818cf8,#f472b6,#facc15,#22d3ee)] p-[1px] text-left transition hover:scale-[1.01]"
               >
                 <div className="rounded-2xl bg-slate-950/80 px-4 py-4">
@@ -489,6 +612,70 @@ export default function ChildRewards() {
             >
               Nice
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {spinningCard ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
+          <style>{`
+            @keyframes fadeIn {
+              from { opacity: 0; transform: scale(0.95); }
+              to { opacity: 1; transform: scale(1); }
+            }
+            .animate-fade-in {
+              animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+          `}</style>
+          <div className="relative w-full max-w-md overflow-hidden rounded-[2.25rem] border border-cyan-500/25 bg-slate-950/90 p-8 text-center shadow-[0_24px_60px_rgba(34,211,238,0.18)] backdrop-blur-md animate-fade-in">
+            {/* Ambient Background Glow */}
+            <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-cyan-500/15 blur-3xl" />
+            <div className="absolute -left-20 -bottom-20 h-40 w-40 rounded-full bg-indigo-500/15 blur-3xl" />
+
+            <h3 className="text-2xl font-display font-black text-white">{spinningCard.title}</h3>
+            <p className={clsx('mt-1 text-sm', mutedTextClass)}>{spinningCard.reason}</p>
+
+            {/* Wheel Container */}
+            <div className="relative my-8 flex justify-center">
+              {/* Pointer Arrow pointing down */}
+              <div className="absolute top-[-10px] left-1/2 z-10 h-0 w-0 -translate-x-1/2 border-l-[12px] border-r-[12px] border-t-[20px] border-l-transparent border-r-transparent border-t-cyan-400 drop-shadow-[0_3px_5px_rgba(0,0,0,0.5)]" />
+              
+              {renderSvgWheel(spinningCard.wheel_segments || [])}
+
+              {/* Center Spin Button */}
+              <button
+                type="button"
+                disabled={isSpinning || wonPrize !== null}
+                onClick={handleStartSpin}
+                className={clsx(
+                  "absolute left-1/2 top-1/2 z-20 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-slate-950 font-display font-black text-xs uppercase tracking-wider shadow-2xl transition duration-300",
+                  isSpinning || wonPrize !== null
+                    ? "bg-slate-800 text-slate-400 cursor-not-allowed"
+                    : "bg-cyan-400 text-slate-950 hover:bg-cyan-300 hover:scale-105 active:scale-95"
+                )}
+              >
+                {isSpinning ? 'Spinning' : 'Spin'}
+              </button>
+            </div>
+
+            {/* Prize Announcement */}
+            {wonPrize ? (
+              <div className="animate-fade-in mt-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-300">Congratulations!</p>
+                <h4 className="mt-1 text-3xl font-display font-black text-white">{wonPrize}</h4>
+                <button
+                  type="button"
+                  onClick={closeSpinWheel}
+                  className="mt-6 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 py-3 text-sm font-black text-slate-950 transition hover:opacity-90 active:scale-[0.99] shadow-[0_4px_20px_rgba(34,211,238,0.3)]"
+                >
+                  Claim Reward
+                </button>
+              </div>
+            ) : (
+              <p className={clsx('text-xs min-h-[40px] flex items-center justify-center', mutedTextClass)}>
+                {isSpinning ? 'Good luck! Waiting for the wheel to stop...' : 'Tap SPIN to test your luck!'}
+              </p>
+            )}
           </div>
         </div>
       ) : null}
