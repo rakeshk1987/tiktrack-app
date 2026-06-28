@@ -699,11 +699,7 @@ function ParentDashboardContent() {
     }
   };
 
-  useEffect(() => {
-    if (settingsTab === 'rewards') {
-      setSettingsTab('manage_child');
-    }
-  }, [settingsTab]);
+
 
   useEffect(() => {
     if (!user) {
@@ -3446,73 +3442,7 @@ function ParentDashboardContent() {
           )}
         </section>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Conversion Rate</h3>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{activeSettings ? `Current: 1 star = ${cashText(rewardRate)}` : 'Set a star-to-cash rate'}</p>
-              </div>
-              <span className="rounded-full border px-3 py-1 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>{rewards.length} saved</span>
-            </div>
 
-            <form onSubmit={handleSaveReward} className="grid grid-cols-1 gap-3">
-              <div className="grid gap-3 sm:grid-cols-[110px_1fr]">
-                <input required value={rCurrencySymbol} onChange={(ev) => setRCurrencySymbol(ev.target.value)} placeholder="Currency" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
-                <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value for 1 star" type="number" min="0" step="0.01" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {([5, 4, 3, 2, 1] as const).map((star) => (
-                  <label key={star} className="rounded-xl border p-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>
-                    {star} star %
-                    <input value={rPayoutPercentages[star]} onChange={(event) => setRPayoutPercentages((current) => ({ ...current, [star]: Number(event.target.value) || 0 }))} type="number" min="0" max="100" className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
-                  </label>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
-                  <span style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
-                </label>
-                <div className="flex gap-2">
-                  <button disabled={rewardLoading} type="submit" className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : 'Save Rate')}</button>
-                  <button type="button" onClick={editRewardId ? cancelEditReward : () => { setRStarRate(''); setRWeeklyBonus(false); }} className="rounded-xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: 'var(--border-main)' }}>{editRewardId ? 'Cancel' : 'Clear'}</button>
-                </div>
-              </div>
-            </form>
-          </section>
-
-          <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Settlement</h3>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Pay out the selected child and reset their star balance.</p>
-              </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{cashText(settleCash)}</span>
-            </div>
-            <form onSubmit={handleSettleRewardBalance} className="grid grid-cols-1 gap-3">
-              <select value={settleChildId} onChange={(event) => setSettleChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                <option value="">Select child</option>
-                {children.map((child) => (
-                  <option key={child.id} value={child.id}>{child.name || child.email}</option>
-                ))}
-              </select>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Stars to reset</p>
-                  <p className="mt-1 text-xl font-black" style={{ color: 'var(--text-main)' }}>{settleStars}</p>
-                </div>
-                <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Cash payout</p>
-                  <p className="mt-1 text-xl font-black" style={{ color: 'var(--text-main)' }}>{cashText(settleCash)}</p>
-                </div>
-              </div>
-              <button disabled={settleSaving || !settleChildId || settleStars <= 0} type="submit" className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-                {settleSaving ? 'Settling...' : 'Mark Paid & Reset'}
-              </button>
-            </form>
-          </section>
-        </div>
 
         <section className="space-y-4 rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -5460,6 +5390,9 @@ function ParentDashboardContent() {
                         <button onClick={() => setSettingsTab('manage_child')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'manage_child' ? 'white' : 'var(--text-main)', background: settingsTab === 'manage_child' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Manage Child
                         </button>
+                        <button onClick={() => setSettingsTab('rewards')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'rewards' ? 'white' : 'var(--text-main)', background: settingsTab === 'rewards' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
+                          Reward Settings
+                        </button>
                         <button onClick={() => setSettingsTab('growth')} className="w-full py-2 rounded-xl text-sm font-bold border" style={{ borderColor: 'var(--border-main)', color: settingsTab === 'growth' ? 'white' : 'var(--text-main)', background: settingsTab === 'growth' ? 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' : 'var(--surface-soft)' }}>
                           Growth
                         </button>
@@ -5681,21 +5614,87 @@ function ParentDashboardContent() {
                     {settingsTab === 'rewards' && (
                       <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-base font-bold" style={{ color: 'var(--text-main)' }}>Rewards Configuration</h3>
-                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length}</span>
+                          <h3 className="text-base font-bold" style={{ color: 'var(--text-main)' }}>Reward Settings</h3>
+                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{rewards.length} saved</span>
                         </div>
                         <div className="space-y-4">
+                          {/* Conversion Rate */}
                           <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                               <div>
-                                <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Cash Value Rules</h4>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Saved conversion from stars to real money.</p>
+                                <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Conversion Rate</h4>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{activeSettings ? `Current: 1 star = ${rewardCurrency}${rewardRate}` : 'Set a star-to-cash rate'}</p>
                               </div>
                               {rewards[0] ? (
                                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">
-                                  1 point = {normalizeRewardSettings(rewards[0]).currency_symbol}{normalizeRewardSettings(rewards[0]).point_to_cash_rate}
+                                  1 star = {normalizeRewardSettings(rewards[0]).currency_symbol}{normalizeRewardSettings(rewards[0]).point_to_cash_rate}
                                 </span>
                               ) : null}
+                            </div>
+                            <form onSubmit={handleSaveReward} className="grid grid-cols-1 gap-3">
+                              <div className="grid gap-3 sm:grid-cols-[110px_1fr]">
+                                <input required value={rCurrencySymbol} onChange={(ev) => setRCurrencySymbol(ev.target.value)} placeholder="Currency" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                                <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value for 1 star" type="number" min="0" step="0.01" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                                {([5, 4, 3, 2, 1] as const).map((star) => (
+                                  <label key={star} className="rounded-xl border p-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>
+                                    {star} star %
+                                    <input value={rPayoutPercentages[star]} onChange={(event) => setRPayoutPercentages((current) => ({ ...current, [star]: Number(event.target.value) || 0 }))} type="number" min="0" max="100" className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                                  </label>
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <label className="inline-flex items-center gap-2 text-sm">
+                                  <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
+                                  <span style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
+                                </label>
+                                <div className="flex gap-2">
+                                  <button disabled={rewardLoading} type="submit" className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : 'Save Rate')}</button>
+                                  <button type="button" onClick={editRewardId ? cancelEditReward : () => { setRStarRate(''); setRWeeklyBonus(false); }} className="rounded-xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: 'var(--border-main)' }}>{editRewardId ? 'Cancel' : 'Clear'}</button>
+                                </div>
+                              </div>
+                            </form>
+                          </div>
+
+                          {/* Settlement */}
+                          <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Settlement</h4>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Pay out the selected child and reset their star balance to zero.</p>
+                              </div>
+                              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">{settleChildId ? `${rewardCurrency}${settleStars * rewardRate}` : 'Select child'}</span>
+                            </div>
+                            <form onSubmit={handleSettleRewardBalance} className="grid grid-cols-1 gap-3">
+                              <select value={settleChildId} onChange={(event) => setSettleChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                                <option value="">Select child</option>
+                                {children.map((child) => (
+                                  <option key={child.id} value={child.id}>{child.name || child.email}</option>
+                                ))}
+                              </select>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Stars to reset</p>
+                                  <p className="mt-1 text-xl font-black" style={{ color: 'var(--text-main)' }}>{settleStars}</p>
+                                </div>
+                                <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
+                                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Cash payout</p>
+                                  <p className="mt-1 text-xl font-black" style={{ color: 'var(--text-main)' }}>{rewardCurrency}{settleStars * rewardRate}</p>
+                                </div>
+                              </div>
+                              <button disabled={settleSaving || !settleChildId || settleStars <= 0} type="submit" className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                                {settleSaving ? 'Settling...' : 'Mark Paid & Reset'}
+                              </button>
+                            </form>
+                          </div>
+
+                        <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Cash Value Rules</h4>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Saved conversion rules from stars to real money.</p>
+                              </div>
                             </div>
                             {rewardsLoading ? (
                               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading cash rules...</p>
@@ -5717,38 +5716,7 @@ function ParentDashboardContent() {
                               </div>
                             )}
                           </div>
-                          <form onSubmit={handleSaveReward} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
-                            <input required value={rCurrencySymbol} onChange={(ev) => setRCurrencySymbol(ev.target.value)} placeholder="₹" className="rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                            <input required value={rStarRate as any} onChange={(ev) => setRStarRate(ev.target.value === '' ? '' : Number(ev.target.value))} placeholder="Cash value per point" type="number" min="0" step="0.01" className="col-span-1 rounded-xl py-2 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                            <label className="col-span-1 sm:col-span-1 inline-flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={rWeeklyBonus} onChange={(ev) => setRWeeklyBonus(ev.target.checked)} className="h-4 w-4" />
-                              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Weekly bonus</span>
-                            </label>
-                            <div className="col-span-1 sm:col-span-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                              {([5, 4, 3, 2, 1] as const).map((star) => (
-                                <label key={star} className="rounded-xl border p-2 text-xs font-bold" style={{ borderColor: 'var(--border-main)', color: 'var(--text-muted)' }}>
-                                  {star}★ %
-                                  <input
-                                    value={rPayoutPercentages[star]}
-                                    onChange={(event) => setRPayoutPercentages((current) => ({ ...current, [star]: Number(event.target.value) || 0 }))}
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm"
-                                    style={{ borderColor: 'var(--border-main)', background: 'var(--surface)', color: 'var(--text-main)' }}
-                                  />
-                                </label>
-                              ))}
-                            </div>
-                            <div className="col-span-1 sm:col-span-3 flex gap-2">
-                              <button disabled={rewardLoading} type="submit" className="py-2 px-4 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--bg-hero-a), var(--bg-hero-b))' }}>{rewardLoading ? 'Saving...' : (editRewardId ? 'Save Changes' : '+ Save Setting')}</button>
-                              {editRewardId ? (
-                                <button type="button" onClick={cancelEditReward} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Cancel</button>
-                              ) : (
-                                <button type="button" onClick={() => { setRStarRate(''); setRWeeklyBonus(false); }} className="py-2 px-4 rounded-xl text-sm font-semibold border" style={{ borderColor: 'var(--border-main)' }}>Clear</button>
-                              )}
-                            </div>
-                          </form>
+
                           <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                             <div className="mb-3">
                               <h4 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Award Stars</h4>
