@@ -3371,21 +3371,21 @@ function ParentDashboardContent() {
     }
   };
 
-  const renderRewardsPage = () => {
-    const activeSettings = rewards[0] ? normalizeRewardSettings(rewards[0]) : null;
-    const rewardRate = Number(activeSettings?.point_to_cash_rate || rStarRate || 0);
-    const rewardCurrency = activeSettings?.currency_symbol || rCurrencySymbol || '₹';
-    const walletStars = Number(selectedAutomationProfile?.total_stars || 0);
-    const walletCash = walletStars * rewardRate;
-    const monthEarnedCash = selectedRewardMonthSummary.earned * rewardRate;
-    const monthSpentCash = selectedRewardMonthSummary.spent * rewardRate;
-    const monthNetCash = selectedRewardMonthSummary.net * rewardRate;
-    const settleStars = settleChildId ? Number(childProfiles.find((child) => child.id === settleChildId)?.total_stars || 0) : 0;
-    const settleCash = settleStars * rewardRate;
-    const pendingRedemptions = redemptions.filter((item) => item.status === 'pending').length;
-    const approvedRedemptions = redemptions.filter((item) => item.status === 'approved').length;
-    const cashText = (value: number) => `${rewardCurrency}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const activeSettings = rewards[0] ? normalizeRewardSettings(rewards[0]) : null;
+  const rewardRate = Number(activeSettings?.point_to_cash_rate || rStarRate || 0);
+  const rewardCurrency = activeSettings?.currency_symbol || rCurrencySymbol || '₹';
+  const walletStars = Number(selectedAutomationProfile?.total_stars || 0);
+  const walletCash = walletStars * rewardRate;
+  const monthEarnedCash = selectedRewardMonthSummary.earned * rewardRate;
+  const monthSpentCash = selectedRewardMonthSummary.spent * rewardRate;
+  const monthNetCash = selectedRewardMonthSummary.net * rewardRate;
+  const settleStars = settleChildId ? Number(childProfiles.find((child) => child.id === settleChildId)?.total_stars || 0) : 0;
+  const settleCash = settleStars * rewardRate;
+  const pendingRedemptions = redemptions.filter((item) => item.status === 'pending').length;
+  const approvedRedemptions = redemptions.filter((item) => item.status === 'approved').length;
+  const cashText = (value: number) => `${rewardCurrency}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
+  const renderRewardsPage = () => {
     return (
       <div className="space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
