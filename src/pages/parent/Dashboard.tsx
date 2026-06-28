@@ -3422,24 +3422,25 @@ function ParentDashboardContent() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.10)' }}>
-                <p className="text-xs font-bold uppercase text-emerald-500">Earned</p>
+                <p className="text-xs font-bold uppercase text-emerald-500">Earned <span className="font-normal normal-case opacity-60">this month</span></p>
                 <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{selectedRewardMonthSummary.earned} stars</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(monthEarnedCash)}</p>
               </div>
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'rgba(244,63,94,0.35)', background: 'rgba(244,63,94,0.10)' }}>
-                <p className="text-xs font-bold uppercase text-rose-500">Paid / Spent</p>
+                <p className="text-xs font-bold uppercase text-rose-500">Paid / Spent <span className="font-normal normal-case opacity-60">this month</span></p>
                 <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{selectedRewardMonthSummary.spent} stars</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(monthSpentCash)}</p>
               </div>
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)', background: 'rgba(34,211,238,0.10)' }}>
-                <p className="text-xs font-bold uppercase text-cyan-500">Net Month</p>
+                <p className="text-xs font-bold uppercase text-cyan-500">Net <span className="font-normal normal-case opacity-60">this month</span></p>
                 <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{selectedRewardMonthSummary.net} stars</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(monthNetCash)}</p>
               </div>
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Current Balance</p>
+                <p className="text-xs font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Current Balance <span className="font-normal normal-case opacity-60">all-time</span></p>
                 <p className="mt-1 text-2xl font-black" style={{ color: 'var(--text-main)' }}>{walletStars} stars</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cashText(walletCash)}</p>
+                <p className="mt-1 text-[10px] leading-tight" style={{ color: 'var(--text-muted)' }}>Cumulative total — includes stars from all previous months</p>
               </div>
             </div>
           )}

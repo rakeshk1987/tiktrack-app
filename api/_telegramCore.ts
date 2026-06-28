@@ -1084,6 +1084,105 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     return;
   }
 
+  // ── Inline approve / reject ────────────────────────────────────────────────
+  // Must be checked BEFORE the session guard — approval notifications arrive
+  // in a fresh chat with no active session and should always work regardless.
+  if (callback.data.startsWith('approve:') || callback.data.startsWith('reject:')) {
+    const isApprove = callback.data.startsWith('approve:');
+    const approvalId = callback.data.split(':')[1];
+    const action = isApprove ? 'approved' : 'rejected';
+
+    const approvalRef = getDb().collection('approvals').doc(approvalId);
+    const approvalSnap = await approvalRef.get();
+
+    if (!approvalSnap.exists) {
+      await sendMessage(chatId, '⚠️ Approval not found — it may have already been reviewed.');
+      return;
+    }
+
+    const approval = approvalSnap.data() || {};
+
+    if (String(approval.family_id) !== link.family_id) {
+      await sendMessage(chatId, '⚠️ You do not have permission to review this approval.');
+      return;
+    }
+
+    if (approval.status !== 'pending') {
+      await sendMessage(chatId, `ℹ️ Already <b>${escapeHtml(String(approval.status))}</b> — no change made.`);
+      return;
+    }
+
+    await approvalRef.update({
+      status: action,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: 'telegram',
+    });
+
+    // Award stars when approved and points are set
+    if (isApprove && Number(approval.points || 0) > 0) {
+      try {
+        const profileRef = getDb().collection('child_profile').doc(String(approval.child_id));
+        const profileSnap = await profileRef.get();
+        if (profileSnap.exists) {
+          const currentStars = Number(profileSnap.data()?.total_stars || 0);
+          await profileRef.update({ total_stars: currentStars + Number(approval.points) });
+          await getDb().collection('reward_ledger').add({
+            child_id: approval.child_id,
+            parent_id: link.family_id,
+            family_id: link.family_id,
+            type: approval.type === 'routine' ? 'bonus' : 'task_completed',
+            stars_delta: Number(approval.points),
+            title: String(approval.title || 'Approval'),
+            reason: `${String(approval.type || 'Item')} approved via Telegram: ${String(approval.title || '')}`,
+            source_id: approvalId,
+            source_type: 'approval',
+            visible_to_child: true,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn('Telegram inline approval: star award failed', err);
+      }
+    }
+
+    // Notify child in-app
+    try {
+      await getDb().collection('messages').add({
+        child_id: approval.child_id,
+        parent_id: link.family_id,
+        content: `Your ${String(approval.type || 'item')} "${String(approval.title || '')}" was ${action} by your parent!${isApprove ? ' 🎉' : ''}`,
+        timestamp: new Date().toISOString(),
+        is_read: false,
+        sender_role: 'parent',
+        sender_id: link.family_id,
+        subject: 'Quest Resolution',
+      });
+    } catch (err) {
+      console.warn('Telegram inline approval: child message failed', err);
+    }
+
+    // Edit the original notification to show resolved state (remove buttons)
+    const resolvedEmoji = isApprove ? '✅' : '❌';
+    const starsLine = isApprove && Number(approval.points || 0) > 0 ? `\n⭐ +${Number(approval.points)} stars awarded.` : '';
+    const resolvedText = [
+      `${resolvedEmoji} <b>${isApprove ? 'Approved!' : 'Rejected.'}</b>`,
+      ``,
+      `<b>${escapeHtml(String(approval.title || 'Item'))}</b> — reviewed via Telegram.${starsLine}`,
+    ].join('\n');
+
+    try {
+      await telegramApi('editMessageText', {
+        chat_id: chatId,
+        message_id: callback.message.message_id,
+        text: resolvedText,
+        parse_mode: 'HTML',
+      });
+    } catch {
+      await sendMessage(chatId, resolvedText);
+    }
+    return;
+  }
+
   const session = await loadSession(callback.from.id);
   if (callback.data === 'action:change_child') {
     await showChildPicker(chatId, callback.from.id, link);
@@ -1234,102 +1333,6 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     return;
   }
 
-  // ── Inline approve / reject ────────────────────────────────────────────────
-  if (callback.data.startsWith('approve:') || callback.data.startsWith('reject:')) {
-    const isApprove = callback.data.startsWith('approve:');
-    const approvalId = callback.data.split(':')[1];
-    const action = isApprove ? 'approved' : 'rejected';
-
-    const approvalRef = getDb().collection('approvals').doc(approvalId);
-    const approvalSnap = await approvalRef.get();
-
-    if (!approvalSnap.exists) {
-      await sendMessage(chatId, '⚠️ Approval not found — it may have already been reviewed.');
-      return;
-    }
-
-    const approval = approvalSnap.data() || {};
-
-    if (String(approval.family_id) !== link.family_id) {
-      await sendMessage(chatId, '⚠️ You do not have permission to review this approval.');
-      return;
-    }
-
-    if (approval.status !== 'pending') {
-      await sendMessage(chatId, `ℹ️ Already <b>${escapeHtml(String(approval.status))}</b> — no change made.`);
-      return;
-    }
-
-    await approvalRef.update({
-      status: action,
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: 'telegram',
-    });
-
-    // Award stars when approved and points are set
-    if (isApprove && Number(approval.points || 0) > 0) {
-      try {
-        const profileRef = getDb().collection('child_profile').doc(String(approval.child_id));
-        const profileSnap = await profileRef.get();
-        if (profileSnap.exists) {
-          const currentStars = Number(profileSnap.data()?.total_stars || 0);
-          await profileRef.update({ total_stars: currentStars + Number(approval.points) });
-          await getDb().collection('reward_ledger').add({
-            child_id: approval.child_id,
-            parent_id: link.family_id,
-            family_id: link.family_id,
-            type: approval.type === 'routine' ? 'bonus' : 'task_completed',
-            stars_delta: Number(approval.points),
-            title: String(approval.title || 'Approval'),
-            reason: `${String(approval.type || 'Item')} approved via Telegram: ${String(approval.title || '')}`,
-            source_id: approvalId,
-            source_type: 'approval',
-            visible_to_child: true,
-            created_at: new Date().toISOString(),
-          });
-        }
-      } catch (err) {
-        console.warn('Telegram inline approval: star award failed', err);
-      }
-    }
-
-    // Notify child in-app
-    try {
-      await getDb().collection('messages').add({
-        child_id: approval.child_id,
-        parent_id: link.family_id,
-        content: `Your ${String(approval.type || 'item')} "${String(approval.title || '')}" was ${action} by your parent!${isApprove ? ' 🎉' : ''}`,
-        timestamp: new Date().toISOString(),
-        is_read: false,
-        sender_role: 'parent',
-        sender_id: link.family_id,
-        subject: 'Quest Resolution',
-      });
-    } catch (err) {
-      console.warn('Telegram inline approval: child message failed', err);
-    }
-
-    // Edit the original notification to show resolved state (remove buttons)
-    const resolvedEmoji = isApprove ? '✅' : '❌';
-    const starsLine = isApprove && Number(approval.points || 0) > 0 ? `\n⭐ +${Number(approval.points)} stars awarded.` : '';
-    const resolvedText = [
-      `${resolvedEmoji} <b>${isApprove ? 'Approved!' : 'Rejected.'}</b>`,
-      ``,
-      `<b>${escapeHtml(String(approval.title || 'Item'))}</b> — reviewed via Telegram.${starsLine}`,
-    ].join('\n');
-
-    try {
-      await telegramApi('editMessageText', {
-        chat_id: chatId,
-        message_id: callback.message.message_id,
-        text: resolvedText,
-        parse_mode: 'HTML',
-      });
-    } catch {
-      await sendMessage(chatId, resolvedText);
-    }
-    return;
-  }
 }
 
 // ── Error classes ──────────────────────────────────────────────────────────────

@@ -318,7 +318,15 @@ export default function ChildRewards() {
       const centerAngle = sliceAngle * targetIndex + sliceAngle / 2;
       const alignmentRotation = 270 - centerAngle;
       const finalRotation = 2160 + alignmentRotation;
-      setSpinRotation(finalRotation);
+      // Delay the rotation update by one animation frame so React can first
+      // commit the isSpinning=true render (enabling the CSS transition) before
+      // the rotation value changes — otherwise both updates are batched into one
+      // render and the browser skips the animation entirely.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setSpinRotation(finalRotation);
+        });
+      });
 
       setTimeout(() => {
         setWonPrize(revealed.prize_label);
@@ -423,10 +431,20 @@ export default function ChildRewards() {
         {loadingSummary ? <p className={clsx('mt-3 text-sm', mutedTextClass)}>Loading progress summary...</p> : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Balance</p><p className="mt-1 text-2xl font-black">{formatCash(profile.total_stars || 0, currencySymbol)}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>{monthlyLedgerSummary.label}</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyDisplayEarned, currencySymbol)}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Balance <span className="font-normal normal-case opacity-60">all-time</span></p>
+            <p className="mt-1 text-2xl font-black">{formatCash(profile.total_stars || 0, currencySymbol)}</p>
+            <p className={clsx('mt-1 text-[10px] leading-tight', mutedTextClass)}>Cumulative — includes previous months</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Earned <span className="font-normal normal-case opacity-60">this month</span></p>
+            <p className="mt-1 text-2xl font-black">{formatCash(monthlyDisplayEarned, currencySymbol)}</p>
+          </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Base Estimate</p><p className="mt-1 text-2xl font-black">{formatCash(monthlyPayoutEstimate, currencySymbol)}</p></div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Cash Spent</p><p className="mt-1 text-2xl font-black">{formatCash(monthlySpentStars, currencySymbol)}</p></div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Spent <span className="font-normal normal-case opacity-60">this month</span></p>
+            <p className="mt-1 text-2xl font-black">{formatCash(monthlySpentStars, currencySymbol)}</p>
+          </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Streak / Shields</p><p className="mt-1 text-2xl font-black">{profile.streak_count || 0} / {profile.streak_shields || 0}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className={clsx('text-xs font-bold uppercase', mutedTextClass)}>Pending Rewards</p><p className="mt-1 text-2xl font-black">{pendingRewards}</p></div>
         </div>
