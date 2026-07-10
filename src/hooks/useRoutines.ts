@@ -153,6 +153,32 @@ export function useRoutines(familyId: string, childId?: string) {
         updated_at: now,
       };
       const docRef = await addDoc(collection(db, 'routines'), payload);
+
+      if (routine.created_by === 'child') {
+        const approvalRef = await addDoc(collection(db, 'approvals'), {
+          family_id: routine.family_id,
+          child_id: routine.child_id || '',
+          type: 'routine',
+          reference_id: docRef.id,
+          title: routine.title,
+          points: 0,
+          status: 'pending',
+          created_at: now,
+        });
+
+        fetch('/api/telegram/notify-approval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            family_id: routine.family_id,
+            child_id: routine.child_id || '',
+            type: 'routine',
+            title: routine.title,
+            approval_id: approvalRef.id,
+          }),
+        }).catch(() => {});
+      }
+
       return docRef.id;
     } catch (err: any) {
       setError(err.message);

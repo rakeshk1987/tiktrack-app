@@ -1105,6 +1105,7 @@ async function handleLinkCommand(chatId: number, telegramUser: TelegramUser, cod
     family_id: String(codeData.family_id),
     parent_id: codeData.parent_id ? String(codeData.parent_id) : null,
     status: 'active',
+    chat_id: chatId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -1186,7 +1187,45 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     return;
   }
 
+  // ── Inline approve / reject ────────────────────────────────────────────────
+  // Must be checked BEFORE the session guard — approval notifications arrive
+  // in a fresh chat with no active session and should always work regardless.
+  if (callback.data.startsWith('approve:') || callback.data.startsWith('reject:')) {
+    const isApprove = callback.data.startsWith('approve:');
+    const approvalId = callback.data.split(':')[1];
+    const action = isApprove ? 'approved' : 'rejected';
+
+    const approvalRef = db.collection('approvals').doc(approvalId);
+    const approvalSnap = await approvalRef.get();
+
+    if (!approvalSnap.exists) {
+      await sendMessage(chatId, '⚠️ Approval not found — it may have already been reviewed.');
+      return;
+    }
+
+    const approvalData = approvalSnap.data() || {};
+    if (approvalData.status !== 'pending') {
+      const previousAction = approvalData.status || 'reviewed';
+      await sendMessage(chatId, `ℹ️ This was already <b>${escapeHtml(previousAction)}</b>.`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    await approvalRef.update({
+      status: action,
+      reviewed_at: now,
+      reviewed_by: String(callback.from.id),
+      updated_at: now,
+    });
+
+    const emoji = isApprove ? '✅' : '❌';
+    const titleText = approvalData.title ? ` "<b>${escapeHtml(String(approvalData.title))}</b>"` : '';
+    await sendMessage(chatId, `${emoji} You <b>${action}</b> the request${titleText}.`);
+    return;
+  }
+
   const session = await loadSession(callback.from.id);
+
   if (callback.data === 'action:change_child') {
     await showChildPicker(chatId, callback.from.id, link);
     return;

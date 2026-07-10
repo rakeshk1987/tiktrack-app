@@ -255,7 +255,7 @@ const generateExamPrepTasks = (exam, daysUntilExam, profile) => {
             priority: 'high',
             energy_level: 'high',
             difficulty_level: Math.min(8, 5 + Math.floor((7 - daysUntilExam) * 0.5)),
-            star_value: 4 + (7 - daysUntilExam),
+            star_value: 4 + (7 - daysUntilExam), // Bonus stars as exam approaches
             requires_proof: true,
             generated_at: new Date().toISOString(),
             generation_reason: `Exam prep for ${subject} (${daysUntilExam} days away)`,

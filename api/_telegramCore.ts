@@ -45,6 +45,7 @@ interface TelegramLink {
   status: 'active' | 'disabled';
   default_child_id?: string | null;
   chat_id?: number;
+  telegram_user_id?: number;
 }
 
 interface ChildOption {
@@ -207,12 +208,13 @@ async function clearSession(telegramUserId: number) {
   await getDb().collection('telegram_sessions').doc(String(telegramUserId)).delete();
 }
 
-/** Silently stores chat_id in telegram_links if it is missing (backfill for existing accounts). */
+/** Silently stores / refreshes chat_id in telegram_links on every interaction so push notifications always have a valid target. */
 async function backfillChatId(telegramUserId: number, chatId: number) {
   try {
     const docRef = getDb().collection('telegram_links').doc(String(telegramUserId));
     const snap = await docRef.get();
-    if (snap.exists && !snap.data()?.chat_id) {
+    // Always write the latest chat_id — it can change if the parent opens a new chat with the bot.
+    if (snap.exists && snap.data()?.chat_id !== chatId) {
       await docRef.update({ chat_id: chatId, updated_at: new Date().toISOString() });
     }
   } catch {
@@ -1540,11 +1542,17 @@ export async function sendApprovalNotification(params: ApprovalNotificationParam
 
   for (const linkDoc of linksSnap.docs) {
     const linkData = linkDoc.data() as TelegramLink;
-    if (!linkData.chat_id) continue;
+    // chat_id equals telegram_user_id for personal chats — use it as a safe fallback
+    // so parents linked before chat_id was persisted still receive notifications.
+    const targetChatId = linkData.chat_id ?? linkData.telegram_user_id;
+    if (!targetChatId) {
+      console.warn(`Skipping approval notification — no chat_id or telegram_user_id for link ${linkDoc.id}`);
+      continue;
+    }
     try {
-      await sendMessage(linkData.chat_id, text, keyboard);
+      await sendMessage(targetChatId, text, keyboard);
     } catch (err) {
-      console.warn(`Failed to send approval notification to chat ${linkData.chat_id}:`, err);
+      console.warn(`Failed to send approval notification to chat ${targetChatId}:`, err);
     }
   }
 }
