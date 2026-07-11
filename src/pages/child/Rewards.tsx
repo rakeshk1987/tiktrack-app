@@ -147,6 +147,9 @@ export default function ChildRewards() {
   const [openedScratch, setOpenedScratch] = useState<ScratchRewardCard | null>(null);
   const [spinningCard, setSpinningCard] = useState<ScratchRewardCard | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
+  // spinReady=true means the wheel is mounted at rotation=0 and we can safely
+  // enable the CSS transition for the next rotation change.
+  const [spinReady, setSpinReady] = useState(false);
   const [spinRotation, setSpinRotation] = useState(0);
   const [wonPrize, setWonPrize] = useState<string | null>(null);
   const [scratchFullyRevealed, setScratchFullyRevealed] = useState(false);
@@ -154,6 +157,7 @@ export default function ChildRewards() {
   const closeSpinWheel = () => {
     setSpinningCard(null);
     setIsSpinning(false);
+    setSpinReady(false);
     setSpinRotation(0);
     setWonPrize(null);
   };
@@ -284,6 +288,8 @@ export default function ChildRewards() {
   };
 
   const openScratchReward = async (cardId: string) => {
+    // Reset scratch state before opening so a fresh card always starts unscratched
+    setScratchFullyRevealed(false);
     const revealed = await revealScratchCard(cardId);
     if (revealed) {
       setOpenedScratch(revealed);
@@ -300,14 +306,12 @@ export default function ChildRewards() {
         setIsSpinning(false);
         return;
       }
-      
-      // Update spinningCard with the revealed prize so it matches our local state
-      setSpinningCard({ ...spinningCard, prize_label: revealed.prize_label });
 
       const segments = (spinningCard.wheel_segments || []).filter(Boolean);
       const targetIndex = segments.indexOf(revealed.prize_label);
 
-      if (targetIndex === -1) {
+      if (targetIndex === -1 || segments.length === 0) {
+        // No matching segment — show prize immediately without spin animation
         setWonPrize(revealed.prize_label);
         setIsSpinning(false);
         return;
@@ -316,22 +320,23 @@ export default function ChildRewards() {
       const n = segments.length;
       const sliceAngle = 360 / n;
       const centerAngle = sliceAngle * targetIndex + sliceAngle / 2;
+      // The pointer is at the top (270° in SVG coordinate space where 0° is right).
+      // We want centerAngle to land at the top, so we subtract it from 270.
       const alignmentRotation = 270 - centerAngle;
       const finalRotation = 2160 + alignmentRotation;
-      // Delay the rotation update by one animation frame so React can first
-      // commit the isSpinning=true render (enabling the CSS transition) before
-      // the rotation value changes — otherwise both updates are batched into one
-      // render and the browser skips the animation entirely.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setSpinRotation(finalRotation);
-        });
-      });
+
+      // spinReady=true enables the CSS transition on the SVG. We set spinRotation
+      // in the same microtask tick so the browser can batch the style update
+      // together — the key insight is that spinReady was false before (no transition)
+      // so the wheel was rendered at 0° without any animation, and now we enable
+      // the transition and set the target angle in one commit.
+      setSpinReady(true);
+      setSpinRotation(finalRotation);
 
       setTimeout(() => {
         setWonPrize(revealed.prize_label);
         setIsSpinning(false);
-      }, 4000);
+      }, 4500);
     } catch (err) {
       console.error('Failed to spin wheel:', err);
       setIsSpinning(false);
@@ -358,7 +363,9 @@ export default function ChildRewards() {
         className="w-full h-full max-w-[320px] max-h-[320px] select-none shadow-[0_0_60px_rgba(34,211,238,0.4)] rounded-full border-[6px] border-slate-900 bg-slate-900"
         style={{
           transform: `rotate(${spinRotation}deg)`,
-          transition: isSpinning ? 'transform 4.5s cubic-bezier(0.15, 0.9, 0.15, 1)' : 'none'
+          // Only apply the transition when spinReady is true (wheel has been rendered
+          // at 0° first, then we enable transition + set final rotation in the same render).
+          transition: spinReady ? 'transform 4.5s cubic-bezier(0.15, 0.9, 0.15, 1)' : 'none'
         }}
       >
         <defs>
@@ -617,9 +624,12 @@ export default function ChildRewards() {
                 key={card.id}
                 type="button"
                 onClick={() => {
-                  setSpinningCard(card);
+                  // Reset all spin state so each new card starts fresh
                   setWonPrize(null);
                   setSpinRotation(0);
+                  setSpinReady(false);
+                  setIsSpinning(false);
+                  setSpinningCard(card);
                 }}
                 className="group rounded-2xl border border-cyan-300/25 bg-[conic-gradient(from_45deg,#22d3ee,#818cf8,#f472b6,#facc15,#22d3ee)] p-[1px] text-left transition hover:scale-[1.01]"
               >
