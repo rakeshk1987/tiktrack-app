@@ -17,8 +17,13 @@ export {
   triggerCleanupJob,
 } from './backgroundJobs';
 
-
+// Export Telegram bot functions (webhook + approval trigger)
+export {
+  telegramWebhook,
+  onApprovalCreated,
+} from './telegramBot';
 
 // Export types for use in other functions
 export * from './types/schema';
 export * from './taskScheduler';
+

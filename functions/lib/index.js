@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.triggerCleanupJob = exports.triggerMandatoryTaskExpiryJob = exports.triggerExamPrepJob = exports.triggerReminderDispatchJob = exports.triggerDailyTasksJob = exports.cleanupExpiredDataJob = exports.processExpiredMandatoryTasksJob = exports.generateExamPrepTasksJob = exports.dispatchRemindersJob = exports.generateDailyTasksJob = void 0;
+exports.onApprovalCreated = exports.telegramWebhook = exports.triggerCleanupJob = exports.triggerMandatoryTaskExpiryJob = exports.triggerExamPrepJob = exports.triggerReminderDispatchJob = exports.triggerDailyTasksJob = exports.cleanupExpiredDataJob = exports.processExpiredMandatoryTasksJob = exports.generateExamPrepTasksJob = exports.dispatchRemindersJob = exports.generateDailyTasksJob = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -52,6 +52,10 @@ Object.defineProperty(exports, "triggerReminderDispatchJob", { enumerable: true,
 Object.defineProperty(exports, "triggerExamPrepJob", { enumerable: true, get: function () { return backgroundJobs_1.triggerExamPrepJob; } });
 Object.defineProperty(exports, "triggerMandatoryTaskExpiryJob", { enumerable: true, get: function () { return backgroundJobs_1.triggerMandatoryTaskExpiryJob; } });
 Object.defineProperty(exports, "triggerCleanupJob", { enumerable: true, get: function () { return backgroundJobs_1.triggerCleanupJob; } });
+// Export Telegram bot functions (webhook + approval trigger)
+var telegramBot_1 = require("./telegramBot");
+Object.defineProperty(exports, "telegramWebhook", { enumerable: true, get: function () { return telegramBot_1.telegramWebhook; } });
+Object.defineProperty(exports, "onApprovalCreated", { enumerable: true, get: function () { return telegramBot_1.onApprovalCreated; } });
 // Export types for use in other functions
 __exportStar(require("./types/schema"), exports);
 __exportStar(require("./taskScheduler"), exports);
