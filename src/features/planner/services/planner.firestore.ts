@@ -208,6 +208,21 @@ export async function createParentPlannerEvent(parentId: string, familyId: strin
   };
 
   const ref = await addDoc(collection(db, 'events'), payload);
+
+  // Fire-and-forget Telegram notification — never blocks the UI
+  fetch('/api/telegram/notify-schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      family_id: familyId,
+      child_id: childId,
+      schedule_type: 'event',
+      title: input.title,
+      start_at: input.startAt,
+      created_by: 'parent',
+    }),
+  }).catch(() => {});
+
   return ref.id;
 }
 
@@ -254,6 +269,21 @@ export async function createChildQuickPlannerEvent(childId: string, familyId: st
   };
 
   const ref = await addDoc(collection(db, 'events'), payload);
+
+  // Fire-and-forget Telegram notification — never blocks the UI
+  fetch('/api/telegram/notify-schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      family_id: familyId,
+      child_id: childId,
+      schedule_type: 'event',
+      title: input.title,
+      start_at: input.startAt,
+      created_by: 'child',
+    }),
+  }).catch(() => {});
+
   return ref.id;
 }
 

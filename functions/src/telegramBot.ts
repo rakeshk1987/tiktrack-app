@@ -1414,6 +1414,18 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     const id = await createSchedule(link.family_id, session.draft);
     await clearSession(callback.from.id);
     await sendMessage(chatId, `Created in TikTrack: <code>${id}</code>`);
+
+    // Notify other linked parents about the new schedule
+    if (session.draft.scheduleType && session.draft.title && session.draft.startAt) {
+      sendScheduleCreatedNotification({
+        familyId: link.family_id,
+        childId: session.draft.childId || '',
+        scheduleType: session.draft.scheduleType,
+        title: session.draft.title,
+        startAt: session.draft.startAt,
+        createdBy: 'telegram',
+      }).catch((err) => console.warn('Failed to send schedule created notification:', err));
+    }
     return;
   }
 
@@ -1438,6 +1450,83 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     const child = children.find((item) => item.id === session.draft.childId);
     if (child && source === 'week') await sendWeekSchedule(chatId, link.family_id, child);
     if (child && source !== 'week') await sendTodaySchedule(chatId, link.family_id, child);
+  }
+}
+
+// ── Schedule Created Notifications ────────────────────────────────────────────
+
+async function sendScheduleCreatedNotification(params: {
+  familyId: string;
+  childId: string;
+  scheduleType: 'task' | 'event' | 'exam';
+  title: string;
+  startAt: string;
+  createdBy?: string;
+}) {
+  const { familyId, childId, scheduleType, title, startAt, createdBy } = params;
+
+  let childName = 'Your child';
+  if (childId) {
+    try {
+      const profileSnap = await db.collection('child_profile').doc(childId).get();
+      if (profileSnap.exists) {
+        childName = String(profileSnap.data()?.name || childName);
+      } else {
+        const userSnap = await db.collection('users').doc(childId).get();
+        if (userSnap.exists) {
+          childName = String(userSnap.data()?.name || userSnap.data()?.email || childName)
+            .replace('@tiktrack.family', '');
+        }
+      }
+    } catch { /* use default */ }
+  }
+
+  const linksSnap = await db
+    .collection('telegram_links')
+    .where('family_id', '==', familyId)
+    .where('status', '==', 'active')
+    .get();
+
+  if (linksSnap.empty) {
+    console.warn(`Schedule notification: no active Telegram links for family ${familyId}`);
+    return;
+  }
+
+  const typeEmoji: Record<string, string> = { task: '📝', event: '📅', exam: '🎓' };
+  const typeLabel: Record<string, string> = { task: 'task', event: 'event', exam: 'exam' };
+  const emoji = typeEmoji[scheduleType] || '📋';
+  const label = typeLabel[scheduleType] || 'item';
+
+  let timeDisplay = startAt;
+  try {
+    timeDisplay = new Date(startAt).toLocaleString('en-IN', {
+      timeZone: DEFAULT_TIME_ZONE, dateStyle: 'medium', timeStyle: 'short',
+    });
+  } catch { /* use raw */ }
+
+  const sourceLine = createdBy === 'telegram' ? 'via Telegram bot' : '';
+  const text = [
+    `🆕 <b>New ${label} added!</b>`,
+    ``,
+    `<b>${escapeHtml(childName)}</b> — ${emoji} <b>${escapeHtml(title)}</b>`,
+    `🕐 ${timeDisplay}`,
+    sourceLine ? `📱 ${sourceLine}` : '',
+  ].filter(Boolean).join('\n');
+
+  let sentCount = 0;
+  for (const linkDoc of linksSnap.docs) {
+    const linkData = linkDoc.data() as TelegramLink;
+    const targetChatId = linkData.chat_id ?? linkData.telegram_user_id;
+    if (!targetChatId) continue;
+    try {
+      await sendMessage(targetChatId, text);
+      sentCount++;
+    } catch (err) {
+      console.warn(`Schedule notification: failed to send to chat ${targetChatId}:`, err);
+    }
+  }
+  if (sentCount > 0) {
+    console.log(`Schedule notification sent to ${sentCount} parent(s) for ${scheduleType}: ${title}`);
   }
 }
 
@@ -1489,7 +1578,10 @@ export const onApprovalCreated = functions.firestore
       .where('status', '==', 'active')
       .get();
 
-    if (linksSnap.empty) return;
+    if (linksSnap.empty) {
+      console.warn(`onApprovalCreated: no active Telegram links found for family ${familyId}. Make sure a parent has linked their Telegram account with /link.`);
+      return;
+    }
 
     const typeEmoji: Record<string, string> = { task: '📝', routine: '⏰', exam: '🎓', custom: '📋' };
     const typeLabel: Record<string, string> = { task: 'task', routine: 'routine', exam: 'exam', custom: 'item' };

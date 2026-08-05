@@ -117,6 +117,20 @@ export const useTaskScheduler = (
           });
           const docRef = await addDoc(tasksRef, taskPayload);
 
+          // Fire-and-forget Telegram notification — never blocks the UI
+          fetch('/api/telegram/notify-schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              family_id: (generated as any).family_id || parentId,
+              child_id: childId,
+              schedule_type: 'task',
+              title: generated.title,
+              start_at: generated.available_from || nowIso,
+              created_by: 'parent',
+            }),
+          }).catch(() => {});
+
           savedTasks.push({
             id: docRef.id,
             child_id: childId,
@@ -162,6 +176,20 @@ export const useTaskScheduler = (
           created_at: nowIso,
         });
         const docRef = await addDoc(tasksRef, taskPayload);
+
+        // Fire-and-forget Telegram notification — never blocks the UI
+        fetch('/api/telegram/notify-schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            family_id: (generated as any).family_id || parentId,
+            child_id: childId,
+            schedule_type: 'task',
+            title: generated.title,
+            start_at: generated.available_from || nowIso,
+            created_by: 'parent',
+          }),
+        }).catch(() => {});
 
         savedTasks.push({
           id: docRef.id,

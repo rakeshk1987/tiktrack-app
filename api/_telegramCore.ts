@@ -1308,6 +1308,18 @@ async function handleCallback(callback: TelegramCallbackQuery) {
     const id = await createSchedule(link.family_id, session.draft);
     await clearSession(callback.from.id);
     await sendMessage(chatId, `Created in TikTrack: <code>${id}</code>`);
+
+    // Notify other linked parents about the new schedule
+    if (session.draft.scheduleType && session.draft.title && session.draft.startAt) {
+      sendScheduleCreatedNotification({
+        familyId: link.family_id,
+        childId: session.draft.childId || '',
+        scheduleType: session.draft.scheduleType,
+        title: session.draft.title,
+        startAt: session.draft.startAt,
+        createdBy: 'telegram',
+      }).catch((err) => console.warn('Failed to send schedule created notification:', err));
+    }
     return;
   }
 
@@ -1439,6 +1451,17 @@ export async function miniAppCreateSchedule(body: unknown): Promise<CreateSchedu
     recurrenceDays: draft.recurrenceDays || [],
     linkedProgramId: draft.linkedProgramId || null,
   });
+
+  // Notify linked parents about the new schedule
+  sendScheduleCreatedNotification({
+    familyId: auth.link.family_id,
+    childId: draft.childId!,
+    scheduleType: draft.scheduleType!,
+    title: draft.title.trim(),
+    startAt: draft.startAt!,
+    createdBy: 'telegram',
+  }).catch((err) => console.warn('Failed to send schedule created notification (mini app):', err));
+
   return { ok: true, id };
 }
 
@@ -1518,7 +1541,10 @@ export async function sendApprovalNotification(params: ApprovalNotificationParam
     .where('status', '==', 'active')
     .get();
 
-  if (linksSnap.empty) return;
+  if (linksSnap.empty) {
+    console.warn(`Approval notification: no active Telegram links found for family ${familyId}. Make sure a parent has linked their Telegram account with /link.`);
+    return;
+  }
 
   const typeEmoji: Record<string, string> = { task: '📝', routine: '⏰', exam: '🎓', custom: '📋' };
   const typeLabel: Record<string, string> = { task: 'task', routine: 'routine', exam: 'exam', custom: 'item' };
@@ -1540,19 +1566,126 @@ export async function sendApprovalNotification(params: ApprovalNotificationParam
     ? [[callbackButton('✅ Approve', `approve:${approvalId}`), callbackButton('❌ Reject', `reject:${approvalId}`)]]
     : undefined;
 
+  let sentCount = 0;
   for (const linkDoc of linksSnap.docs) {
     const linkData = linkDoc.data() as TelegramLink;
     // chat_id equals telegram_user_id for personal chats — use it as a safe fallback
     // so parents linked before chat_id was persisted still receive notifications.
     const targetChatId = linkData.chat_id ?? linkData.telegram_user_id;
     if (!targetChatId) {
-      console.warn(`Skipping approval notification — no chat_id or telegram_user_id for link ${linkDoc.id}`);
+      console.warn(`Approval notification: skipping — no chat_id or telegram_user_id for link ${linkDoc.id}`);
       continue;
     }
     try {
       await sendMessage(targetChatId, text, keyboard);
+      sentCount++;
     } catch (err) {
-      console.warn(`Failed to send approval notification to chat ${targetChatId}:`, err);
+      console.warn(`Approval notification: failed to send to chat ${targetChatId}:`, err);
     }
+  }
+
+  if (sentCount > 0) {
+    console.log(`Approval notification sent to ${sentCount} parent(s) for ${approvalType}: ${title}`);
+  } else {
+    console.warn(`Approval notification: failed to send to any parent for ${approvalType}: ${title}. Check that the bot token is valid and parents have started the bot.`);
+  }
+}
+
+// ── Schedule Created Notifications ─────────────────────────────────────────────
+
+export interface ScheduleCreatedNotificationParams {
+  familyId: string;
+  childId: string;
+  scheduleType: 'task' | 'event' | 'exam';
+  title: string;
+  startAt: string;
+  createdBy?: 'telegram' | 'web' | 'parent' | 'child';
+}
+
+/**
+ * Sends a Telegram push notification to all parents linked to the family
+ * whenever a new task, event, or exam is created for a child.
+ */
+export async function sendScheduleCreatedNotification(params: ScheduleCreatedNotificationParams): Promise<void> {
+  const { familyId, childId, scheduleType, title, startAt, createdBy } = params;
+
+  // Resolve child name from Firestore
+  let childName = 'Your child';
+  if (childId) {
+    try {
+      const profileSnap = await getDb().collection('child_profile').doc(childId).get();
+      if (profileSnap.exists) {
+        childName = String(profileSnap.data()?.name || childName);
+      } else {
+        const userSnap = await getDb().collection('users').doc(childId).get();
+        if (userSnap.exists) {
+          childName = String(userSnap.data()?.name || userSnap.data()?.email || childName)
+            .replace('@tiktrack.family', '');
+        }
+      }
+    } catch {
+      // use default name
+    }
+  }
+
+  // Find all active Telegram links for this family
+  const linksSnap = await getDb()
+    .collection('telegram_links')
+    .where('family_id', '==', familyId)
+    .where('status', '==', 'active')
+    .get();
+
+  if (linksSnap.empty) {
+    console.log('Schedule notification: no active Telegram links for family', familyId);
+    return;
+  }
+
+  const typeEmoji: Record<string, string> = { task: '📝', event: '📅', exam: '🎓' };
+  const typeLabel: Record<string, string> = { task: 'task', event: 'event', exam: 'exam' };
+  const emoji = typeEmoji[scheduleType] || '📋';
+  const label = typeLabel[scheduleType] || 'item';
+
+  // Format the start time nicely
+  let timeDisplay = startAt;
+  try {
+    timeDisplay = new Date(startAt).toLocaleString('en-IN', {
+      timeZone: DEFAULT_TIME_ZONE,
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    // use raw value
+  }
+
+  const sourceLine = createdBy === 'telegram' ? 'via Telegram bot' : '';
+
+  const text = [
+    `🆕 <b>New ${label} added!</b>`,
+    ``,
+    `<b>${escapeHtml(childName)}</b> — ${emoji} <b>${escapeHtml(title)}</b>`,
+    `🕐 ${timeDisplay}`,
+    sourceLine ? `📱 ${sourceLine}` : '',
+  ].filter(Boolean).join('\n');
+
+  let sentCount = 0;
+  for (const linkDoc of linksSnap.docs) {
+    const linkData = linkDoc.data() as TelegramLink;
+    const targetChatId = linkData.chat_id ?? linkData.telegram_user_id;
+    if (!targetChatId) {
+      console.warn(`Schedule notification: skipping — no chat_id for link ${linkDoc.id}`);
+      continue;
+    }
+    try {
+      await sendMessage(targetChatId, text);
+      sentCount++;
+    } catch (err) {
+      console.warn(`Schedule notification: failed to send to chat ${targetChatId}:`, err);
+    }
+  }
+
+  if (sentCount > 0) {
+    console.log(`Schedule notification sent to ${sentCount} parent(s) for ${scheduleType}: ${title}`);
+  } else {
+    console.warn(`Schedule notification: failed to send to any parent for ${scheduleType}: ${title}`);
   }
 }
