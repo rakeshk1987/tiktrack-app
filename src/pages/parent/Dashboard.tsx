@@ -3442,19 +3442,6 @@ function ParentDashboardContent() {
           )}
         </section>
 
-
-
-        <section className="space-y-4 rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Shop</h3>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Child-requestable catalogue items.</p>
-            </div>
-            <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Add Starter Catalogue</button>
-          </div>
-          <RewardManagement rewards={rewardItems} onCreateReward={createRewardForFamily} onUpdateReward={updateReward} onDeleteReward={deleteReward} loading={rewardItemsLoading} />
-        </section>
-
         <section className="rounded-3xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -3497,84 +3484,9 @@ function ParentDashboardContent() {
                 <button disabled={awardSaving} type="submit" className="rounded-xl bg-pink-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{awardSaving ? 'Sending...' : 'Award Stars'}</button>
               </div>
             </form>
-
-            <form onSubmit={handleSaveScratchTemplate} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Reward Template</h4>
-                <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">{getScratchTriggerLabel(scratchTemplateTrigger)}</span>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <select value={scratchTemplateChildId} onChange={(event) => setScratchTemplateChildId(event.target.value)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                  <option value="">All children</option>
-                  {children.map((child) => (
-                    <option key={child.id} value={child.id}>{child.name || child.email}</option>
-                  ))}
-                </select>
-                <input value={scratchTemplateTitle} onChange={(event) => setScratchTemplateTitle(event.target.value)} placeholder="Template title" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                <select value={scratchTemplateTrigger} onChange={(event) => setScratchTemplateTrigger(event.target.value as typeof scratchTemplateTrigger)} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                  <option value="task_completion">Every completed task</option>
-                  <option value="random_task">Random completed task</option>
-                  <option value="streak">7-day streak milestone</option>
-                  <option value="perfect_exam">100% exam result</option>
-                </select>
-                <select value={scratchTemplateRevealType} onChange={(event) => setScratchTemplateRevealType(event.target.value as 'scratch' | 'wheel')} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                  <option value="scratch">Scratch Card</option>
-                  <option value="wheel">Spin Wheel</option>
-                </select>
-                {scratchTemplateRevealType === 'scratch' ? (
-                  <>
-                    <select value={scratchTemplatePrizeType} onChange={(event) => {
-                      const nextType = event.target.value as typeof scratchTemplatePrizeType;
-                      setScratchTemplatePrizeType(nextType);
-                      setScratchTemplatePrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'cash' ? `${rCurrencySymbol || '₹'}${scratchTemplateStars || 10}` : nextType === 'stars' ? `${scratchTemplateStars || 10} stars` : '');
-                    }} className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}>
-                      <option value="cash">Cash</option>
-                      <option value="stars">Stars</option>
-                      <option value="book">Book</option>
-                      <option value="toy">Toy</option>
-                      <option value="treat">Treat</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    {scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? (
-                      <input value={scratchTemplateStars as any} onChange={(event) => {
-                        const value = event.target.value === '' ? '' : Number(event.target.value);
-                        setScratchTemplateStars(value);
-                        setScratchTemplatePrizeLabel(value === '' ? '' : scratchTemplatePrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${value}` : `${value} stars`);
-                      }} placeholder={scratchTemplatePrizeType === 'cash' ? 'Cash' : 'Stars'} type="number" min="1" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                    ) : (
-                      <input value={scratchTemplatePrizeLabel} onChange={(event) => setScratchTemplatePrizeLabel(event.target.value)} placeholder="Prize label" className="rounded-xl py-2.5 px-3 border" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }} />
-                    )}
-                  </>
-                ) : (
-                  renderWheelSegmentEditor(scratchTemplateWheelSegments, setScratchTemplateWheelSegments)
-                )}
-                <button disabled={scratchTemplateSaving} type="submit" className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">{scratchTemplateSaving ? 'Saving...' : 'Save Template'}</button>
-              </div>
-            </form>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-              <h4 className="mb-3 font-bold" style={{ color: 'var(--text-main)' }}>Saved Templates</h4>
-              <div className="grid gap-2">
-                {scratchTemplatesLoading ? (
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading templates...</p>
-                ) : scratchTemplates.length === 0 ? (
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No templates saved.</p>
-                ) : (
-                  scratchTemplates.map((template) => (
-                    <div key={template.id} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
-                      <div className="min-w-0">
-                        <p className="truncate font-bold" style={{ color: 'var(--text-main)' }}>{template.title}</p>
-                        <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {getScratchTriggerLabel(template.trigger)} • {template.reveal_type === 'wheel' ? `${template.wheel_segments?.length || 0} wheel options` : template.prize_label}</p>
-                      </div>
-                      <button type="button" onClick={() => void updateScratchTemplate(template.id, { is_active: !template.is_active })} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${template.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{template.is_active ? 'Active' : 'Paused'}</button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
+          <div className="mt-4">
             <form onSubmit={handleSendScratchReward} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
               <h4 className="mb-3 font-bold" style={{ color: 'var(--text-main)' }}>Send One-Time Surprise</h4>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -4167,7 +4079,6 @@ function ParentDashboardContent() {
 
                 <div className={activeTab === 'rewards' ? 'xl:col-span-12' : 'hidden'}>
                   {renderRewardsPage()}
-                  {false && (
                   <div className={`${cardBase} bg-[var(--surface)]`} style={{ borderColor: 'var(--border-main)' }}>
                     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -4386,128 +4297,11 @@ function ParentDashboardContent() {
 
                     <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)' }}>
                       <div className="mb-4">
-                        <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Scratch Rewards</h3>
+                        <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Send One-Time Surprise</h3>
                         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
                           Send a scratch card with a parent-decided prize like stars, a book, a toy, a treat, or a custom surprise.
                         </p>
                       </div>
-
-                      <form onSubmit={handleSaveScratchTemplate} className="mb-5 rounded-xl border p-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                          <h4 className="font-bold" style={{ color: 'var(--text-main)' }}>Auto Award Template</h4>
-                          <span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">{getScratchTriggerLabel(scratchTemplateTrigger)}</span>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-6 xl:items-center">
-                          <select
-                            value={scratchTemplateChildId}
-                            onChange={(event) => setScratchTemplateChildId(event.target.value)}
-                            className="rounded-xl py-2.5 px-3 border"
-                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                          >
-                            <option value="">All children</option>
-                            {children.map((child) => (
-                              <option key={child.id} value={child.id}>{child.name || child.email}</option>
-                            ))}
-                          </select>
-                          <input
-                            value={scratchTemplateTitle}
-                            onChange={(event) => setScratchTemplateTitle(event.target.value)}
-                            placeholder="Template title"
-                            className="rounded-xl py-2.5 px-3 border"
-                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                          />
-                          <select
-                            value={scratchTemplateTrigger}
-                            onChange={(event) => setScratchTemplateTrigger(event.target.value as typeof scratchTemplateTrigger)}
-                            className="rounded-xl py-2.5 px-3 border"
-                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                          >
-                            <option value="task_completion">Every completed task</option>
-                            <option value="random_task">Random completed task</option>
-                            <option value="streak">7-day streak milestone</option>
-                            <option value="perfect_exam">100% exam result</option>
-                          </select>
-                          <select
-                            value={scratchTemplateRevealType}
-                            onChange={(event) => setScratchTemplateRevealType(event.target.value as 'scratch' | 'wheel')}
-                            className="rounded-xl py-2.5 px-3 border"
-                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                          >
-                            <option value="scratch">Scratch Card</option>
-                            <option value="wheel">Spin Wheel</option>
-                          </select>
-                          <select
-                            value={scratchTemplatePrizeType}
-                            onChange={(event) => {
-                              const nextType = event.target.value as typeof scratchTemplatePrizeType;
-                              setScratchTemplatePrizeType(nextType);
-                              setScratchTemplatePrizeLabel(nextType === 'book' ? 'Book' : nextType === 'toy' ? 'Toy' : nextType === 'treat' ? 'Treat' : nextType === 'cash' ? `${rCurrencySymbol || '₹'}${scratchTemplateStars || 10}` : nextType === 'stars' ? `${scratchTemplateStars || 10} stars` : '');
-                            }}
-                            className="rounded-xl py-2.5 px-3 border"
-                            style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                          >
-                            <option value="cash">Cash</option>
-                            <option value="stars">Stars</option>
-                            <option value="book">Book</option>
-                            <option value="toy">Toy</option>
-                            <option value="treat">Treat</option>
-                            <option value="custom">Custom</option>
-                          </select>
-                          {scratchTemplatePrizeType === 'stars' || scratchTemplatePrizeType === 'cash' ? (
-                            <input
-                              value={scratchTemplateStars as any}
-                              onChange={(event) => {
-                                const value = event.target.value === '' ? '' : Number(event.target.value);
-                                setScratchTemplateStars(value);
-                                setScratchTemplatePrizeLabel(value === '' ? '' : scratchTemplatePrizeType === 'cash' ? `${rCurrencySymbol || '₹'}${value}` : `${value} stars`);
-                              }}
-                              placeholder={scratchTemplatePrizeType === 'cash' ? 'Cash' : 'Stars'}
-                              type="number"
-                              min="1"
-                              className="rounded-xl py-2.5 px-3 border"
-                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                            />
-                          ) : (
-                            <input
-                              value={scratchTemplatePrizeLabel}
-                              onChange={(event) => setScratchTemplatePrizeLabel(event.target.value)}
-                              placeholder="Prize label"
-                              className="rounded-xl py-2.5 px-3 border"
-                              style={{ borderColor: 'var(--border-main)', background: 'var(--surface-soft)', color: 'var(--text-main)' }}
-                            />
-                          )}
-                          <button disabled={scratchTemplateSaving} type="submit" className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-                            {scratchTemplateSaving ? 'Saving...' : 'Save Template'}
-                          </button>
-                        </div>
-                      </form>
-
-                      <div className="mb-5 grid gap-2 md:grid-cols-2">
-                        {scratchTemplatesLoading ? (
-                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading scratch templates...</p>
-                        ) : scratchTemplates.length === 0 ? (
-                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No scratch templates yet. Save one to auto-award cards after task completion.</p>
-                        ) : (
-                          scratchTemplates.map((template) => (
-                            <div key={template.id} className="rounded-xl border p-3 flex items-center justify-between gap-3" style={{ borderColor: 'var(--border-main)', background: 'var(--surface)' }}>
-                              <div>
-                                <p className="font-bold" style={{ color: 'var(--text-main)' }}>{template.title}</p>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                                  {template.child_id ? (children.find((child) => child.id === template.child_id)?.name || 'Selected child') : 'All children'} • {getScratchTriggerLabel(template.trigger)} • {template.prize_label}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void updateScratchTemplate(template.id, { is_active: !template.is_active })}
-                                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${template.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}
-                              >
-                                {template.is_active ? 'Active' : 'Paused'}
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
                       <form onSubmit={handleSendScratchReward} className="grid grid-cols-1 gap-3 xl:grid-cols-6 xl:items-center">
                         <select
                           value={scratchChildId}
@@ -4590,14 +4384,11 @@ function ParentDashboardContent() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
                         <div>
                           <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Reward Catalogue</h3>
                           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Set the cash cost for screen time, treats, items, experiences, privileges, and learning rewards.</p>
                         </div>
-                        <button type="button" onClick={() => void seedDefaultRewards()} disabled={rewardItemsLoading} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-                          Add Starter Catalogue
-                        </button>
                       </div>
                       <RewardManagement
                         rewards={rewardItems}
@@ -4627,7 +4418,6 @@ function ParentDashboardContent() {
                     </div>
 	              </div>
 		                </div>
-                  )}
                 </div>
 
                 <div className={activeTab === 'tasks' ? 'xl:col-span-12' : 'hidden'}>
