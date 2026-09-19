@@ -4,6 +4,7 @@ import { PLANNER_CATEGORY_COLORS } from '../constants/planner.constants';
 import type { PlannerActivityModule, PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable, PlannerTimetableSlot } from '../types/planner.types';
 import type { PlannerEventInput, PlannerQuickAddInput, PlannerTimetableCellInput } from '../utils/planner.validation';
 import { getDefaultKidsTimetableSlots, normalizePlannerTimetable } from '../utils/planner.timetable';
+import { getTelegramApiUrl } from '../../../../utils/telegram';
 
 export function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEvent {
   return {
@@ -210,7 +211,7 @@ export async function createParentPlannerEvent(parentId: string, familyId: strin
   const ref = await addDoc(collection(db, 'events'), payload);
 
   // Fire-and-forget Telegram notification — never blocks the UI
-  fetch('/api/telegram/notify-schedule', {
+  fetch(getTelegramApiUrl('/api/telegram/notify-schedule'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -271,7 +272,7 @@ export async function createChildQuickPlannerEvent(childId: string, familyId: st
   const ref = await addDoc(collection(db, 'events'), payload);
 
   // Fire-and-forget Telegram notification — never blocks the UI
-  fetch('/api/telegram/notify-schedule', {
+  fetch(getTelegramApiUrl('/api/telegram/notify-schedule'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

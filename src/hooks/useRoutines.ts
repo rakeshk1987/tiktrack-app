@@ -8,6 +8,7 @@ import type { Routine, RoutineLog } from '../types/schema';
 import { useSickMode } from './useSickMode';
 import { createRewardLedgerEntry } from './useRewardLedger';
 import { calculateCashReward, fetchCashRewardSettings } from '../utils/rewards';
+import { getTelegramApiUrl } from '../utils/telegram';
 
 export interface RoutineLogResult {
   status: 'completed' | 'missed' | 'sick';
@@ -166,7 +167,7 @@ export function useRoutines(familyId: string, childId?: string) {
           created_at: now,
         });
 
-        fetch('/api/telegram/notify-approval', {
+        fetch(getTelegramApiUrl('/api/telegram/notify-approval'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -301,7 +302,7 @@ export function useRoutines(familyId: string, childId?: string) {
                 created_at: new Date().toISOString(),
               });
               // Fire-and-forget Telegram notification — never blocks the UI
-              fetch('/api/telegram/notify-approval', {
+              fetch(getTelegramApiUrl('/api/telegram/notify-approval'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

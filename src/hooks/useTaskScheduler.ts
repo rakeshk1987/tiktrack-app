@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import type { Task, RoutineConfiguration, ChildProfile, ExamResult, Event, MoodLog } from '../types/schema';
 import {
+import { getTelegramApiUrl } from '../utils/telegram';
   generateSmartDailyTasks,
   generateExamPrepTasks,
 } from '../utils/taskScheduler';
@@ -118,7 +119,7 @@ export const useTaskScheduler = (
           const docRef = await addDoc(tasksRef, taskPayload);
 
           // Fire-and-forget Telegram notification — never blocks the UI
-          fetch('/api/telegram/notify-schedule', {
+          fetch(getTelegramApiUrl('/api/telegram/notify-schedule'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -178,7 +179,7 @@ export const useTaskScheduler = (
         const docRef = await addDoc(tasksRef, taskPayload);
 
         // Fire-and-forget Telegram notification — never blocks the UI
-        fetch('/api/telegram/notify-schedule', {
+        fetch(getTelegramApiUrl('/api/telegram/notify-schedule'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

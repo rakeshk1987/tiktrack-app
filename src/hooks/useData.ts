@@ -20,6 +20,7 @@ import { db, storage } from '../config/firebase';
 import { createRewardLedgerEntry } from './useRewardLedger';
 import { awardScratchRewardForTrigger } from './useScratchRewards';
 import { calculateCashReward, fetchCashRewardSettings } from '../utils/rewards';
+import { getTelegramApiUrl } from '../utils/telegram';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
 const MAX_CHILD_VISIBLE_TASKS = 7;
@@ -439,7 +440,7 @@ export function useChildProofs(childId: string, familyId?: string) {
       });
 
       // Fire-and-forget Telegram notification — never blocks the UI
-      fetch('/api/telegram/notify-approval', {
+      fetch(getTelegramApiUrl('/api/telegram/notify-approval'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

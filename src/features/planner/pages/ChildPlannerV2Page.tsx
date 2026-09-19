@@ -23,6 +23,7 @@ import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanne
 import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 import { expandRecurringEventForRange, formatPlannerRecurrence, getNextPlannerOccurrence, getPlannerExpiryStatus } from '../utils/planner.recurrence';
+import { getTelegramApiUrl } from '../../../../utils/telegram';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
 type ActivitySubTab = PlannerActivityModule;
@@ -419,7 +420,7 @@ export default function ChildPlannerV2Page() {
         created_at: new Date().toISOString()
       });
       // Fire-and-forget Telegram notification — never blocks the UI
-      fetch('/api/telegram/notify-approval', {
+      fetch(getTelegramApiUrl('/api/telegram/notify-approval'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -506,7 +507,7 @@ export default function ChildPlannerV2Page() {
         created_at: new Date().toISOString()
       });
       // Fire-and-forget Telegram notification — never blocks the UI
-      fetch('/api/telegram/notify-approval', {
+      fetch(getTelegramApiUrl('/api/telegram/notify-approval'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
