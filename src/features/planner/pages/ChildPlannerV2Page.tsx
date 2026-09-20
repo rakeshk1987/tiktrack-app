@@ -23,7 +23,7 @@ import { PlannerConflictBanner } from '../components/shared/PlannerConflictBanne
 import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import type { PlannerActivityModule, PlannerEvent } from '../types/planner.types';
 import { expandRecurringEventForRange, formatPlannerRecurrence, getNextPlannerOccurrence, getPlannerExpiryStatus } from '../utils/planner.recurrence';
-import { getTelegramApiUrl } from '../../../../utils/telegram';
+import { getTelegramApiUrl } from '../../../utils/telegram';
 
 type ChildPlannerTab = 'calendar' | `activity_${string}`;
 type ActivitySubTab = PlannerActivityModule;

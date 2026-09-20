@@ -4,7 +4,7 @@ import { PLANNER_CATEGORY_COLORS } from '../constants/planner.constants';
 import type { PlannerActivityModule, PlannerDateRange, PlannerEvent, PlannerProgram, PlannerTimetable, PlannerTimetableSlot } from '../types/planner.types';
 import type { PlannerEventInput, PlannerQuickAddInput, PlannerTimetableCellInput } from '../utils/planner.validation';
 import { getDefaultKidsTimetableSlots, normalizePlannerTimetable } from '../utils/planner.timetable';
-import { getTelegramApiUrl } from '../../../../utils/telegram';
+import { getTelegramApiUrl } from '../../../utils/telegram';
 
 export function mapPlannerEvent(docId: string, raw: Record<string, unknown>): PlannerEvent {
   return {
