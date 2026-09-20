@@ -10,10 +10,10 @@ import {
 } from 'firebase/firestore';
 import type { Task, RoutineConfiguration, ChildProfile, ExamResult, Event, MoodLog } from '../types/schema';
 import {
-import { getTelegramApiUrl } from '../utils/telegram';
   generateSmartDailyTasks,
   generateExamPrepTasks,
 } from '../utils/taskScheduler';
+import { getTelegramApiUrl } from '../utils/telegram';
 
 interface ScheduledTask extends Task {
   generated_at: string;
